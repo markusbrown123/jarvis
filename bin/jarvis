@@ -53,13 +53,9 @@ start_servers() {
 }
 
 open_window() {
-  # Already open: bring it to the front instead of opening a second one.
-  local pid
-  pid="$(pgrep -f "user-data-dir=$PROFILE" | head -n 1)"
-  if [ -n "$pid" ]; then
-    osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" >/dev/null 2>&1
-    return
-  fi
+  # Always ask for a window. If his Chrome is still running (closing the last
+  # window on a Mac doesn't quit it), Chrome hands this to that instance and
+  # it opens a fresh window instead of starting a second copy.
 
   # Fill the screen without going fullscreen.
   local bounds w h

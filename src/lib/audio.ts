@@ -9,15 +9,63 @@ let ctx: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let buf: Uint8Array | null = null
 
+const VOICE = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+}
+
+const open = (deviceId?: string) =>
+  navigator.mediaDevices.getUserMedia({
+    audio: deviceId ? { ...VOICE, deviceId: { exact: deviceId } } : VOICE,
+  })
+
+/**
+ * macOS hands the default input to a nearby iPhone (Continuity) whenever it
+ * can, and that microphone is often unavailable by the time the page asks for
+ * it — or it works, and JARVIS listens to a phone in another room. Prefer the
+ * Mac's own microphone; any other input that isn't a phone will do.
+ */
+const PHONE = /iphone|ipad/i
+
+async function localMic(): Promise<string | null> {
+  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
+    (d) =>
+      d.kind === 'audioinput' &&
+      d.deviceId !== 'default' &&
+      d.deviceId !== 'communications' &&
+      !PHONE.test(d.label),
+  )
+  const builtIn = inputs.find((d) => /macbook|built-in/i.test(d.label))
+  return (builtIn ?? inputs[0])?.deviceId ?? null
+}
+
 export async function getMic(): Promise<MediaStream> {
   if (stream) return stream
-  stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    },
-  })
+  let s: MediaStream
+  try {
+    s = await open()
+  } catch (err) {
+    // A refused permission is final. Anything else may be the phone's mic
+    // having gone away, so try the Mac's own before giving up.
+    if (err instanceof DOMException && err.name === 'NotAllowedError') throw err
+    const id = await localMic()
+    if (!id) throw err
+    s = await open(id)
+  }
+  if (PHONE.test(s.getAudioTracks()[0]?.label ?? '')) {
+    const id = await localMic()
+    if (id) {
+      try {
+        const own = await open(id)
+        s.getTracks().forEach((t) => t.stop())
+        s = own
+      } catch {
+        // The phone works; better than nothing.
+      }
+    }
+  }
+  stream = s
   return stream
 }
 
