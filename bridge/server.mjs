@@ -1279,6 +1279,9 @@ wss.on('connection', (socket) => {
     },
   })
 
+  // Which content blocks of the message in flight are text, by index.
+  const textBlocks = {}
+
   // Pump the session's output stream to the browser for as long as it lives.
   ;(async () => {
     try {
@@ -1307,6 +1310,17 @@ wss.on('connection', (socket) => {
               ev.content_block?.type === 'tool_use'
             ) {
               announceTool(ev.content_block.id, ev.content_block.name)
+            }
+            // The end of a text block is the end of what can be said for now:
+            // the browser speaks the unfinished last sentence straight away
+            // instead of holding it until the turn's result arrives, which on
+            // a short answer was most of the wait.
+            if (ev?.type === 'content_block_start') {
+              textBlocks[ev.index] = ev.content_block?.type === 'text'
+            }
+            if (ev?.type === 'content_block_stop' && textBlocks[ev.index]) {
+              delete textBlocks[ev.index]
+              sendTurn({ type: 'text_end' })
             }
             break
           }

@@ -84,6 +84,19 @@ async function openMic(): Promise<MediaStream> {
   return stream
 }
 
+/**
+ * Let go of the microphone entirely, so the system's mic indicator goes out.
+ * The next getMic() opens it afresh, and startAnalyser() rebuilds its graph.
+ */
+export function releaseMic(): void {
+  stream?.getTracks().forEach((t) => t.stop())
+  stream = null
+  void ctx?.close()
+  ctx = null
+  analyser = null
+  buf = null
+}
+
 /** Which microphone is actually open, for the diagnostics panel. */
 export function micName(): string {
   return stream?.getAudioTracks()[0]?.label ?? ''

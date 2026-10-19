@@ -19,6 +19,9 @@ export type AskHandlers = {
   onText: (delta: string) => void
   /** Fires when Claude starts running a remote tool. */
   onTool: (name: string) => void
+  /** Fires when a block of text is complete, so the last sentence can be
+   *  spoken without waiting for the turn to finish. Bridge only. */
+  onTextEnd?: () => void
 }
 
 /** The stream for the turn in flight, so a barge-in can abort it. Without this

@@ -1,7 +1,7 @@
 import { BRIDGE_HTTP_URL } from '../config'
 import { getMic } from './audio'
 import { speakingNow, speakingSince } from './tts'
-import { startVad, type Vad } from './vad'
+import { SILENCE_MS, startVad, type Vad } from './vad'
 import { caps } from './capabilities'
 
 /**
@@ -53,6 +53,8 @@ export type VoiceHandlers = {
 
 export type Voice = {
   stop: () => void
+  /** Treat what has been said so far as the whole thought, now. */
+  finish: () => void
   /** True while a recogniser is actually running. */
   live: () => boolean
 }
@@ -152,7 +154,7 @@ const SELF_GUARD_MS = 350
  * more clause. Making it generous here is what would make every ordinary
  * question feel slow.
  */
-const SETTLE_MS = 250
+const SETTLE_MS = 450
 /** ...and this long when the sentence is plainly unfinished. */
 const CONTINUE_MS = 1600
 /**
@@ -186,6 +188,8 @@ type Assembler = {
   flush: () => void
   /** Throw away whatever is held — used when he stands down. */
   cancel: () => void
+  /** The user has started talking again: keep waiting for the rest. */
+  extend: () => void
   held: () => string
 }
 
@@ -240,6 +244,12 @@ function makeAssembler(h: {
       timer = setTimeout(fire, wait)
     },
     flush: fire,
+    extend() {
+      if (!held) return
+      clear()
+      // The same ceiling as an active feed: the next transcript re-decides.
+      timer = setTimeout(fire, Math.max(0, MAX_HOLD_MS - (Date.now() - firstAt)))
+    },
     cancel() {
       clear()
       held = ''
@@ -345,6 +355,8 @@ export const diag = {
   lastError: '',
   /** Times the wake word matched. */
   wakes: 0,
+  /** When the user's speech last ended (ms epoch), for the turn timeline. */
+  lastSpeechAt: 0,
   /** Current mode, as the app last reported it. */
   mode: '',
   /** Why the last transcript was ignored — '' when it was accepted. */
@@ -396,7 +408,7 @@ export async function startVoice(h: VoiceHandlers): Promise<Voice> {
         ? 'Microphone access denied — voice input is unavailable.'
         : 'No microphone available.',
     )
-    return { stop: () => {}, live: () => false }
+    return { stop: () => {}, finish: () => {}, live: () => false }
   }
   diag.engine = caps().stt ? 'elevenlabs' : 'browser'
   return caps().stt ? startElevenVoice(h) : startBrowserVoice(h)
@@ -526,6 +538,8 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       // Standing down mid-thought throws the thought away with it. Otherwise
       // held text would surface as the opening of the *next* conversation.
       if (mode === 'wake') assemble.cancel()
+      // Talking again after a pause: the held words are not the whole thought.
+      if (mode === 'command') assemble.extend()
       // The barge-in. In guard mode the user has started talking over him, and
       // because the guard threshold is high this is a real interruption rather
       // than leaked playback — so cut him off now, do not wait for the words.
@@ -539,6 +553,8 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       }
     },
     onEnd: (blob) => {
+      // The segment closes after SILENCE_MS of quiet, so speech ended then.
+      diag.lastSpeechAt = Date.now() - SILENCE_MS
       pendingAudio.push(blob)
       void drain()
     },
@@ -581,6 +597,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       vad?.stop()
       diag.running = false
     },
+    finish: () => assemble.flush(),
     live: () => vad?.live() ?? false,
   }
 }
@@ -604,7 +621,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
   if (!Ctor) {
     h.onError('This browser has no speech recognition — use Chrome or Edge, or add an ElevenLabs key.')
-    return { stop: () => {}, live: () => false }
+    return { stop: () => {}, finish: () => {}, live: () => false }
   }
 
   let stopped = false
@@ -691,6 +708,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       interim = ''
       return
     }
+    diag.lastSpeechAt = Date.now()
     let fresh = ''
     interim = ''
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -721,6 +739,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
 
     settled += fresh
     const full = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
+    if (mode === 'command') assemble.extend()
     if (!started || (mode === 'guard' && !barged)) {
       const words = full.split(/\s+/).filter(Boolean).length
       if (mode === 'guard') {
@@ -825,6 +844,10 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       } catch {
         /* noop */
       }
+    },
+    finish: () => {
+      if (started) emit()
+      assemble.flush()
     },
     live: () => running,
   }

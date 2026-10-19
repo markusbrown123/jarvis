@@ -4,7 +4,7 @@ import { Hud } from './ui/Hud'
 import { Ignition } from './ui/Ignition'
 import { Diagnostics } from './ui/Diagnostics'
 import { useStore } from './store'
-import { startVoice, type Voice, type VoiceMode } from './lib/voice'
+import { startVoice, diag as voiceDiag, type Voice, type VoiceHandlers, type VoiceMode } from './lib/voice'
 import { createSpeaker, cycleVoice, currentVoiceName } from './lib/tts'
 import * as sfx from './lib/sfx'
 import * as music from './lib/music'
@@ -28,7 +28,8 @@ import {
   usingBridge,
   type Msg,
 } from './lib/brain'
-import { startAnalyser, micLevel } from './lib/audio'
+import { startAnalyser, micLevel, releaseMic } from './lib/audio'
+import { recordTurn, type TurnTiming } from './lib/metrics'
 import { probeCapabilities } from './lib/capabilities'
 import { env } from './config'
 
@@ -68,6 +69,19 @@ const BARE_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}[\\s,.!?]*$`, 'i
 /** A leading vocative on a real command: "Jarvis, what's the weather". */
 const LEADING_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}\\b[\\s,.:!?-]*`, 'i')
 
+/** Spoken controls handled here, never sent to the model: they have to work
+ *  instantly and mean exactly one thing. */
+const STOP_TALKING =
+  /^(?:ok(?:ay)?,?\s*)?(?:stop(?: talking)?|quiet|be quiet|shush|hush|enough|that'?s enough|shut up)[.!]*$/i
+const STOP_LISTENING =
+  /^(?:stop listening|mute(?: yourself)?|(?:turn )?(?:the )?mic(?:rophone)? off|go to sleep)[.!]*$/i
+const CANCEL_REPLY = /^(?:cancel(?: that| it| the reply)?|never ?mind|forget (?:it|that))[.!]*$/i
+/** Opening words that mean "this belongs to what I just said". */
+const JOINS = /^(?:and|also|plus|or|but|then|actually|wait|sorry|no,|i mean)\b/i
+
+/** A turn started by hand stays open this long before giving up. */
+const MANUAL_LISTEN_MS = 120000
+
 export default function App() {
   const store = useStore
   const phase = useStore((s) => s.phase)
@@ -81,6 +95,12 @@ export default function App() {
    * the phase, the speaker, or the busy state on its way to the floor.
    */
   const turn = useRef(0)
+  /** The request in flight, so a continuation can be joined to it. */
+  const inflight = useRef<{ text: string; spokeAt: number; tools: boolean } | null>(null)
+  /** A request abandoned while it was being prepared, waiting for the rest of
+   *  the thought. `joinOnly`: only join if the new words say they belong. */
+  const carry = useRef<{ text: string; at: number; joinOnly: boolean } | null>(null)
+  const handlers = useRef<VoiceHandlers | null>(null)
   const booting = useRef(false)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -122,9 +142,23 @@ export default function App() {
 
   // -- one turn -------------------------------------------------------------
 
-  const respond = async (said: string): Promise<void> => {
+  const respond = async (said: string, source: 'voice' | 'typed' = 'voice'): Promise<void> => {
     const mine = ++turn.current
     const stale = () => mine !== turn.current
+    const now = Date.now()
+    const timing: TurnTiming = {
+      id: newId(),
+      at: now,
+      speechEnd:
+        source === 'voice' && now - voiceDiag.lastSpeechAt < 30000 ? voiceDiag.lastSpeechAt : 0,
+      endpoint: now,
+      firstText: 0,
+      firstSound: 0,
+      done: 0,
+      source,
+    }
+    const job = { text: said, spokeAt: 0, tools: false }
+    inflight.current = job
 
     clearIdle()
     const s = store.getState()
@@ -151,6 +185,8 @@ export default function App() {
           if (stale()) return
           if (!started) {
             started = true
+            timing.firstText = Date.now()
+            job.spokeAt = timing.firstText
             store.getState().setPhase('speaking')
             // The answer arriving is what ends the tool phase — a timer would
             // clear the readout while a slow tool was still running.
@@ -161,8 +197,13 @@ export default function App() {
           store.getState().appendToLastTurn(delta)
           spk.push(delta)
         },
+        onTextEnd: () => {
+          if (stale()) return
+          spk.flush()
+        },
         onTool: (name) => {
           if (stale()) return
+          job.tools = true
           // Only claim the tooling phase while he has nothing to say yet.
           // Setting it unconditionally pinned the machine in 'tooling' for the
           // rest of any answer that called a tool after it started talking,
@@ -195,6 +236,9 @@ export default function App() {
 
       await spk.end()
       if (stale()) return
+      timing.firstSound = spk.firstSound()
+      timing.done = Date.now()
+      recordTurn(timing)
       sfx.play('done')
     } catch (err) {
       if (stale()) return
@@ -205,14 +249,17 @@ export default function App() {
         .setError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
       if (!stale()) {
+        inflight.current = null
         speaker.current = null
         sfx.duck(false)
         music.duck(false)
         store.getState().setActiveTool(null)
         music.working(false)
         // Stay open. Having to say his name again to add one more sentence is
-        // the difference between a conversation and a vending machine.
-        listen(FOLLOW_UP_MS)
+        // the difference between a conversation and a vending machine. Turns
+        // started by hand end by hand, so those go back to standby.
+        if (store.getState().talkMode === 'auto') listen(FOLLOW_UP_MS)
+        else goDormant()
       }
     }
   }
@@ -221,12 +268,15 @@ export default function App() {
 
   /** What the voice loop should do with what it hears, derived from phase. */
   const mode = (): VoiceMode => {
-    switch (store.getState().phase) {
+    const st = store.getState()
+    if (!st.micArmed) return 'deaf'
+    switch (st.phase) {
       case 'offline':
       case 'boot':
         return 'deaf'
       case 'dormant':
-        return 'wake'
+        // Hold and tap mean the mic only counts when you ask it to.
+        return st.talkMode === 'auto' ? 'wake' : 'deaf'
       case 'waking':
       case 'listening':
         return 'command'
@@ -274,6 +324,18 @@ export default function App() {
     const wasBusy =
       phase === 'thinking' || phase === 'tooling' || phase === 'speaking'
 
+    // Talking again before he has done anything usually means the thought was
+    // not finished. Keep the request so the rest can be joined to it. Never
+    // once a tool has run: that request has already acted.
+    const job = inflight.current
+    if (wasBusy && job && !job.tools) {
+      if (phase === 'thinking') {
+        carry.current = { text: job.text, at: Date.now(), joinOnly: false }
+      } else if (phase === 'speaking' && job.spokeAt && Date.now() - job.spokeAt < 3000) {
+        carry.current = { text: job.text, at: Date.now(), joinOnly: true }
+      }
+    }
+
     silence()
     if (wasBusy) {
       // Abandon the answer in flight. The turn counter moves in respond()'s
@@ -298,13 +360,103 @@ export default function App() {
       listen(AWAIT_SPEECH_MS)
       return
     }
-    const said = text.replace(LEADING_NAME, '').trim()
+    let said = text.replace(LEADING_NAME, '').trim()
     if (!said) {
       listen(AWAIT_SPEECH_MS)
       return
     }
 
+    if (STOP_TALKING.test(said)) {
+      carry.current = null
+      silence()
+      listen(FOLLOW_UP_MS)
+      return
+    }
+    if (STOP_LISTENING.test(said)) {
+      carry.current = null
+      void setMicArmed(false)
+      return
+    }
+    if (CANCEL_REPLY.test(said)) {
+      cancelReply()
+      return
+    }
+
+    const c = carry.current
+    carry.current = null
+    if (c && Date.now() - c.at < 15000 && (!c.joinOnly || JOINS.test(said))) {
+      said = `${c.text} ${said}`
+    }
+
     void respond(said)
+  }
+
+  // -- controls the interface calls -----------------------------------------
+
+  const busy = () => {
+    const p = store.getState().phase
+    return p === 'thinking' || p === 'tooling' || p === 'speaking'
+  }
+
+  /** Abandon the reply in flight, in the bridge as well as on the speaker. */
+  const abandonReply = () => {
+    silence()
+    if (!busy()) return
+    turn.current++
+    interrupt()
+    store.getState().setActiveTool(null)
+    music.working(false)
+    sfx.duck(false)
+    music.duck(false)
+  }
+
+  /** Quiet now; the answer keeps arriving as text and nothing else stops. */
+  const stopTalking = () => silence()
+
+  const cancelReply = () => {
+    carry.current = null
+    abandonReply()
+    if (store.getState().talkMode === 'auto') listen(FOLLOW_UP_MS)
+    else goDormant()
+  }
+
+  const finishSpeaking = () => voice.current?.finish()
+
+  const startTalking = () => {
+    const st = store.getState()
+    if (st.phase === 'offline' || st.phase === 'boot') return
+    if (!st.micArmed) void setMicArmed(true)
+    if (busy()) onSpeechStart()
+    listen(st.talkMode === 'auto' ? AWAIT_SPEECH_MS : MANUAL_LISTEN_MS)
+  }
+
+  /** Off really means off: the stream is closed and the mic light goes out. */
+  const setMicArmed = async (on: boolean) => {
+    const st = store.getState()
+    if (on === st.micArmed) return
+    if (!on) {
+      voice.current?.stop()
+      voice.current = null
+      releaseMic()
+      st.setMicArmedFlag(false)
+      if (st.phase === 'listening' || st.phase === 'waking') goDormant()
+      return
+    }
+    st.setMicArmedFlag(true)
+    try {
+      await startAnalyser()
+    } catch {
+      /* the reactor just won't pulse with your voice */
+    }
+    if (handlers.current) voice.current = await startVoice(handlers.current)
+  }
+
+  const sendText = (text: string) => {
+    const said = text.trim()
+    if (!said) return
+    carry.current = null
+    abandonReply()
+    void respond(said, 'typed')
   }
 
   const onPartial = (text: string) => {
@@ -506,13 +658,22 @@ export default function App() {
     await probeCapabilities()
 
     // One voice loop, started once, running until the page closes.
-    voice.current = await startVoice({
+    handlers.current = {
       mode,
       onWake,
       onSpeechStart,
       onPartial,
       onUtterance,
       onError: onVoiceError,
+    }
+    voice.current = await startVoice(handlers.current)
+    store.getState().setControls({
+      stopTalking,
+      cancelReply,
+      finishSpeaking,
+      startTalking,
+      setMicArmed: (on) => void setMicArmed(on),
+      sendText,
     })
 
     store.getState().setPhase('dormant')
@@ -663,6 +824,20 @@ export default function App() {
         return
       }
 
+      // M releases or re-opens the microphone.
+      if (e.key === 'm' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        void setMicArmed(!store.getState().micArmed)
+        return
+      }
+
+      // Enter: that's the whole thought, don't wait for the pause.
+      if (e.key === 'Enter' && store.getState().phase === 'listening') {
+        e.preventDefault()
+        finishSpeaking()
+        return
+      }
+
       // Escape stands the whole thing down — the one thing the old build had
       // no key for at all.
       if (e.key === 'Escape') {
@@ -677,10 +852,16 @@ export default function App() {
       e.preventDefault()
 
       const phase = store.getState().phase
+      const talkMode = store.getState().talkMode
       if (phase === 'offline') {
         void powerOn()
       } else if (phase === 'boot') {
         /* ignore — the boot sequence owns the phase until it finishes */
+      } else if (talkMode === 'hold') {
+        startTalking()
+      } else if (talkMode === 'tap') {
+        if (phase === 'listening') finishSpeaking()
+        else startTalking()
       } else if (
         phase === 'thinking' ||
         phase === 'tooling' ||
@@ -694,9 +875,19 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
 
+    // Hold to talk: letting go of Space is the end of the thought.
+    const onKeyUp = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.code !== 'Space' || store.getState().talkMode !== 'hold') return
+      if (store.getState().phase === 'listening') finishSpeaking()
+    }
+    window.addEventListener('keyup', onKeyUp)
+
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
       clearIdle()
       if (voicePoll.current) clearInterval(voicePoll.current)
       voice.current?.stop()
