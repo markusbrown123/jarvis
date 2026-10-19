@@ -1,11 +1,11 @@
 #!/bin/bash
 #
 # One command for everything. Starts the brain and the face in the background
-# (no terminal to keep open, no `npm start`), then opens JARVIS in his own
-# full-size Chrome window, already booted.
+# (no terminal to keep open, no `npm start`), then opens JARVIS in a new
+# full-size window of your normal Chrome. Click INITIALISE to wake him.
 #
 #   jarvis          start if needed, then open his window
-#   jarvis stop     shut him down and close his window
+#   jarvis stop     shut him down
 #   jarvis logs     follow the log
 #
 # Settings come from the environment, with defaults below. The ElevenLabs key
@@ -15,10 +15,7 @@
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$HOME/Library/Logs/jarvis.log"
 PIDFILE="$DIR/.jarvis.pid"
-URL="http://localhost:5173/?autostart"
-# A Chrome profile of his own, so the window can autoplay sound and boot
-# without a click, and never touches the profile you browse with.
-PROFILE="$HOME/Library/Application Support/JARVIS Chrome"
+URL="http://localhost:5173/"
 
 # launchd (the clap listener) starts us with a bare PATH.
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
@@ -53,24 +50,32 @@ start_servers() {
 }
 
 open_window() {
-  # Always ask for a window. If his Chrome is still running (closing the last
-  # window on a Mac doesn't quit it), Chrome hands this to that instance and
-  # it opens a fresh window instead of starting a second copy.
-
-  # Fill the screen without going fullscreen.
-  local bounds w h
-  bounds="$(osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>/dev/null)"
-  w="$(echo "$bounds" | cut -d, -f3 | tr -d ' ')"
-  h="$(echo "$bounds" | cut -d, -f4 | tr -d ' ')"
-
-  open -na "Google Chrome" --args \
-    --user-data-dir="$PROFILE" \
-    --app="$URL" \
-    --window-position=0,0 \
-    --window-size="${w:-1440},${h:-900}" \
-    --autoplay-policy=no-user-gesture-required \
-    --no-first-run \
-    --no-default-browser-check
+  # Your normal Chrome, not a separate profile: that is where the microphone
+  # works. A new window, sized to fill the screen without going fullscreen.
+  # If Chrome wasn't running, use the window it opens on launch instead of
+  # adding a second one.
+  osascript - "$URL" <<'OSA'
+on run argv
+  set wasRunning to application "Google Chrome" is running
+  tell application "Finder" to set b to bounds of window of desktop
+  tell application "Google Chrome"
+    activate
+    if not wasRunning then
+      repeat 20 times
+        if (count of windows) > 0 then exit repeat
+        delay 0.2
+      end repeat
+    end if
+    if wasRunning or (count of windows) is 0 then
+      set w to make new window
+    else
+      set w to window 1
+    end if
+    set URL of active tab of w to item 1 of argv
+    set bounds of w to {0, 0, item 3 of b, item 4 of b}
+  end tell
+end run
+OSA
 }
 
 stop_all() {
@@ -78,7 +83,6 @@ stop_all() {
     kill "$(cat "$PIDFILE")" 2>/dev/null
     rm -f "$PIDFILE"
   fi
-  pkill -f "user-data-dir=$PROFILE" 2>/dev/null
   echo "JARVIS stopped."
 }
 

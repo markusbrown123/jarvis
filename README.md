@@ -46,7 +46,7 @@ language.
 
 ```bash
 echo 'alias jarvis="$HOME/jarvis/bin/jarvis"' >> ~/.zshrc && source ~/.zshrc
-jarvis          # starts in the background and opens his own window, already booted
+jarvis          # starts in the background and opens him in Chrome; click INITIALISE
 jarvis stop     # shuts him down
 jarvis logs     # shows what he's doing
 ```
