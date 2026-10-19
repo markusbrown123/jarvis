@@ -1,0 +1,100 @@
+#!/bin/bash
+#
+# One command for everything. Starts the brain and the face in the background
+# (no terminal to keep open, no `npm start`), then opens JARVIS in his own
+# full-size Chrome window, already booted.
+#
+#   jarvis          start if needed, then open his window
+#   jarvis stop     shut him down and close his window
+#   jarvis logs     follow the log
+#
+# Settings come from the environment, with defaults below. The ElevenLabs key
+# is read from the macOS Keychain (service "elevenlabs") so it never sits in a
+# file:  security add-generic-password -a "$USER" -s elevenlabs -w
+
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+LOG="$HOME/Library/Logs/jarvis.log"
+PIDFILE="$DIR/.jarvis.pid"
+URL="http://localhost:5173/?autostart"
+# A Chrome profile of his own, so the window can autoplay sound and boot
+# without a click, and never touches the profile you browse with.
+PROFILE="$HOME/Library/Application Support/JARVIS Chrome"
+
+# launchd (the clap listener) starts us with a bare PATH.
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+
+ready() {
+  curl -s http://localhost:8788/health | grep -q '"ok":true' &&
+    curl -s -o /dev/null http://localhost:5173
+}
+
+start_servers() {
+  if [ -z "${ELEVENLABS_API_KEY:-}" ]; then
+    ELEVENLABS_API_KEY="$(security find-generic-password -a "$USER" -s elevenlabs -w 2>/dev/null)"
+    export ELEVENLABS_API_KEY
+  fi
+  export JARVIS_VOICE_ID="${JARVIS_VOICE_ID:-0b0iqagmTWiLn7v15IEs}"
+  export JARVIS_MODEL="${JARVIS_MODEL:-claude-sonnet-5-5}"
+  export JARVIS_EFFORT="${JARVIS_EFFORT:-low}"
+
+  echo "Starting JARVIS..."
+  mkdir -p "$(dirname "$LOG")"
+  cd "$DIR" || exit 1
+  nohup node scripts/start.mjs >>"$LOG" 2>&1 &
+  echo $! >"$PIDFILE"
+
+  for _ in $(seq 60); do
+    ready && return 0
+    sleep 1
+  done
+  echo "JARVIS didn't start within 60 seconds. Last lines of $LOG:"
+  tail -n 20 "$LOG"
+  return 1
+}
+
+open_window() {
+  # Already open: bring it to the front instead of opening a second one.
+  local pid
+  pid="$(pgrep -f "user-data-dir=$PROFILE" | head -n 1)"
+  if [ -n "$pid" ]; then
+    osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" >/dev/null 2>&1
+    return
+  fi
+
+  # Fill the screen without going fullscreen.
+  local bounds w h
+  bounds="$(osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>/dev/null)"
+  w="$(echo "$bounds" | cut -d, -f3 | tr -d ' ')"
+  h="$(echo "$bounds" | cut -d, -f4 | tr -d ' ')"
+
+  open -na "Google Chrome" --args \
+    --user-data-dir="$PROFILE" \
+    --app="$URL" \
+    --window-position=0,0 \
+    --window-size="${w:-1440},${h:-900}" \
+    --autoplay-policy=no-user-gesture-required \
+    --no-first-run \
+    --no-default-browser-check
+}
+
+stop_all() {
+  if [ -f "$PIDFILE" ]; then
+    kill "$(cat "$PIDFILE")" 2>/dev/null
+    rm -f "$PIDFILE"
+  fi
+  pkill -f "user-data-dir=$PROFILE" 2>/dev/null
+  echo "JARVIS stopped."
+}
+
+case "${1:-}" in
+  stop) stop_all ;;
+  logs) tail -n 50 -f "$LOG" ;;
+  "")
+    ready || start_servers || exit 1
+    open_window
+    ;;
+  *)
+    echo "usage: jarvis [stop|logs]"
+    exit 1
+    ;;
+esac

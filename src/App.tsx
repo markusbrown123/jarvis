@@ -558,6 +558,21 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
+  // -- autostart ------------------------------------------------------------
+
+  /**
+   * `?autostart` boots him without the button. Only useful in a browser started
+   * with --autoplay-policy=no-user-gesture-required (bin/jarvis does this);
+   * anywhere else he boots the same way a clap boots him, and may stay silent
+   * until the page is clicked.
+   */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('autostart')) {
+      void powerOn()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // -- level pump + keys ----------------------------------------------------
 
   useEffect(() => {

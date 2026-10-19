@@ -28,7 +28,7 @@ import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
 
-const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
+const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
 
 /**
  * A crash here takes the whole assistant down mid-sentence, and most of what
@@ -46,7 +46,7 @@ process.on('unhandledRejection', (err) => {
  * A WebSocket handshake is not subject to the same-origin policy: the browser
  * sends it on behalf of whatever page asked, no preflight stands in the way,
  * and the page reads every byte that comes back. Without a check here, any tab
- * the user happens to have open could open a socket to ws://localhost:8787,
+ * the user happens to have open could open a socket to ws://localhost:8788,
  * drive the agent with every MCP server on this machine, and read back every
  * token and panel. The Origin header is the only thing that separates our own
  * dev server from someone else's page, so it is checked explicitly.

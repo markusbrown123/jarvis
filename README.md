@@ -42,6 +42,18 @@ language.
 
 ## Quick start
 
+**On a Mac, one command does everything** (this fork's launcher, `bin/jarvis`):
+
+```bash
+echo 'alias jarvis="$HOME/jarvis/bin/jarvis"' >> ~/.zshrc && source ~/.zshrc
+jarvis          # starts in the background and opens his own window, already booted
+jarvis stop     # shuts him down
+jarvis logs     # shows what he's doing
+```
+
+It reads the ElevenLabs key from the Keychain (`security add-generic-password -a "$USER" -s elevenlabs -w`)
+and logs to `~/Library/Logs/jarvis.log`. The manual way still works:
+
 First, install, then start it:
 
 ```bash
@@ -92,7 +104,7 @@ the brain and the hands.
   │  "Hey Jarvis" wake word            │        │  Node · bridge/server.mjs        │
   │  local VAD  →  speech to text      │   ws   │  Claude Agent SDK                │
   │  reactor UI (Three.js + GLSL)      │◄─────► │   = Claude Code, headless        │
-  │  text to speech                    │  8787  │  spawns your MCP servers         │
+  │  text to speech                    │  8788  │  spawns your MCP servers         │
   │  heads-up display                  │        │  permission gate (decideTool)    │
   └────────────────────────────────────┘        └──────────────────────────────────┘
 ```
@@ -101,7 +113,7 @@ Everything you see and hear happens in the browser. The bridge is a single Node
 process (`bridge/server.mjs`) that runs the **Claude Agent SDK**
 (`@anthropic-ai/claude-agent-sdk`) — this spawns the real `claude` CLI as a child
 process, so **the brain literally is Claude Code, headless.** They talk over a
-WebSocket (plus a few HTTP endpoints) on `ws://localhost:8787`.
+WebSocket (plus a few HTTP endpoints) on `ws://localhost:8788`.
 
 **Why a bridge at all?** A browser tab cannot spawn the local stdio MCP servers —
 `higgsfield`, `elevenlabs`, `android`, `playwright`, `exa`, `serper`, and the
@@ -224,7 +236,7 @@ Everything is optional in bridge mode. Frontend settings live in `.env.local`
 
 | Variable | Default | Effect |
 |---|---|---|
-| `JARVIS_BRIDGE_PORT` | `8787` | Port for the WebSocket + HTTP endpoints |
+| `JARVIS_BRIDGE_PORT` | `8788` | Port for the WebSocket + HTTP endpoints |
 | `JARVIS_MODEL` | `claude-opus-5` | Model to run |
 | `JARVIS_EFFORT` | `medium` | Reasoning effort |
 | `JARVIS_ALLOW_WRITES` | off | `1` allows effectful tools (see below) |
@@ -289,7 +301,7 @@ Press **T** for a one-line audio self-test.
 window** (not an embedded preview), and you must have **allowed the microphone**.
 
 **Bridge not reachable.** Check that `npm run bridge` is still running in its
-terminal, and that nothing else is holding port `8787`.
+terminal, and that nothing else is holding port `8788`.
 
 ---
 
