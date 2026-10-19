@@ -1,0 +1,8 @@
+#!/bin/bash
+# Claude Code hook → JARVIS. Forwards the hook's JSON to the local bridge and
+# always exits 0, so a JARVIS that isn't running never slows or blocks Claude.
+TOKEN="$(cat "$HOME/.jarvis/token" 2>/dev/null)" || exit 0
+curl -s -m 2 -X POST "http://127.0.0.1:${JARVIS_BRIDGE_PORT:-8788}/api/hook" \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  --data-binary @- >/dev/null 2>&1
+exit 0

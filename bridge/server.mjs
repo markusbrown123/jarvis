@@ -27,6 +27,8 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
+import { startHub } from './hub/api.mjs'
+import * as hub from './hub/store.mjs'
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
 
@@ -662,6 +664,8 @@ function corsFor(req) {
 // One HTTP server for both the speech proxy and the WebSocket upgrade.
 const http = await import('node:http')
 
+const hubApi = startHub()
+
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
   if (origin && !originAllowed(origin)) {
@@ -675,6 +679,9 @@ const handleRequest = async (req, res) => {
     res.writeHead(204, cors)
     return res.end()
   }
+
+  // The command center: projects, jobs, Needs Markus, usage.
+  if (req.url?.startsWith('/api/')) return hubApi(req, res, cors, Boolean(origin))
 
   if (req.method === 'GET' && req.url === '/health') {
     // The browser reads this once at boot to decide which voice engine to use.
@@ -998,7 +1005,13 @@ const wss = new WebSocketServer({
     done(true)
   },
 })
-server.listen(PORT)
+/**
+ * Loopback only, unless JARVIS_BIND says otherwise. Listening on every
+ * interface put the speech proxy and the agent one Wi-Fi hop from anyone on
+ * the same network.
+ */
+const BIND = process.env.JARVIS_BIND ?? '127.0.0.1'
+server.listen(PORT, BIND)
 
 console.log(`[jarvis] bridge listening on ws://localhost:${PORT}`)
 console.log(
@@ -1350,7 +1363,20 @@ wss.on('connection', (socket) => {
             break
           }
 
+          case 'rate_limit_event':
+            hub.observeLimitStatus(msg.rate_limit_info)
+            break
+
           case 'result':
+            // JARVIS's own usage, once per request (deduplicated by its id).
+            hub.observeRequest({
+              id: msg.uuid,
+              inputTokens: msg.usage?.input_tokens ?? 0,
+              outputTokens: msg.usage?.output_tokens ?? 0,
+              cacheReadTokens: msg.usage?.cache_read_input_tokens ?? 0,
+              cacheWriteTokens: msg.usage?.cache_creation_input_tokens ?? 0,
+              costUsd: msg.total_cost_usd ?? 0,
+            })
             // A result is not automatically a success. The error subtypes
             // carry no `result` field at all, so reporting them as 'done' with
             // empty text is indistinguishable from a turn that simply had

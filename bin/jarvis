@@ -7,6 +7,7 @@
 #   jarvis          start if needed, then open his window
 #   jarvis stop     shut him down
 #   jarvis logs     follow the log
+#   jarvis setup-claude [--remove]   forward Claude Code usage + activity
 #
 # Settings come from the environment, with defaults below. The ElevenLabs key
 # is read from the macOS Keychain (service "elevenlabs") so it never sits in a
@@ -95,13 +96,14 @@ stop_all() {
 
 case "${1:-}" in
   stop) stop_all ;;
+  setup-claude) shift; node "$DIR/scripts/setup-claude.mjs" "$@" ;;
   logs) tail -n 50 -f "$LOG" ;;
   "")
     ready || start_servers || exit 1
     open_window
     ;;
   *)
-    echo "usage: jarvis [stop|logs]"
+    echo "usage: jarvis [stop|logs|setup-claude [--remove]]"
     exit 1
     ;;
 esac
