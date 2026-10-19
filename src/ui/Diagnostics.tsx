@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store'
+import { micLevel, micName } from '../lib/audio'
 
 /**
  * The "why can't he hear me / why can't I hear him" panel.
@@ -104,6 +105,8 @@ export function Diagnostics() {
       </div>
 
       <div className="diag-sec">LISTENING</div>
+      <Row k="microphone" v={micName() || '— none open'} bad={!micName()} />
+      <Row k="mic level" v={`${Math.round(micLevel() * 100)}%`} />
       <Row k="recogniser" v={v.running ? 'running' : 'STOPPED'} bad={!v.running} />
       <Row k="sessions" v={String(v.sessions ?? 0)} />
       <Row

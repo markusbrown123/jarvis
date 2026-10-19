@@ -69,6 +69,11 @@ export async function getMic(): Promise<MediaStream> {
   return stream
 }
 
+/** Which microphone is actually open, for the diagnostics panel. */
+export function micName(): string {
+  return stream?.getAudioTracks()[0]?.label ?? ''
+}
+
 export async function startAnalyser(): Promise<void> {
   if (analyser) return
   const s = await getMic()
