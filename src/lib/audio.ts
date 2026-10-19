@@ -28,7 +28,9 @@ const open = (deviceId?: string) =>
  */
 const PHONE = /iphone|ipad/i
 
-async function localMic(): Promise<string | null> {
+const BUILT_IN = /macbook|built-in/i
+
+async function localMic(): Promise<MediaDeviceInfo | null> {
   const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
     (d) =>
       d.kind === 'audioinput' &&
@@ -36,12 +38,21 @@ async function localMic(): Promise<string | null> {
       d.deviceId !== 'communications' &&
       !PHONE.test(d.label),
   )
-  const builtIn = inputs.find((d) => /macbook|built-in/i.test(d.label))
-  return (builtIn ?? inputs[0])?.deviceId ?? null
+  return inputs.find((d) => BUILT_IN.test(d.label)) ?? inputs[0] ?? null
 }
 
-export async function getMic(): Promise<MediaStream> {
-  if (stream) return stream
+/** The request in flight, so two callers at once share one microphone. */
+let opening: Promise<MediaStream> | null = null
+
+export function getMic(): Promise<MediaStream> {
+  if (stream) return Promise.resolve(stream)
+  opening ??= openMic().finally(() => {
+    opening = null
+  })
+  return opening
+}
+
+async function openMic(): Promise<MediaStream> {
   let s: MediaStream
   try {
     s = await open()
@@ -49,19 +60,23 @@ export async function getMic(): Promise<MediaStream> {
     // A refused permission is final. Anything else may be the phone's mic
     // having gone away, so try the Mac's own before giving up.
     if (err instanceof DOMException && err.name === 'NotAllowedError') throw err
-    const id = await localMic()
-    if (!id) throw err
-    s = await open(id)
+    const mic = await localMic()
+    if (!mic) throw err
+    s = await open(mic.deviceId)
   }
-  if (PHONE.test(s.getAudioTracks()[0]?.label ?? '')) {
-    const id = await localMic()
-    if (id) {
+  // Always the built-in mic when there is one, whatever macOS chose as the
+  // default (a phone, AirPods, a webcam). With no built-in, only move off a
+  // phone.
+  const label = s.getAudioTracks()[0]?.label ?? ''
+  if (!BUILT_IN.test(label)) {
+    const mic = await localMic()
+    if (mic && (BUILT_IN.test(mic.label) || PHONE.test(label))) {
       try {
-        const own = await open(id)
+        const own = await open(mic.deviceId)
         s.getTracks().forEach((t) => t.stop())
         s = own
       } catch {
-        // The phone works; better than nothing.
+        // What macOS picked works; better than nothing.
       }
     }
   }
