@@ -51,6 +51,9 @@ jarvis stop     # shuts him down
 jarvis logs     # shows what he's doing
 ```
 
+The command center (projects, jobs, Needs Markus, usage) is described in
+[docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md).
+
 It reads the ElevenLabs key from the Keychain (`security add-generic-password -a "$USER" -s elevenlabs -w`)
 and logs to `~/Library/Logs/jarvis.log`. The manual way still works:
 

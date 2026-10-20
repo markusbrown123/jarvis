@@ -40,6 +40,12 @@ start_servers() {
   echo "Starting JARVIS..."
   mkdir -p "$(dirname "$LOG")"
   cd "$DIR" || exit 1
+  # After a `git pull` that changed dependencies, install them first —
+  # otherwise the page fails to build on a missing package.
+  if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+    echo "Installing updated dependencies (one time)..."
+    npm install --no-audit --no-fund >>"$LOG" 2>&1 || { echo "npm install failed — see $LOG"; return 1; }
+  fi
   nohup node scripts/start.mjs >>"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
 
