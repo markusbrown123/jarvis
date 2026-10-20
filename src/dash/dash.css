@@ -1,6 +1,10 @@
-@import '@fontsource-variable/space-grotesk';
-@import '@fontsource-variable/inter';
-@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource/barlow/latin-400.css';
+@import '@fontsource/barlow/latin-500.css';
+@import '@fontsource/barlow/latin-600.css';
+@import '@fontsource/barlow-condensed/latin-500.css';
+@import '@fontsource/barlow-condensed/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
 
 /* --------------------------------------------------------------- tokens */
 
@@ -21,9 +25,11 @@
   --red: #f05252;
   --green: #4ade80;
   --radius: 12px;
-  --head: 'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
-  --body: 'Inter Variable', system-ui, -apple-system, sans-serif;
-  --mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  /* Instrument-panel type: a DIN-like grotesk for reading, its condensed cut
+     for headings and labels, and Plex Mono for numbers and the terminal. */
+  --head: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  --body: 'Barlow', system-ui, -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
   --nav-w: 232px;
   --needs-w: 340px;
 }
@@ -31,6 +37,8 @@
 body.dash-mode {
   background: var(--g0);
   font-family: var(--body);
+  /* Barlow sits smaller than the sizes here were set for; match x-heights. */
+  font-size-adjust: 0.53;
   color: var(--text);
 }
 /* Clean surfaces: no scanlines over text. */
@@ -721,68 +729,30 @@ body.dash-mode::after {
 .convo {
   grid-area: convo;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) minmax(220px, 320px) auto;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 20px;
   align-items: center;
-  padding: 10px 16px;
+  padding: 8px 16px;
   border-top: 1px solid var(--line);
   background: rgba(15, 13, 23, 0.92);
-  min-height: 76px;
+  min-height: 84px;
 }
-.convo-state {
+.convo-center {
+  min-width: 300px;
+  display: flex;
+  justify-content: center;
+}
+.convo-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
 }
-.orb {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 40%, #fff 0%, var(--violet) 35%, #2e1065 75%);
-  box-shadow: 0 0 18px rgba(167, 139, 250, 0.55);
-  flex: none;
-}
-.state-live .orb,
-.state-held .orb {
-  background: radial-gradient(circle at 40% 40%, #fff 0%, #ff9a3c 40%, #4c1d95 80%);
-  box-shadow: 0 0 22px rgba(255, 154, 60, 0.7);
-}
-.state-speak .orb {
-  background: radial-gradient(circle at 40% 40%, #fff 0%, var(--cyan) 40%, #134e4a 80%);
-}
-.state-off .orb {
-  background: radial-gradient(circle, #3b3650, #1a1726);
-  box-shadow: none;
-}
-.state-fail .orb {
-  background: radial-gradient(circle, #fecaca, var(--red) 50%, #450a0a);
-}
-.convo-label {
-  font: 600 14.5px var(--head);
-}
-.wave {
-  display: flex;
-  gap: 2px;
-  height: 18px;
-  align-items: center;
-  margin-top: 4px;
-}
-.wave > span {
-  display: block;
-  width: 3px;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--violet);
-  transform-origin: center;
-  transform: scaleY(0.12);
-  transition: transform 80ms linear;
-}
-.state-live .wave > span,
-.state-held .wave > span {
-  background: #ff9a3c;
-}
-.state-speak .wave > span {
-  background: var(--cyan);
+.convo-right .convo-input {
+  flex: 1 1 200px;
+  max-width: 320px;
+  min-width: 140px;
 }
 .convo-transcript {
   min-width: 0;
@@ -909,18 +879,11 @@ body.dash-mode::after {
   position: absolute !important;
   inset: 0;
 }
-.core-label {
+.core-wave {
   position: absolute;
   left: 50%;
-  bottom: 14px;
+  bottom: 10px;
   transform: translateX(-50%);
-  font: 600 12px var(--mono);
-  letter-spacing: 0.3em;
-  color: var(--muted);
-}
-.core-label-listening,
-.core-label-waking {
-  color: #ff9a3c;
 }
 
 .constellation {
@@ -1617,23 +1580,6 @@ kbd {
   z-index: 20;
   background: #05030a;
 }
-.live-pill {
-  position: absolute;
-  top: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(12, 8, 20, 0.6);
-  color: var(--text);
-  font: 600 12px var(--mono);
-  letter-spacing: 0.14em;
-  cursor: pointer;
-}
 .immersive-close {
   position: absolute;
   top: 18px;
@@ -1642,7 +1588,7 @@ kbd {
 .immersive-words {
   position: absolute;
   left: 50%;
-  bottom: 120px;
+  bottom: 210px;
   transform: translateX(-50%);
   width: min(900px, calc(100vw - 48px));
   text-align: center;
@@ -1664,14 +1610,6 @@ kbd {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-}
-.immersive-state {
-  font: 600 12px var(--mono);
-  letter-spacing: 0.3em;
-  color: var(--muted);
-}
-.immersive .wave > span {
-  background: #ff9a3c;
 }
 
 /* fallback core when WebGL is unavailable */
@@ -1700,12 +1638,8 @@ kbd {
   .pipeline {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .convo {
-    grid-template-columns: 220px minmax(0, 1fr) auto;
-  }
-  .convo-input {
-    grid-column: 1 / -1;
-    order: 4;
+  .convo-right .convo-input {
+    display: none;
   }
 }
 @media (max-width: 1050px) {
@@ -1850,4 +1784,102 @@ kbd {
 }
 .phone-card .check > .input {
   margin: 0 6px;
+}
+
+/* ------------------------------------------------------- voice visualizer */
+
+.vw {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+.vw-canvas {
+  display: block;
+}
+.vw-word {
+  font: 500 11.5px var(--mono);
+  letter-spacing: 0.32em;
+  /* The tracking adds space after the last letter too; keep it centred. */
+  margin-right: -0.32em;
+  color: var(--muted);
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vw.state-live .vw-word,
+.vw.state-held .vw-word {
+  color: #ffc48a;
+}
+.vw.state-speak .vw-word {
+  color: var(--cyan);
+}
+.vw.state-fail .vw-word {
+  color: #fca5a5;
+}
+.vw-large {
+  gap: 10px;
+}
+.vw-large .vw-word {
+  font-size: 13px;
+  max-width: 520px;
+}
+.vw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 8, 20, 0.55);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font: 500 11.5px var(--mono);
+  letter-spacing: 0.16em;
+  cursor: pointer;
+}
+.vw-pill:hover {
+  border-color: rgba(255, 255, 255, 0.36);
+}
+.vw-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--violet);
+  box-shadow: 0 0 10px var(--violet);
+}
+.vw.state-live .vw-dot,
+.vw.state-held .vw-dot {
+  background: #ff7a1a;
+  box-shadow: 0 0 10px #ff7a1a;
+  animation: vwBlink 1.2s ease-in-out infinite;
+}
+.vw.state-speak .vw-dot {
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+}
+@keyframes vwBlink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.reduced .vw-dot {
+  animation: none;
+}
+
+/* headings in the condensed cut read best a little larger and tracked */
+.view-head h1 {
+  font-size: 31px;
+  letter-spacing: 0.01em;
+}
+.card-head h3,
+.needs-head h2 {
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 15.5px;
+}
+.brand-mark {
+  letter-spacing: 0.24em;
 }

@@ -79,11 +79,19 @@ function onHook(e) {
       hub.upsertJob({ ...job, state: 'waiting', stage: 'session started', expectsHeartbeat: false })
       break
     case 'UserPromptSubmit':
+      hub.term(`claude:${base(e.cwd) || 'session'}`, 'new prompt — working', 'info')
       hub.upsertJob({ ...job, state: 'running', stage: 'working on a prompt', expectsHeartbeat: true, staleAfterMs: 15 * 60000 })
       break
     case 'PreToolUse':
     case 'PostToolUse':
       hub.upsertJob({ ...job, state: 'running', stage: tool ?? 'using a tool', expectsHeartbeat: true, staleAfterMs: 15 * 60000 })
+      // The terminal shows what is being worked on: the tool, its own
+      // one-line description, and for file tools the file name — never
+      // commands or contents.
+      if (e.hook_event_name === 'PreToolUse') {
+        const file = e.tool_input?.file_path ? ` ${base(e.tool_input.file_path)}` : ''
+        hub.term(`claude:${base(e.cwd) || 'session'}`, `${e.tool_name ?? 'tool'}${file}${e.tool_input?.description ? ` — ${String(e.tool_input.description).slice(0, 100)}` : ''}`, 'tool')
+      }
       if (hub.getItem(permItem)?.state === 'open') hub.upsertItem({ id: permItem, state: 'resolved' }, { fromSource: false })
       break
     case 'PostToolUseFailure':
@@ -119,6 +127,7 @@ function onHook(e) {
       break
     case 'Stop':
       hub.upsertJob({ ...job, state: 'waiting', stage: 'turn finished — waiting for you', expectsHeartbeat: false })
+      hub.term(`claude:${base(e.cwd) || 'session'}`, 'turn finished', 'success')
       if (hub.getItem(permItem)?.state === 'open') hub.upsertItem({ id: permItem, state: 'resolved' }, { fromSource: false })
       break
     case 'StopFailure':
@@ -216,9 +225,12 @@ export function startHub({ runner, phone } = {}) {
         const send = (snap) => res.write(`event: state\ndata: ${JSON.stringify(snap)}\n\n`)
         send(hub.snapshot())
         const off = hub.subscribe(send)
+        res.write(`event: term\ndata: ${JSON.stringify(hub.termBacklog())}\n\n`)
+        const offTerm = hub.termSubscribe((line) => res.write(`event: term\ndata: ${JSON.stringify([line])}\n\n`))
         const ping = setInterval(() => res.write(': ping\n\n'), 25000)
         req.on('close', () => {
           off()
+          offTerm()
           clearInterval(ping)
         })
         return

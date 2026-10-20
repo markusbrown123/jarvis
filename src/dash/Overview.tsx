@@ -3,8 +3,8 @@ import { useHub, fileUrl, type View } from '../hub/client'
 import type { HubState, Job } from '../hub/types'
 import { ago, until, tone } from '../hub/format'
 import { CoreView } from '../scene/CoreView'
-import { useStore } from '../store'
 import { openItems, useTick } from './state'
+import { VoiceWave } from './VoiceWave'
 
 /**
  * The overview: one look answers what is running, what changed, what there is
@@ -265,7 +265,6 @@ export function Overview() {
   useTick(20000)
   const s = useHub((x) => x.state)
   const setPrefs = useHub((x) => x.setPrefs)
-  const phase = useStore((x) => x.phase)
   const go = (v: View, extra?: Record<string, string>) => setPrefs({ view: v, ...(extra ?? {}) })
   const sectors = useMemo(() => (s ? buildSectors(s, go) : []), [s]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!s) {
@@ -318,7 +317,9 @@ export function Overview() {
           <CoreView mode="compact" />
         </div>
         <Constellation sectors={sectors} />
-        <div className={`core-label core-label-${phase}`}>{phase === 'dormant' ? 'STANDBY' : phase.toUpperCase()}</div>
+        <div className="core-wave">
+          <VoiceWave />
+        </div>
       </div>
     </div>
   )

@@ -1355,6 +1355,7 @@ wss.on('connection', (socket) => {
     // interface is the interface talking about itself, not work being done for
     // the user, and the badge would be describing the very thing they can see.
     if (name.startsWith('mcp__jarvis_ui__')) return
+    hub.term('voice', name.replace(/^mcp__(\w+?)__/, '$1 · '), 'tool')
     if (decideTool(name)) return sendTurn({ type: 'tool', name })
     if (id) heldTools.set(id, name)
   }
@@ -1534,6 +1535,7 @@ wss.on('connection', (socket) => {
             // nothing to say — the HUD stops spinning and JARVIS stands there
             // silent. Say what happened instead.
             if (msg.subtype === 'success') {
+              hub.term('voice', `jarvis › ${msg.result ?? ''}`, 'reply')
               sendTurn({
                 type: 'done',
                 text: msg.result ?? '',
@@ -1610,6 +1612,7 @@ wss.on('connection', (socket) => {
        */
       const text = msg.text
       const id = typeof msg.id === 'string' ? msg.id : null
+      hub.term('voice', `markus › ${text}`, 'user')
       void settling.then(() => {
         answering = id
         if (deliver) {

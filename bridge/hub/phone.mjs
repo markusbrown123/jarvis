@@ -281,11 +281,13 @@ export function startPhone({ makeChat, transcribe, speak }) {
       }
     }
     if (!said) return
+    hub.term('phone', `markus${voice ? ' (voice note)' : ''} › ${said}`, 'user')
 
     await tg('sendChatAction', { chat_id: cfg.chatId, action: 'typing' }).catch(() => {})
     try {
       chat ??= makeChat()
       const answer = await chat.ask(said)
+      hub.term('phone', `jarvis › ${answer}`, 'reply')
       await reply(answer || 'Done, sir.', Boolean(voice))
     } catch (err) {
       chat = null

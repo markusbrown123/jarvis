@@ -141,6 +141,36 @@ function changed() {
   }
 }
 
+/**
+ * The terminal feed: one line per thing happening right now — a question,
+ * a tool call, a job step, a Claude Code edit, a phone message. Memory only
+ * (the activity log is the durable record); pushed to dashboards as it
+ * happens rather than inside the state snapshot.
+ */
+const termLines = []
+const termListeners = new Set()
+let termSeq = 0
+
+export function term(src, text, kind = 'info') {
+  if (!text) return
+  const line = { id: ++termSeq, ts: Date.now(), src, kind, text: String(text).replace(/\s+/g, ' ').slice(0, 280) }
+  termLines.push(line)
+  if (termLines.length > 400) termLines.splice(0, termLines.length - 400)
+  for (const fn of termListeners) fn(line)
+}
+
+// Start with the last few things that happened, so a fresh terminal isn't blank.
+for (const a of state.activity.slice(-25)) termLines.push({ id: ++termSeq, ts: a.ts, src: a.source, kind: 'history', text: a.title })
+
+export function termBacklog(n = 200) {
+  return termLines.slice(-n)
+}
+
+export function termSubscribe(fn) {
+  termListeners.add(fn)
+  return () => termListeners.delete(fn)
+}
+
 export function subscribe(fn) {
   listeners.add(fn)
   return () => listeners.delete(fn)
@@ -184,6 +214,7 @@ export function activity({ id, ts, source, project, title, detail, level = 'info
   state.activity.sort((a, b) => a.ts - b.ts)
   if (state.activity.length > MAX_ACTIVITY) state.activity.splice(0, state.activity.length - MAX_ACTIVITY)
   logEvent(ev)
+  if (Date.now() - ev.ts < 10 * 60000) term(source, title, level)
   changed()
   return true
 }

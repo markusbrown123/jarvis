@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store'
 import { useHub, connectHub, type View } from '../hub/client'
 import { ago, JOB_LABEL, tone } from '../hub/format'
-import { micLevel } from '../lib/audio'
 import { CoreView } from '../scene/CoreView'
 import { Blades } from '../ui/Blades'
 import { Effects } from '../ui/Effects'
@@ -17,6 +16,7 @@ import { Automaton } from './Automaton'
 import { Needs, Activity, Settings } from './Pages'
 import { Jobs } from './Jobs'
 import { UsageChip } from './Usage'
+import { VoiceWave } from './VoiceWave'
 import { ItemCard } from './shared'
 import { inputState, openItems, useTick } from './state'
 import './dash.css'
@@ -167,31 +167,6 @@ function NeedsPanel() {
   )
 }
 
-function Waveform() {
-  const bars = useRef<HTMLSpanElement[]>([])
-  useEffect(() => {
-    let raf = 0
-    const hist = new Array(24).fill(0)
-    const tick = () => {
-      const { phase, level } = useStore.getState()
-      const v = phase === 'speaking' ? level : micLevel()
-      hist.push(v)
-      hist.shift()
-      bars.current.forEach((b, i) => b && (b.style.transform = `scaleY(${0.12 + Math.min(1, hist[i] * 1.8)})`))
-      raf = requestAnimationFrame(tick)
-    }
-    tick()
-    return () => cancelAnimationFrame(raf)
-  }, [])
-  return (
-    <span className="wave" aria-hidden>
-      {Array.from({ length: 24 }, (_, i) => (
-        <span key={i} ref={(el) => void (el && (bars.current[i] = el))} />
-      ))}
-    </span>
-  )
-}
-
 function ConversationBar() {
   useTick(250)
   const phase = useStore((s) => s.phase)
@@ -203,19 +178,12 @@ function ConversationBar() {
   const setTalkMode = useStore((s) => s.setTalkMode)
   const c = useStore((s) => s.controls)
   const [text, setText] = useState('')
-  const st = inputState()
+  const view = useHub((s) => s.prefs.view)
   const last = turns.slice(-2)
   const busy = phase === 'thinking' || phase === 'tooling' || phase === 'speaking'
   const listening = phase === 'listening' || phase === 'waking'
   return (
     <footer className="convo">
-      <div className={`convo-state state-${st.tone}`}>
-        <span className="orb" />
-        <div>
-          <div className="convo-label">{st.label}</div>
-          <Waveform />
-        </div>
-      </div>
       <div className="convo-transcript" aria-live="polite">
         {listening && caption && caption !== '…' ? (
           <div className="line line-live">
@@ -230,6 +198,9 @@ function ConversationBar() {
         )}
         {error && <div className="line line-error">{error}</div>}
       </div>
+      {/* On the overview the visualizer sits under the core instead. */}
+      <div className="convo-center">{view !== 'overview' && <VoiceWave />}</div>
+      <div className="convo-right">
       <form
         className="convo-input"
         onSubmit={(e) => {
@@ -268,6 +239,7 @@ function ConversationBar() {
           <option value="hold">Hold</option>
           <option value="tap">Tap</option>
         </select>
+      </div>
       </div>
     </footer>
   )
@@ -357,16 +329,11 @@ function Immersive() {
   const turns = useStore((s) => s.turns)
   const caption = useStore((s) => s.caption)
   const phase = useStore((s) => s.phase)
-  const c = useStore((s) => s.controls)
-  const st = inputState()
   const last = turns.at(-1)
   const live = phase === 'listening' || phase === 'waking'
   return (
     <div className="immersive">
       <CoreView mode="immersive" />
-      <button className={`live-pill state-${st.tone}`} onClick={() => (live ? c.finishSpeaking() : c.startTalking())}>
-        <span className="state-dot" /> {live ? 'LIVE · TAP TO FINISH' : busyLabel(phase)}
-      </button>
       <button className="btn btn-quiet immersive-close" onClick={() => setPrefs({ immersive: false })} title="Back to the dashboard (Esc)">
         Dashboard
       </button>
@@ -374,17 +341,10 @@ function Immersive() {
         {live && caption && caption !== '…' ? <p className="you">{caption}</p> : last ? <p className={last.role === 'user' ? 'you' : 'him'}>{last.text}</p> : null}
       </div>
       <div className="immersive-foot">
-        <Waveform />
-        <div className="immersive-state">{st.label.toUpperCase()}</div>
+        <VoiceWave size="large" />
       </div>
     </div>
   )
-}
-
-function busyLabel(phase: string) {
-  if (phase === 'speaking') return 'SPEAKING'
-  if (phase === 'thinking' || phase === 'tooling') return 'THINKING'
-  return 'TAP TO TALK'
 }
 
 function Toast() {

@@ -97,10 +97,14 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
           const at = Date.now()
           if (msg.type === 'assistant') {
             for (const block of msg.message?.content ?? []) {
-              if (block.type === 'text' && block.text.trim()) lastText = block.text.trim()
+              if (block.type === 'text' && block.text.trim()) {
+                lastText = block.text.trim()
+                hub.term(`job:${title}`, lastText, 'text')
+              }
               if (block.type === 'tool_use') {
                 const what = block.input?.description ? ` — ${String(block.input.description).slice(0, 80)}` : ''
                 hub.upsertJob({ id, stage: `using ${block.name}${what}`, heartbeatAt: at, updatedAt: at })
+                hub.term(`job:${title}`, `${block.name.replace(/^mcp__\w+?__/, '')}${what}`, 'tool')
               }
             }
           }
