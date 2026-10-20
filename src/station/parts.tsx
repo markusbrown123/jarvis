@@ -206,6 +206,51 @@ export function HoloTable() {
   )
 }
 
+// ---------------------------------------------------------------- light shaft
+
+const shaftFrag = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uTime;
+  varying vec2 vUv;
+  varying vec3 vN;
+  varying vec3 vV;
+  void main() {
+    // Soft at the rim, brightest just under the ceiling, gone by the table.
+    float body = pow(abs(dot(vN, vV)), 1.4);
+    float fall = smoothstep(0.0, 0.85, vUv.y) * (0.35 + 0.65 * vUv.y);
+    float motes = 0.82 + 0.18 * sin(vUv.y * 40.0 - uTime * 0.8 + sin(vUv.x * 25.0) * 2.0);
+    gl_FragColor = vec4(uColor, body * fall * motes * 0.16);
+  }
+`
+
+/** The visible shaft from the ceiling ring down onto the table. */
+export function LightShaft() {
+  const col = useMemo(() => new THREE.Color('#d6ccff'), [])
+  const mat = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: beamVert,
+        fragmentShader: shaftFrag,
+        uniforms: { uColor: { value: new THREE.Color('#d6ccff') }, uTime: { value: 0 } },
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+      }),
+    [],
+  )
+  useFrame((state, dt) => {
+    stateColor(col, Math.min(1, dt * 2))
+    mat.uniforms.uColor.value.copy(col).lerp(C.white, 0.55)
+    mat.uniforms.uTime.value = state.clock.elapsedTime * motion()
+  })
+  return (
+    <mesh position-y={1.02 + (7.5 - 1.02) / 2} material={mat}>
+      <cylinderGeometry args={[0.55, 2.1, 7.5 - 1.02, 64, 1, true]} />
+    </mesh>
+  )
+}
+
 // ---------------------------------------------------------------- the core
 
 export function StationCore() {

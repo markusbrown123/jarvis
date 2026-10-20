@@ -1,5 +1,4 @@
 import { type ReactNode } from 'react'
-import { Html } from '@react-three/drei'
 import { useHub, type Graphics, type View } from '../hub/client'
 import { useStore } from '../store'
 import { ago, clock, elapsed, JOB_LABEL, tone, until } from '../hub/format'
@@ -10,14 +9,14 @@ import { StationScene } from './StationScene'
 import './station.css'
 
 /**
- * JARVIS Station: the 3D workshop with live holographic panels standing in
- * it — the terminal, what needs Markus, what's running, business and money —
- * and the voice visualizer under the core.
+ * JARVIS Station: the 3D workshop, with live holographic panels over it —
+ * the terminal, what needs Markus, what's running, business and money — and
+ * the voice visualizer under the core.
  */
 
-function Holo({ title, badge, wide, onOpen, children }: { title: string; badge?: ReactNode; wide?: boolean; onOpen?: () => void; children: ReactNode }) {
+function Holo({ title, badge, onOpen, children }: { title: string; badge?: ReactNode; onOpen?: () => void; children: ReactNode }) {
   return (
-    <section className={`holo ${wide ? 'holo-wide' : ''}`}>
+    <section className="holo">
       <header className="holo-head">
         <span className="holo-title">{title}</span>
         {badge}
@@ -36,14 +35,6 @@ function Holo({ title, badge, wide, onOpen, children }: { title: string; badge?:
   )
 }
 
-/** A DOM panel standing in the room, angled toward the viewer. */
-function Panel({ position, yaw, children }: { position: [number, number, number]; yaw: number; children: ReactNode }) {
-  return (
-    <Html transform distanceFactor={2.45} position={position} rotation-y={yaw} zIndexRange={[12, 10]} className="holo-anchor">
-      {children}
-    </Html>
-  )
-}
 
 function NeedsHolo({ go }: { go: (v: View) => void }) {
   const s = useHub((x) => x.state)
@@ -107,7 +98,7 @@ function BusinessHolo({ go }: { go: (v: View) => void }) {
   const fiveFresh = five && (!five.resetsAt || five.resetsAt > Date.now())
   const stage = (k: string) => am?.sites?.filter((x) => x.stage === k).length ?? 0
   return (
-    <Holo title="Business & money" wide onOpen={() => go('automaton')}>
+    <Holo title="Business & money" onOpen={() => go('finance')}>
       <div className="biz">
         <button className="biz-cell" onClick={() => go('automaton')}>
           <span className="biz-k">automaton.llc</span>
@@ -209,27 +200,22 @@ function Dock() {
 export function Station() {
   const graphics = useHub((s) => s.prefs.graphics)
   const go = useHub((s) => s.go)
-  const panels = (
-    <>
-      <Panel position={[-4.25, 2.0, 1.3]} yaw={0.4}>
-        <Holo title="Terminal" onOpen={() => go('terminal')}>
-          <TerminalFeed compact height={318} />
-        </Holo>
-      </Panel>
-      <Panel position={[-4.2, 4.25, 0.7]} yaw={0.38}>
-        <BusinessHolo go={go} />
-      </Panel>
-      <Panel position={[4.25, 4.0, 0.7]} yaw={-0.4}>
-        <NeedsHolo go={go} />
-      </Panel>
-      <Panel position={[4.25, 1.85, 1.3]} yaw={-0.4}>
-        <JobsHolo go={go} />
-      </Panel>
-    </>
-  )
+  // The panels are a HUD over the room, angled in like a helmet display.
+  // (Placed inside the 3D scene they blank the frame once the reflective
+  // floor is on.)
   return (
     <div className="station">
-      <StationScene graphics={graphics} panels={panels} />
+      <StationScene graphics={graphics} />
+      <div className="st-panels st-left">
+        <BusinessHolo go={go} />
+        <Holo title="Terminal" onOpen={() => go('terminal')}>
+          <TerminalFeed compact height={300} />
+        </Holo>
+      </div>
+      <div className="st-panels st-right">
+        <NeedsHolo go={go} />
+        <JobsHolo go={go} />
+      </div>
       <TopHud />
       <Dock />
       <p className="st-hint">Drag to look around · scroll to move closer · 1–9 dashboard views</p>

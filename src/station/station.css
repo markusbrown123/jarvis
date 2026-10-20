@@ -168,12 +168,40 @@
 
 /* ------------------------------------------------------- holo panels */
 
-.holo-anchor {
-  pointer-events: auto;
+/* HUD panels: two columns angled in toward the room, like a helmet display. */
+.st-panels {
+  position: absolute;
+  top: 92px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: clamp(330px, 27vw, 430px);
+  perspective: 1400px;
+}
+.st-panels > * {
+  width: 100%;
+}
+.st-left {
+  left: 24px;
+}
+.st-right {
+  right: 24px;
+}
+.st-left > * {
+  transform: rotateY(14deg);
+  transform-origin: left center;
+}
+.st-right > * {
+  transform: rotateY(-14deg);
+  transform-origin: right center;
+}
+.reduced .st-panels > * {
+  transform: none;
 }
 .holo {
   position: relative;
-  width: 440px;
+  box-sizing: border-box;
   padding: 12px 14px 14px;
   border: 1px solid rgba(140, 220, 255, 0.26);
   border-radius: 6px;
@@ -186,9 +214,6 @@
     inset 0 0 30px rgba(120, 180, 255, 0.05);
   color: #dfe6f2;
   font-size: 15px;
-}
-.holo-wide {
-  width: 520px;
 }
 .holo-head {
   display: flex;

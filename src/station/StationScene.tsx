@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Environment, Lightformer, MeshReflectorMaterial, OrbitControls, PerformanceMonitor, Sparkles, SpotLight } from '@react-three/drei'
+import { Environment, Lightformer, MeshReflectorMaterial, OrbitControls, PerformanceMonitor, Sparkles } from '@react-three/drei'
 import { Bloom, ChromaticAberration, EffectComposer, N8AO, Noise, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import * as THREE from 'three'
 import { useHub, type Graphics } from '../hub/client'
 import { useStore } from '../store'
-import { BackScreen, Drones, FloorMarks, HoloTable, Racks, RobotArm, Room, StationCore } from './parts'
+import { BackScreen, Drones, FloorMarks, HoloTable, LightShaft, Racks, RobotArm, Room, StationCore } from './parts'
 import { stateColor } from './shared'
 
 /**
@@ -73,29 +73,18 @@ function Lights({ q }: { q: (typeof QUALITY)[Graphics] }) {
       {/* A low warm bounce so the floor-side of things isn't black. */}
       <pointLight position={[0, 0.6, 5]} intensity={6} distance={12} decay={2} color="#ff9a5a" />
       {/* The shaft from the ceiling ring onto the table. */}
-      {q.volumetric ? (
-        <SpotLight
-          ref={shaft}
-          position={[0, 7.5, 0]}
-          angle={0.36}
-          penumbra={0.8}
-          distance={9}
-          attenuation={7.5}
-          anglePower={4.5}
-          radiusTop={0.6}
-          radiusBottom={3}
-          opacity={0.32}
-          intensity={160}
-          decay={2}
-          color="#d6ccff"
-          target={target}
-          castShadow={q.shadows}
-          shadow-mapSize={[q.map / 2 || 512, q.map / 2 || 512]}
-          shadow-bias={-0.0002}
-        />
-      ) : (
-        <spotLight ref={shaft} position={[0, 7.5, 0]} angle={0.36} penumbra={0.8} intensity={160} distance={10} decay={2} target={target} />
-      )}
+      <spotLight
+        ref={shaft}
+        position={[0, 7.5, 0]}
+        angle={0.36}
+        penumbra={0.8}
+        intensity={160}
+        distance={10}
+        decay={2}
+        target={target}
+      />
+      {/* Only the key light casts shadows; the visible shaft is a mesh. */}
+      {q.volumetric && <LightShaft />}
     </>
   )
 }
@@ -128,18 +117,57 @@ function Floor({ q }: { q: (typeof QUALITY)[Graphics] }) {
 
 /**
  * The room is framed for a 16:10 window. A narrower one pulls the camera
- * back so the side panels still fit, rather than cutting them off.
+ * back so the table, arms and racks still fit.
  */
 function FitCamera() {
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
   const controls = useThree((s) => s.controls) as unknown as { update?: () => void } | null
   useEffect(() => {
+    // The first measurement can be 0×0; an aspect from that is NaN, and a
+    // NaN camera never recovers.
+    if (!size.width || !size.height) return
     const target = new THREE.Vector3(...TARGET)
-    const dir = camera.position.clone().sub(target).normalize()
+    const dir = camera.position.clone().sub(target)
+    if (!Number.isFinite(dir.lengthSq()) || dir.lengthSq() < 1e-6) dir.set(0, 1.35, 11.8)
+    dir.normalize()
     camera.position.copy(target).addScaledVector(dir, 11.9 * Math.max(1, 1.6 / (size.width / size.height)))
     controls?.update?.()
   }, [camera, size.width, size.height, controls])
+  return null
+}
+
+const LOWER = { ultra: 'high', high: 'low', low: null } as const
+
+/** Drop one quality level, once, and say why. */
+function stepDown(from: Graphics, why: string) {
+  const lower = LOWER[from]
+  if (!lower || useHub.getState().prefs.graphics !== from) return
+  useHub.getState().setPrefs({ graphics: lower })
+  useHub.getState().say(`${why} — station switched to ${lower} quality`)
+}
+
+/**
+ * Some graphics stacks fail silently at high settings: no error, just an
+ * empty frame. A few frames in, look at what was actually drawn (after
+ * post-processing, hence priority 2) and step down if it's blank.
+ */
+function BlankGuard({ graphics }: { graphics: Graphics }) {
+  const n = useRef(0)
+  useFrame((state) => {
+    n.current++
+    if (graphics === 'low' || (n.current !== 24 && n.current !== 90)) return
+    const gl = state.gl.getContext()
+    const W = gl.drawingBufferWidth
+    const H = gl.drawingBufferHeight
+    const px = new Uint8Array(4)
+    let lit = 0
+    for (const [x, y] of [[0.5, 0.42], [0.5, 0.3], [0.38, 0.35], [0.62, 0.35], [0.5, 0.15], [0.3, 0.12], [0.7, 0.12]]) {
+      gl.readPixels(Math.floor(W * x), Math.floor(H * y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
+      if (Math.max(px[0], px[1], px[2]) > 14) lit++
+    }
+    if (lit === 0) stepDown(graphics, 'This Mac drew a blank frame at that setting')
+  }, 2)
   return null
 }
 
@@ -176,12 +204,13 @@ function Post({ q }: { q: (typeof QUALITY)[Graphics] }) {
   )
 }
 
-export function StationScene({ graphics, panels }: { graphics: Graphics; panels: ReactNode }) {
-  // Development only: override single settings to test them in isolation.
-  const q = { ...QUALITY[graphics], ...(import.meta.env.DEV ? (JSON.parse(localStorage.getItem('jarvis.qOverride') ?? '{}') as object) : {}) }
+export function StationScene({ graphics }: { graphics: Graphics }) {
+  const q = QUALITY[graphics]
   const [dpr, setDpr] = useState(Math.min(q.maxDpr, window.devicePixelRatio || 1))
-  // Behind the power-up screen one still frame is enough.
+  // Nothing to draw behind the power-up screen. (Rendering on demand there
+  // instead breaks the first-frame environment and shadow setup.)
   const asleep = useStore((s) => s.phase === 'offline')
+  if (asleep) return null
   return (
     // Keyed on quality: shadow-map type and multisampling are fixed when
     // the renderer is made.
@@ -190,9 +219,20 @@ export function StationScene({ graphics, panels }: { graphics: Graphics; panels:
       className="station-canvas"
       shadows={q.shadows}
       dpr={dpr}
-      frameloop={asleep ? 'demand' : 'always'}
       gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
       camera={{ position: [0, 3.1, 11.8], fov: 38, near: 0.1, far: 80 }}
+      onCreated={({ gl }) => {
+        // If the graphics card drops the context (too much for it, or a
+        // driver reset), step down a quality level instead of sitting black.
+        gl.domElement.addEventListener(
+          'webglcontextlost',
+          (e) => {
+            e.preventDefault()
+            stepDown(graphics, 'The graphics card reset')
+          },
+          { once: true },
+        )
+      }}
     >
       <PerformanceMonitor
         flipflops={3}
@@ -211,6 +251,7 @@ export function StationScene({ graphics, panels }: { graphics: Graphics; panels:
         <Lightformer form="circle" intensity={4} color="#e8e2ff" position={[0, 8, 0]} rotation-x={Math.PI / 2} scale={4} />
       </Environment>
       {import.meta.env.DEV && <FrameProbe />}
+      <BlankGuard graphics={graphics} />
       <Lights q={q} />
       <Drift>
         <Floor q={q} />
@@ -220,11 +261,10 @@ export function StationScene({ graphics, panels }: { graphics: Graphics; panels:
         <BackScreen />
         <HoloTable />
         <StationCore />
-        <RobotArm position={[-2.85, 0, 1.05]} side={-1} seed={1} />
-        <RobotArm position={[2.85, 0, 1.05]} side={1} seed={2} />
+        <RobotArm position={[-2.5, 0, 1.25]} side={-1} seed={1} />
+        <RobotArm position={[2.5, 0, 1.25]} side={1} seed={2} />
         <Drones />
         <Sparkles count={q.dust} scale={[18, 7, 14]} position={[0, 3.5, -1]} size={1.6} speed={0.18} opacity={0.32} color="#c4b5fd" noise={1.2} />
-        {panels}
       </Drift>
       <OrbitControls
         makeDefault

@@ -35,14 +35,15 @@ no downloaded models. Everything in it is live:
   heartbeat). Hover for the job, click for Jobs.
 - **Server racks** whose lights blink faster the more has happened in the last minute.
 - **Back screen**: the latest studio render.
-- **Holo panels** standing in the room: Terminal (type to JARVIS), Business & money,
-  Needs Markus, Running. Each opens its full view.
+- **Holo panels** angled over the room like a helmet display: Business & money,
+  Terminal (type to JARVIS), Needs Markus, Running. Each opens its full view.
 
 Drag to look around, scroll to move closer. Graphics: **Low** (flat, for battery),
-**High** (shadows, reflective floor, light shafts), **Ultra** (soft shadows, 4096
-shadow maps, ambient occlusion, full-res reflections, grain, lens fringing) —
+**High** (shadows, reflective floor, light shaft), **Ultra** (wider soft shadows,
+4096 shadow maps, ambient occlusion, full-res reflections, grain, lens fringing) —
 switch on the station's top bar or in Settings. A performance monitor lowers the
-resolution if frames drop; before INITIALISE the scene renders one still frame.
+resolution if frames drop, and if a setting ever draws a blank frame (or the GPU
+resets) the station steps down a level by itself and says so; the 3D scene starts after INITIALISE.
 
 ## Terminal
 
