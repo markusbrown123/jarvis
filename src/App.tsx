@@ -1,8 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Scene } from './scene/Scene'
-import { Hud } from './ui/Hud'
-import { Ignition } from './ui/Ignition'
-import { Diagnostics } from './ui/Diagnostics'
+import { Dashboard } from './dash/Dashboard'
 import { useStore } from './store'
 import { startVoice, diag as voiceDiag, type Voice, type VoiceHandlers, type VoiceMode } from './lib/voice'
 import { createSpeaker, cycleVoice, currentVoiceName } from './lib/tts'
@@ -898,12 +895,5 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return (
-    <>
-      <Scene />
-      <Hud />
-      <Diagnostics />
-      <Ignition onStart={() => void powerOn()} />
-    </>
-  )
+  return <Dashboard onStart={() => void powerOn()} />
 }

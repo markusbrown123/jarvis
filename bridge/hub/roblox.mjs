@@ -217,7 +217,8 @@ async function refresh(cfg) {
       prepared: 'The studio queue wrote the exact steps.',
       verify: { kind: 'source', note: 'Resolves when the studio queue marks it done (the PC pushes that to GitHub).' },
       resumes: h.unlocks ? `The studio resumes ${h.unlocks} on its own.` : null,
-      priority: h.unlocks ? 'P1' : 'P3',
+      // Blocking a named task is P1. Optional asks never are.
+      priority: /^optional/i.test(h.what ?? '') ? 'P3' : /\b[A-Z]+-\d+\b/.test(h.unlocks ?? '') ? 'P1' : 'P2',
       state: h.state === 'done' ? 'resolved' : 'open',
       actions: [
         { kind: 'copy', label: 'Copy steps', value: h.how },
