@@ -30,6 +30,7 @@ import { probeUrl, renderPage } from './page.mjs'
 import { startHub } from './hub/api.mjs'
 import { hubServer } from './hub/tools.mjs'
 import { createRunner } from './hub/runner.mjs'
+import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
@@ -499,6 +500,35 @@ function elevenKey() {
 }
 
 const VOICE_ID = process.env.JARVIS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb'
+const ELEVEN_BASE = process.env.ELEVENLABS_API_BASE ?? 'https://api.elevenlabs.io'
+
+/** Speech → text with ElevenLabs Scribe, for audio that isn't from the page
+ *  (phone voice notes). Returns '' for nothing intelligible. */
+async function elevenTranscribe(buffer, type = 'audio/ogg', name = 'voice.ogg') {
+  const key = elevenKey()
+  if (!key) throw new Error('no ElevenLabs key')
+  const form = new FormData()
+  form.append('model_id', 'scribe_v1')
+  form.append('file', new Blob([buffer], { type }), name)
+  const res = await fetch(`${ELEVEN_BASE}/v1/speech-to-text`, { method: 'POST', headers: { 'xi-api-key': key }, body: form, signal: AbortSignal.timeout(60000) })
+  if (!res.ok) throw new Error(`speech-to-text ${res.status}: ${(await res.text()).slice(0, 160)}`)
+  return ((await res.json()).text ?? '').trim()
+}
+
+/** Text → speech in his ElevenLabs voice, as a Buffer. `format` is an
+ *  ElevenLabs output_format, e.g. opus_48000_64 for a phone voice note. */
+async function elevenSpeak(text, format = 'mp3_44100_64') {
+  const key = elevenKey()
+  if (!key) throw new Error('no ElevenLabs key')
+  const res = await fetch(`${ELEVEN_BASE}/v1/text-to-speech/${VOICE_ID}?output_format=${format}`, {
+    method: 'POST',
+    headers: { 'xi-api-key': key, 'content-type': 'application/json' },
+    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.4, similarity_boost: 0.75, speed: 1.05 } }),
+    signal: AbortSignal.timeout(60000),
+  })
+  if (!res.ok) throw new Error(`text-to-speech ${res.status}: ${(await res.text()).slice(0, 160)}`)
+  return Buffer.from(await res.arrayBuffer())
+}
 
 /**
  * Where /file is permitted to read from, and how big a read may get.
@@ -707,7 +737,97 @@ const http = await import('node:http')
 // user's MCP servers but none of the per-connection interface ones.
 const runner = createRunner({ model: MODEL, effort: EFFORT, canUseTool: permissionGate, mcpServers: MCP_SERVERS })
 
-const hubApi = startHub({ runner })
+/**
+ * The phone conversation: Markus texting (or sending voice notes) from
+ * Telegram. One long-lived session of its own, so it remembers the thread
+ * between messages, with the command-center tools and the same permission
+ * gate as the voice conversation — but no screen, camera or browser, since
+ * nobody is at the Mac. Messages are answered one at a time, in order.
+ */
+const PHONE_PROMPT = `${SYSTEM_PROMPT}
+
+RIGHT NOW YOU ARE NOT SPEAKING. Markus is away from the Mac, texting you from his phone over Telegram. Reply as a text message: plain text, short, no markdown headings or tables (a few "•" bullets are fine), no code blocks unless he asks for code. There is no screen in front of him, so never call dashboard_show, display, or anything that opens or shows something on the Mac. If he asks for something long, start it with job_start (it reports back to this chat when done) and say so in one line.`
+
+function makePhoneChat() {
+  const inbox = []
+  let wake = null
+  let pending = null
+  let reply = ''
+  async function* prompts() {
+    for (;;) {
+      const text = inbox.shift() ?? (await new Promise((r) => (wake = r)))
+      yield { type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null }
+    }
+  }
+  const session = query({
+    prompt: prompts(),
+    options: {
+      mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink() }) },
+      systemPrompt: PHONE_PROMPT,
+      cwd: homedir(),
+      settingSources: [],
+      model: MODEL,
+      effort: EFFORT,
+      maxTurns: 24,
+      permissionMode: 'default',
+      canUseTool: permissionGate,
+    },
+  })
+  ;(async () => {
+    try {
+      for await (const msg of session) {
+        if (msg.type === 'assistant') {
+          for (const b of msg.message?.content ?? []) if (b.type === 'text') reply += b.text
+        }
+        if (msg.type === 'rate_limit_event') hub.observeLimitStatus(msg.rate_limit_info)
+        if (msg.type === 'result') {
+          hub.observeRequest({
+            id: msg.uuid,
+            inputTokens: msg.usage?.input_tokens ?? 0,
+            outputTokens: msg.usage?.output_tokens ?? 0,
+            cacheReadTokens: msg.usage?.cache_read_input_tokens ?? 0,
+            cacheWriteTokens: msg.usage?.cache_creation_input_tokens ?? 0,
+            costUsd: msg.total_cost_usd ?? 0,
+          })
+          const p = pending
+          pending = null
+          const text = msg.subtype === 'success' ? (msg.result ?? reply) : ''
+          reply = ''
+          if (msg.subtype === 'success') p?.resolve(text.trim())
+          else p?.reject(new Error(`the turn ended early (${msg.subtype})`))
+        }
+      }
+    } catch (err) {
+      pending?.reject(err)
+    }
+    pending?.reject(new Error('the phone session ended'))
+  })()
+  let chain = Promise.resolve()
+  return {
+    ask(text) {
+      const turn = chain.then(
+        () =>
+          new Promise((resolve, reject) => {
+            pending = { resolve, reject }
+            reply = ''
+            if (wake) {
+              const w = wake
+              wake = null
+              w(text)
+            } else inbox.push(text)
+          }),
+      )
+      chain = turn.catch(() => {})
+      return turn
+    },
+  }
+}
+
+let phone = null
+const phoneLink = () => phone
+phone = startPhone({ makeChat: makePhoneChat, transcribe: elevenTranscribe, speak: elevenSpeak })
+
+const hubApi = startHub({ runner, phone })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
@@ -1271,7 +1391,7 @@ wss.on('connection', (socket) => {
         // The camera, which unlike everything else here has to ask and wait.
         jarvis_eyes: visionServer(ask),
         // The command center: live project data, dashboard, background jobs.
-        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner }),
+        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner, phone }),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk

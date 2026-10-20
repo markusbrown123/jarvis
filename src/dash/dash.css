@@ -1803,3 +1803,51 @@ kbd {
   max-height: 320px;
   overflow: auto;
 }
+
+/* Settings → Phone */
+.steps {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.steps p {
+  margin: 0;
+}
+.steps code,
+.phone-card code {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--g3);
+  overflow-wrap: anywhere;
+}
+.pair-code {
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  color: var(--cyan);
+}
+.row-gap {
+  display: inline-flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.input-num {
+  width: 64px;
+  padding: 4px 6px;
+}
+.input-time {
+  width: 124px;
+  padding: 4px 6px;
+}
+.phone-card .check {
+  display: block;
+  line-height: 2.1;
+}
+.phone-card .check > input {
+  margin: 0 8px 0 0;
+  vertical-align: middle;
+}
+.phone-card .check > .input {
+  margin: 0 6px;
+}

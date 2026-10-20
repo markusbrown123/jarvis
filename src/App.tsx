@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Dashboard } from './dash/Dashboard'
-import { useHub, hubActions, type View } from './hub/client'
+import { useHub, hubActions, markPresent, type View } from './hub/client'
 import { useStore } from './store'
 import { startVoice, diag as voiceDiag, type Voice, type VoiceHandlers, type VoiceMode } from './lib/voice'
 import { createSpeaker, cycleVoice, currentVoiceName } from './lib/tts'
@@ -143,6 +143,7 @@ export default function App() {
   // -- one turn -------------------------------------------------------------
 
   const respond = async (said: string, source: 'voice' | 'typed' = 'voice'): Promise<void> => {
+    markPresent()
     const mine = ++turn.current
     const stale = () => mine !== turn.current
     const now = Date.now()

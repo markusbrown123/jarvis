@@ -114,7 +114,7 @@ function project(name, detail) {
 
 const VIEWS = ['overview', 'roblox', 'finance', 'automaton', 'needs', 'activity', 'settings']
 
-export function hubServer({ emit, runner }) {
+export function hubServer({ emit, runner, phone }) {
   return createSdkMcpServer({
     name: 'jarvis_hub',
     version: '1.0.0',
@@ -155,10 +155,11 @@ export function hubServer({ emit, runner }) {
           title: z.string().describe('Short title shown on the dashboard'),
           project: z.enum(['roblox', 'automaton', 'finance', 'other']),
           instructions: z.string().describe('Complete, standalone instructions for the job'),
+          notify: z.enum(['phone', 'urgent']).optional().describe('Text Markus\'s phone the result even if he is at the dashboard ("phone"), or also raise an urgent alert if it fails ("urgent"). Use when he asks to be told when it is done.'),
         },
-        async (args) => {
+        async ({ notify, ...args }) => {
           try {
-            const { id, cwd } = runner.start(args)
+            const { id, cwd } = runner.start({ ...args, notify: notify ?? null })
             return ok(`Started background job ${id} in ${cwd}. It shows on the dashboard; it keeps running whatever happens in this conversation.`)
           } catch (err) {
             return ok(`Not started: ${err.message}`)
@@ -187,6 +188,16 @@ export function hubServer({ emit, runner }) {
           if (!target) return ok('No matching running job.')
           if (target.cancel !== 'supported') return ok(`${target.title} can't be cancelled from here (${target.source}); it has to be stopped where it runs.`)
           return ok(hub.cancelJob(target.id) ? `Cancellation requested for "${target.title}". It shows as cancelled once it has actually stopped.` : 'It had already finished.')
+        },
+      ),
+      tool(
+        'phone_notify',
+        'Message Markus\'s phone (Telegram; urgent also goes through Pushover, which repeats and breaks through Do Not Disturb). Use when he asks you to text/remind/alert him, or for something genuinely time-critical. urgent=true only for real emergencies or when he explicitly asks for an urgent alert. Never for routine chatter.',
+        { message: z.string(), title: z.string().optional(), urgent: z.boolean().optional() },
+        async ({ message, title, urgent }) => {
+          if (!phone) return ok('The phone link is not running.')
+          const r = await phone.notify({ title: title ?? 'JARVIS', message, urgent: Boolean(urgent), force: true })
+          return ok(r.sent.length ? `Sent via ${r.sent.join(' + ')}${r.silent ? ' (silently — quiet hours)' : ''}.` : 'Not sent: no phone channel is set up yet (Settings → Phone).')
         },
       ),
     ],

@@ -37,7 +37,7 @@ function cwdFor(project) {
 export function createRunner({ model, effort, canUseTool, mcpServers }) {
   const running = new Map()
 
-  function start({ title, project = 'other', instructions }) {
+  function start({ title, project = 'other', instructions, notify = null }) {
     const live = [...running.keys()].filter((id) => hub.getJob(id)?.state === 'running').length
     if (live >= MAX_RUNNING) {
       throw new Error(`${live} background jobs are already running; wait for one or cancel one first.`)
@@ -57,6 +57,7 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
       summary: instructions.slice(0, 400),
       cwd,
       cancel: 'supported',
+      notify,
       expectsHeartbeat: true,
       staleAfterMs: 10 * 60000,
       heartbeatAt: now,

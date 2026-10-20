@@ -207,8 +207,30 @@ export type Usage = {
   sources: Record<string, number>
 }
 
+export type PhoneStatus = {
+  telegram: {
+    configured: boolean
+    bot: string | null
+    paired: boolean
+    chatName: string | null
+    pairedAt: number | null
+    pairing: { code: string; expires: number } | null
+    lastInbound: number
+    lastOutbound: number
+    error: string | null
+  }
+  pushover: { configured: boolean }
+  quiet: { enabled: boolean; start: string; end: string }
+  awayMinutes: number
+  reportWhen: 'away' | 'always'
+  reports: { jobs: boolean; needs: boolean; studio: boolean }
+  inQuietHours: boolean
+}
+
 export type HubState = {
   version: number
+  phone?: PhoneStatus
+  presence?: { lastSeenAt?: number; phoneAt?: number }
   jobs: Record<string, Job>
   items: Record<string, Item>
   projects: {

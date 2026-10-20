@@ -306,6 +306,28 @@ export function setProject(id, data) {
   changed()
 }
 
+/** Phone link status (no secrets): what Settings → Phone shows. */
+export function setPhone(data) {
+  if (JSON.stringify(state.phone) === JSON.stringify(data)) return
+  state.phone = data
+  changed()
+}
+
+/**
+ * Markus was just seen: at the dashboard, or texting from his phone. Reports
+ * go to the phone only after a stretch with no dashboard presence.
+ */
+export function observePresence({ where = 'dashboard', at = Date.now() } = {}) {
+  const prev = state.presence ?? {}
+  if (where === 'dashboard') {
+    if (prev.lastSeenAt && at - prev.lastSeenAt < 20000) return
+    state.presence = { ...prev, lastSeenAt: at, where }
+  } else {
+    state.presence = { ...prev, phoneAt: at }
+  }
+  changed()
+}
+
 /**
  * A preview: { id, project, kind: LIVE | LAST_PLAYTEST | WEB_PROTOTYPE |
  * ASSET | SITE, title, url?, file?, revision?, capturedAt?, artifactUrl? }.

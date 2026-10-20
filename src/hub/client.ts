@@ -104,6 +104,7 @@ export function connectHub() {
   })
   source.onopen = () => useHub.setState({ link: 'live' })
   source.onerror = () => useHub.setState({ link: 'down' })
+  trackPresence()
 }
 
 async function post(path: string, body?: unknown) {
@@ -127,6 +128,33 @@ export const hubActions = {
   startJob: (title: string, project: string, instructions: string) => post('/api/jobs/start', { title, project, instructions }),
   refresh: (project: 'roblox' | 'automaton' | 'finance') => post(`/api/refresh/${project}`),
   setQuantView: (name: string, url: string) => post('/api/config/quant-view', { name, url }),
+  phonePair: () => post('/api/phone/pair'),
+  phoneUnpair: () => post('/api/phone/unpair'),
+  phoneSettings: (p: Record<string, unknown>) => post('/api/phone/settings', p),
+  phoneTest: (channel: 'telegram' | 'pushover' | 'pushover-urgent') => post('/api/phone/test', { channel }),
+}
+
+/**
+ * Tells the bridge Markus is at the dashboard, so reports stay off his phone
+ * while he is here. Only real input in a visible tab counts — a screen left
+ * on in an empty room does not.
+ */
+let lastInput = Date.now()
+export function trackPresence() {
+  const mark = () => {
+    lastInput = Date.now()
+  }
+  for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, mark, { passive: true })
+  const beat = () => {
+    if (document.visibilityState === 'visible' && Date.now() - lastInput < 120000) void post('/api/presence').catch(() => {})
+  }
+  beat()
+  setInterval(beat, 30000)
+}
+
+/** Voice activity counts as presence too. */
+export const markPresent = () => {
+  lastInput = Date.now()
 }
 
 /** A bridge-served file (renders on disk) as an <img> URL. */

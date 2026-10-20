@@ -8,6 +8,7 @@
 #   jarvis stop     shut him down
 #   jarvis logs     follow the log
 #   jarvis setup-claude [--remove]   forward Claude Code usage + activity
+#   jarvis setup-phone telegram|pushover|remove   phone tokens → Keychain
 #
 # Settings come from the environment, with defaults below. The ElevenLabs key
 # is read from the macOS Keychain (service "elevenlabs") so it never sits in a
@@ -100,8 +101,48 @@ stop_all() {
   echo "JARVIS stopped."
 }
 
+# Phone tokens go into the login Keychain, never a file or the repo. The
+# bridge reads them at start-up (restart JARVIS after changing them).
+keychain_put() {
+  local service="$1" prompt="$2" value
+  printf '%s' "$prompt"
+  IFS= read -rs value
+  echo
+  if [ -z "$value" ]; then echo "Nothing entered; unchanged."; return 1; fi
+  security add-generic-password -U -a "$USER" -s "$service" -w "$value" && echo "Saved to Keychain ($service)."
+}
+
+setup_phone() {
+  case "${1:-}" in
+    telegram)
+      echo "Paste the bot token @BotFather gave you (typing is hidden)."
+      keychain_put jarvis-telegram "Telegram bot token: " || return 1
+      ;;
+    pushover)
+      echo "Your User Key is on pushover.net after you log in; the API token is from Create an Application."
+      keychain_put jarvis-pushover-user "Pushover User Key: " || return 1
+      keychain_put jarvis-pushover-token "Pushover API token: " || return 1
+      ;;
+    remove)
+      for s in jarvis-telegram jarvis-pushover-user jarvis-pushover-token; do
+        security delete-generic-password -a "$USER" -s "$s" >/dev/null 2>&1 && echo "Removed $s."
+      done
+      ;;
+    *)
+      echo "usage: jarvis setup-phone telegram|pushover|remove"
+      return 1
+      ;;
+  esac
+  if ready; then
+    echo "Restarting JARVIS so it picks this up..."
+    stop_all >/dev/null
+    start_servers && echo "Done. Finish in JARVIS → Settings → Phone."
+  fi
+}
+
 case "${1:-}" in
   stop) stop_all ;;
+  setup-phone) shift; setup_phone "$@" ;;
   setup-claude) shift; node "$DIR/scripts/setup-claude.mjs" "$@" ;;
   logs) tail -n 50 -f "$LOG" ;;
   "")
@@ -109,7 +150,7 @@ case "${1:-}" in
     open_window
     ;;
   *)
-    echo "usage: jarvis [stop|logs|setup-claude [--remove]]"
+    echo "usage: jarvis [stop|logs|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
     exit 1
     ;;
 esac

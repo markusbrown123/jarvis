@@ -59,6 +59,32 @@ project's folder, behind the same read-only/write gate. Talking over him,
 "stop" and "cancel reply" never touch them; "cancel that task" or the job's
 cancel shows *cancellation requested* until the session has really stopped.
 
+## Phone
+
+Telegram is the two-way line; Pushover is the urgent line. Both are optional.
+
+- **Set up:** `jarvis setup-phone telegram` (bot token from @BotFather) and
+  `jarvis setup-phone pushover` (User Key + app token from pushover.net). Tokens go
+  into the login Keychain (`jarvis-telegram`, `jarvis-pushover-user`,
+  `jarvis-pushover-token`) — never a file or the repo. `jarvis setup-phone remove`
+  deletes them.
+- **Pair:** Settings → Phone → Pair my phone, then send the `/start <code>` it shows
+  to your bot. Only that chat is answered; other chats are ignored and logged. Five
+  wrong codes burn the code.
+- **Talk:** text or voice-note the bot. It is a real JARVIS conversation (same
+  tools and permission gate, its own memory of the thread). Voice notes are
+  transcribed with ElevenLabs Scribe and answered with a voice note in your voice
+  plus text. `/status`, `/needs`, `/jobs` answer instantly without the model.
+- **Reports:** JARVIS background jobs finishing or failing, new P1/P2 Needs Markus
+  items, failed studio tasks — only after `awayMinutes` without dashboard input
+  (or always, if chosen), silently during quiet hours. A job started with
+  "text me when it's done" reports regardless.
+- **Urgent:** `phone_notify(urgent)` — only when you ask, or when a job flagged
+  urgent fails — sends Telegram plus a Pushover emergency (priority 2: repeats every
+  60 s for up to 30 min until acknowledged). Allow Critical Alerts in the Pushover
+  app so it rings through Do Not Disturb / silent.
+- The bot long-polls from the Mac; no port is opened. State: `~/.jarvis/phone.json`.
+
 ## Security
 
 - The bridge listens on `127.0.0.1` only (`JARVIS_BIND` to change, on purpose).

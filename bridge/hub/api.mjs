@@ -146,7 +146,7 @@ function onStatusLine(s) {
   hub.observeStatusLine({ at, model: s?.model?.display_name ?? null, version: s?.version ?? null, hasRateLimits: Boolean(s?.rate_limits) })
 }
 
-export function startHub({ runner } = {}) {
+export function startHub({ runner, phone } = {}) {
   const token = hub.apiToken()
   let cfg = loadConfig()
   const sources = {
@@ -297,6 +297,28 @@ export function startHub({ runner } = {}) {
       m = path.match(/^\/api\/refresh\/(roblox|automaton|finance)$/)
       if (req.method === 'POST' && m) {
         await sources[m[1]].refresh()
+        return json(res, cors, 200, { ok: true })
+      }
+
+      if (req.method === 'POST' && path === '/api/presence') {
+        hub.observePresence({ where: 'dashboard' })
+        return json(res, cors, 200, { ok: true })
+      }
+
+      m = path.match(/^\/api\/phone\/(pair|unpair|settings|test)$/)
+      if (req.method === 'POST' && m) {
+        if (!phone) return json(res, cors, 503, { error: 'The phone link is not running.' })
+        const body = JSON.parse((await readBody(req)) || '{}')
+        if (m[1] === 'pair') return json(res, cors, 200, { ok: true, pairing: phone.newPairingCode() })
+        if (m[1] === 'unpair') phone.unpair()
+        if (m[1] === 'settings') phone.settings(body)
+        if (m[1] === 'test') {
+          try {
+            await phone.test(String(body.channel ?? 'telegram'))
+          } catch (err) {
+            return json(res, cors, 409, { error: err.message })
+          }
+        }
         return json(res, cors, 200, { ok: true })
       }
 

@@ -7,6 +7,7 @@ import { timingSummary, type Stat } from '../lib/metrics'
 import { ItemCard, Empty } from './shared'
 import { openItems, useTick } from './state'
 import { UsagePanel } from './Usage'
+import { PhonePanel } from './Phone'
 
 export function Needs() {
   const s = useHub((x) => x.state)
@@ -161,6 +162,8 @@ export function Settings() {
           </div>
           <p className="fine">Keys: Space talk · Enter finish speaking · M mic on/off · Esc stand down · D diagnostics · T audio test · ⌘K commands</p>
         </section>
+
+        <PhonePanel phone={s?.phone} />
 
         <section className="card">
           <header className="card-head">
