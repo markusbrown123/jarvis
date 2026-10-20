@@ -146,7 +146,7 @@ function onStatusLine(s) {
   hub.observeStatusLine({ at, model: s?.model?.display_name ?? null, version: s?.version ?? null, hasRateLimits: Boolean(s?.rate_limits) })
 }
 
-export function startHub() {
+export function startHub({ runner } = {}) {
   const token = hub.apiToken()
   let cfg = loadConfig()
   const sources = {
@@ -266,6 +266,21 @@ export function startHub() {
         if (action === 'cancel') hub.upsertItem({ id, state: 'canceled' }, { fromSource: false })
         if (action === 'reopen') hub.upsertItem({ id, state: 'open', snoozedUntil: null }, { fromSource: false })
         return json(res, cors, 200, { ok: true, item: hub.getItem(id) })
+      }
+
+      // Start a background job from the dashboard (same runner as voice).
+      if (req.method === 'POST' && path === '/api/jobs/start') {
+        if (!runner) return json(res, cors, 503, { error: 'Background jobs are not available.' })
+        const body = JSON.parse(await readBody(req))
+        const title = String(body.title ?? '').trim().slice(0, 120)
+        const instructions = String(body.instructions ?? '').trim().slice(0, 8000)
+        const project = ['roblox', 'automaton', 'finance', 'other'].includes(body.project) ? body.project : 'other'
+        if (!title || !instructions) return json(res, cors, 400, { error: 'Give the job a title and instructions.' })
+        try {
+          return json(res, cors, 200, { ok: true, ...runner.start({ title, project, instructions }) })
+        } catch (err) {
+          return json(res, cors, 409, { error: err.message })
+        }
       }
 
       m = path.match(/^\/api\/jobs\/([^/]+)\/cancel$/)

@@ -135,7 +135,7 @@ function buildSectors(s: HubState, go: (v: View, extra?: Record<string, string>)
       label: 'Claude sessions',
       sub: sessions.length ? `${sessions.filter((j) => j.state === 'running').length} working · ${sessions.length} open` : s.usage.sources.hooks ? 'none open' : 'hooks not connected',
       tone: sessions.some((j) => j.state === 'needs_markus') ? 'need' : sessions.some((j) => j.state === 'running') ? 'work' : s.usage.sources.hooks ? 'idle' : 'off',
-      go: () => go('activity'),
+      go: () => go('jobs'),
     },
   ]
 
@@ -287,7 +287,7 @@ export function Overview() {
   return (
     <div className="overview">
       <div className="overview-strip">
-        <button className="glance" onClick={() => go('activity')}>
+        <button className="glance" onClick={() => go('jobs')}>
           <span className="glance-k">Running</span>
           <span className="glance-v">{running.length ? `${running.length} job${running.length > 1 ? 's' : ''}` : 'Nothing running'}</span>
           <span className="glance-s">{running.slice(0, 2).map((j) => `${j.taskId ?? ''} ${j.title}`.trim()).join(' · ') || 'Background work shows here'}</span>

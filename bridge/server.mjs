@@ -703,11 +703,11 @@ function corsFor(req) {
 // One HTTP server for both the speech proxy and the WebSocket upgrade.
 const http = await import('node:http')
 
-const hubApi = startHub()
-
 // Background jobs run as their own sessions, behind the same gate, with the
 // user's MCP servers but none of the per-connection interface ones.
 const runner = createRunner({ model: MODEL, effort: EFFORT, canUseTool: permissionGate, mcpServers: MCP_SERVERS })
+
+const hubApi = startHub({ runner })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin

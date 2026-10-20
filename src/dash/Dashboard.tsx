@@ -15,6 +15,7 @@ import { Roblox } from './Roblox'
 import { Finance } from './Finance'
 import { Automaton } from './Automaton'
 import { Needs, Activity, Settings } from './Pages'
+import { Jobs } from './Jobs'
 import { UsageChip } from './Usage'
 import { ItemCard } from './shared'
 import { inputState, openItems, useTick } from './state'
@@ -26,8 +27,9 @@ const NAV: { id: View; label: string; key: string }[] = [
   { id: 'finance', label: 'Finance', key: '3' },
   { id: 'automaton', label: 'Automaton', key: '4' },
   { id: 'needs', label: 'Needs Markus', key: '5' },
-  { id: 'activity', label: 'Activity', key: '6' },
-  { id: 'settings', label: 'Settings', key: '7' },
+  { id: 'jobs', label: 'Jobs', key: '6' },
+  { id: 'activity', label: 'Activity', key: '7' },
+  { id: 'settings', label: 'Settings', key: '8' },
 ]
 
 function TopBar() {
@@ -98,7 +100,7 @@ function NavRail() {
           <button
             key={j.id}
             className={`nav-job tone-${tone(j.state, j.stale)}`}
-            onClick={() => (j.project === 'roblox' ? setPrefs({ view: 'roblox', selectedGame: j.game ?? null }) : go('activity'))}
+            onClick={() => (j.project === 'roblox' && j.source === 'roblox' ? setPrefs({ view: 'roblox', selectedGame: j.game ?? null }) : go('jobs'))}
             title={j.title}
           >
             <span className="job-dot" />
@@ -435,6 +437,8 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
         return <Automaton />
       case 'needs':
         return <Needs />
+      case 'jobs':
+        return <Jobs />
       case 'activity':
         return <Activity />
       case 'settings':

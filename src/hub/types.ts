@@ -39,6 +39,8 @@ export type Job = {
   total?: number
   cwd?: string
   cancel?: 'supported' | 'unsupported'
+  output?: string
+  sessionId?: string
 }
 
 export type ItemState = 'open' | 'in_progress' | 'snoozed' | 'verifying' | 'resolved' | 'canceled'

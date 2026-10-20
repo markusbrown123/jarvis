@@ -13,7 +13,7 @@ import type { HubState } from './types'
 
 export type Link = 'connecting' | 'live' | 'down'
 
-export type View = 'overview' | 'roblox' | 'finance' | 'automaton' | 'needs' | 'activity' | 'settings'
+export type View = 'overview' | 'roblox' | 'finance' | 'automaton' | 'needs' | 'jobs' | 'activity' | 'settings'
 
 type Prefs = {
   view: View
@@ -124,6 +124,7 @@ export const hubActions = {
   cancelItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/cancel`),
   reopenItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/reopen`),
   cancelJob: (id: string) => post(`/api/jobs/${encodeURIComponent(id)}/cancel`),
+  startJob: (title: string, project: string, instructions: string) => post('/api/jobs/start', { title, project, instructions }),
   refresh: (project: 'roblox' | 'automaton' | 'finance') => post(`/api/refresh/${project}`),
   setQuantView: (name: string, url: string) => post('/api/config/quant-view', { name, url }),
 }
