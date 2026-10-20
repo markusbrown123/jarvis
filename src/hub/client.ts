@@ -29,6 +29,7 @@ type Prefs = {
   sitePreviewMode: 'desktop' | 'mobile'
   chartSymbol: string | null
   graphics: Graphics
+  autoStart: boolean
   layoutVersion: number
 }
 
@@ -45,6 +46,7 @@ const DEFAULT_PREFS: Prefs = {
   sitePreviewMode: 'desktop',
   chartSymbol: null,
   graphics: 'ultra',
+  autoStart: true,
   layoutVersion: 2,
 }
 

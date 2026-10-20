@@ -8,6 +8,7 @@ import * as sfx from './lib/sfx'
 import * as music from './lib/music'
 import * as hands from './lib/hands'
 import { listenForClap } from './lib/clap'
+import { listenForName } from './lib/coldwake'
 import * as camera from './lib/camera'
 import * as kokoro from './lib/kokoro'
 import { TTS_ENGINE } from './config'
@@ -509,6 +510,7 @@ export default function App() {
       booting.current = false
       console.error('[jarvis] power-up failed:', err)
       store.getState().setPhase('offline')
+      store.getState().setBootStage('idle')
       store
         .getState()
         .setError(
@@ -524,12 +526,30 @@ export default function App() {
 
     // Must happen inside the click handler — browsers won't start an
     // AudioContext or speech synthesis without a user gesture.
+    s.setBootStage('audio')
     await sfx.unlockAudio()
     // No start-up music or sound: he comes up quietly and greets you instead.
     // music.enable() is what lets any track play, so leaving it out keeps the
     // boot swell, the ambient bed and the working music all silent.
 
+    // Started by voice or on its own (no key press or click), Chrome may hold
+    // his voice until the first one. Say so, and release it on that input.
+    if (!sfx.soundAllowed()) {
+      s.setSoundLocked(true)
+      const release = () => {
+        void sfx.unlockAudio().then(() => {
+          if (!sfx.soundAllowed()) return
+          window.removeEventListener('pointerdown', release, true)
+          window.removeEventListener('keydown', release, true)
+          store.getState().setSoundLocked(false)
+        })
+      }
+      window.addEventListener('pointerdown', release, true)
+      window.addEventListener('keydown', release, true)
+    }
+
     s.setPhase('boot')
+    s.setBootStage('bridge')
 
     watchServers((servers) => store.getState().setConnected(servers))
     watchPanels((panel) => store.getState().pushPanel(panel))
@@ -671,6 +691,7 @@ export default function App() {
     await warming
     store.getState().setConnected(connectedLabels())
     store.getState().setVoice(currentVoiceName())
+    store.getState().setBootStage('microphone')
 
     // The analyser is what makes the reactor pulse with your voice. It needs a
     // getUserMedia stream; speech recognition does not, and gets its own. So a
@@ -689,6 +710,7 @@ export default function App() {
     // first turn already uses ElevenLabs when a key is present and the browser
     // fallback when it is not — no flag, no reload.
     await probeCapabilities()
+    store.getState().setBootStage('voice')
 
     // One voice loop, started once, running until the page closes.
     handlers.current = {
@@ -710,12 +732,24 @@ export default function App() {
     })
 
     store.getState().setPhase('dormant')
+    store.getState().setBootStage('ready')
 
-    // His only start-up: a greeting, in whichever voice is configured.
-    const greeting = createSpeaker()
-    speaker.current = greeting
-    greeting.say('Hey sir.')
-    void greeting.end()
+    // His only start-up: a greeting, in whichever voice is configured — held
+    // until his voice is released if Chrome is still holding it.
+    const greet = () => {
+      const greeting = createSpeaker()
+      speaker.current = greeting
+      greeting.say('Hey sir.')
+      void greeting.end()
+    }
+    if (!store.getState().soundLocked) greet()
+    else {
+      const off = store.subscribe((st) => {
+        if (st.soundLocked) return
+        off()
+        if (store.getState().phase === 'dormant') greet()
+      })
+    }
   }
 
   // -- clap to start --------------------------------------------------------
@@ -734,17 +768,22 @@ export default function App() {
    */
   useEffect(() => {
     if (phase !== 'offline') return
-    let live: { stop: () => void } | null = null
+    const live: { stop: () => void }[] = []
     let gone = false
+    const keep = (l: { stop: () => void }) => {
+      if (gone) l.stop()
+      else live.push(l)
+    }
     void listenForClap(() => {
       if (!gone) void powerOn()
-    }).then((l) => {
-      if (gone) l.stop()
-      else live = l
-    })
+    }).then(keep)
+    // ...and so does saying his name.
+    void listenForName(() => {
+      if (!gone) void powerOn()
+    }).then(keep)
     return () => {
       gone = true
-      live?.stop()
+      live.forEach((l) => l.stop())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])

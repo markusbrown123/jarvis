@@ -46,7 +46,7 @@ language.
 
 ```bash
 echo 'alias jarvis="$HOME/jarvis/bin/jarvis"' >> ~/.zshrc && source ~/.zshrc
-jarvis          # starts in the background and opens him in Chrome; click INITIALISE
+jarvis          # starts in the background and opens him in Chrome; he starts himself (or press any key)
 jarvis stop     # shuts him down
 jarvis logs     # shows what he's doing
 ```
@@ -64,7 +64,7 @@ npm install
 npm start          # runs the brain and the face together
 ```
 
-Then open the URL it prints (http://localhost:5173) in **Chrome**, click **INITIALISE**, and say **“Hey Jarvis”**.
+Then open the URL it prints (http://localhost:5173) in **Chrome**, press any key (or say **“Jarvis”**), and say **“Hey Jarvis”**.
 
 Prefer two terminals? Run them separately instead:
 
@@ -90,7 +90,7 @@ Then open the app in a **real Chrome or Edge window**:
 open http://localhost:5173
 ```
 
-Click **INITIALISE**, allow the microphone when asked, and say **"Hey Jarvis"**.
+Press any key on the start screen, allow the microphone when asked, and say **"Hey Jarvis"**. After that he can start by himself.
 
 > It has to be a real browser window. Embedded preview panes block the
 > microphone, so JARVIS will look perfectly alive and simply never respond.

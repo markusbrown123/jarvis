@@ -213,6 +213,9 @@ const MAX_ORBITS = 8
 /** How a turn starts and ends. Auto listens for the wake word and endpoints
  *  by itself; hold opens the mic only while Space or the button is held; tap
  *  starts on one press and finishes on the next. */
+/** Power-up steps, in order. */
+export type BootStage = 'idle' | 'audio' | 'bridge' | 'microphone' | 'voice' | 'ready'
+
 export type TalkMode = 'auto' | 'hold' | 'tap'
 
 /** The voice controls the interface calls. App registers the real ones once
@@ -271,6 +274,10 @@ type State = {
   looking: string | null
   /** Transient status line during boot, e.g. the voice model download. */
   bootNote: string
+  /** How far power-up has got, for the intro's progress list. */
+  bootStage: BootStage
+  /** Booted without a key press or click, so Chrome may hold his voice until one. */
+  soundLocked: boolean
   /** Cards currently on the display, newest last. */
   panels: Panel[]
   /** Blades currently open, newest last — which is also front-most. */
@@ -293,6 +300,8 @@ type State = {
   setGestures: (on: boolean) => void
   setLooking: (why: string | null) => void
   setBootNote: (n: string) => void
+  setBootStage: (s: BootStage) => void
+  setSoundLocked: (locked: boolean) => void
   pushPanel: (p: Panel) => void
   clearPanels: () => void
   pushBlade: (b: Blade) => void
@@ -334,6 +343,8 @@ export const useStore = create<State>((set) => ({
   focusedBlade: null,
   expandedBlade: null,
   bootNote: '',
+  bootStage: 'idle',
+  soundLocked: false,
   ui: defaultUi(),
   talkMode: savedTalkMode(),
   micArmed: true,
@@ -353,6 +364,8 @@ export const useStore = create<State>((set) => ({
   setGestures: (gestures) => set({ gestures }),
   setLooking: (looking) => set({ looking }),
   setBootNote: (bootNote) => set({ bootNote }),
+  setBootStage: (bootStage) => set({ bootStage }),
+  setSoundLocked: (soundLocked) => set({ soundLocked }),
   // Three is as many as fits around the reactor without crowding it. Sticky
   // panels are exempt from the cull — the tool description promises they stay
   // until replaced, and a plain slice(-3) silently evicted them the moment a

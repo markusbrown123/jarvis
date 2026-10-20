@@ -16,8 +16,18 @@ jarvis watch        # the live terminal feed, in colour, in this Terminal window
 jarvis setup-phone telegram|pushover|remove   # phone tokens into the Keychain
 ```
 
-Click **INITIALISE** once per page load (the browser needs one click before it
-will play sound). Write mode is unchanged: start the bridge yourself with
+**Start-up.** The intro runs a real systems check the moment the window opens —
+bridge, brain (model, effort, read-only or write access), voice (ElevenLabs or
+browser), microphone, command center, phone link, graphics card — with a short
+briefing beside it (what needs you, what's running, spend this month, Claude
+allowance). Then any of these brings him up: say **"Jarvis"** (or "wake up"),
+**any key**, a **click**, a **double clap** — or nothing: with *Start by himself*
+on (default) he counts down 3-2-1 and boots on his own whenever Chrome allows the
+page to make sound, which it does once the microphone is allowed for it. Esc holds
+the countdown. While he powers up, the intro shows the real steps (sound, brain
+link, microphone, voice loop), then fades into the station. If he was started
+hands-free and Chrome still holds his voice, a notice asks for one key press and
+he greets you right after it. Write mode is unchanged: start the bridge yourself with
 `node scripts/start.mjs --writes`, then run `jarvis` to open the window.
 
 ## Station
@@ -43,7 +53,7 @@ Drag to look around, scroll to move closer. Graphics: **Low** (flat, for battery
 4096 shadow maps, ambient occlusion, full-res reflections, grain, lens fringing) —
 switch on the station's top bar or in Settings. A performance monitor lowers the
 resolution if frames drop, and if a setting ever draws a blank frame (or the GPU
-resets) the station steps down a level by itself and says so; the 3D scene starts after INITIALISE.
+resets) the station steps down a level by itself and says so; the 3D scene starts once he's powered up.
 
 ## Terminal
 

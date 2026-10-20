@@ -860,7 +860,8 @@ const handleRequest = async (req, res) => {
     // student with nothing configured still has a working assistant.
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven }))
+    // model/effort/writes feed the intro's systems check. No secrets here.
+    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven, model: MODEL, effort: EFFORT, writes: ALLOW_WRITES }))
   }
 
   // Serve local image files to the page. Screenshots and generated art land on

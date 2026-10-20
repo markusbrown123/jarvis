@@ -61,7 +61,10 @@ export async function unlockAudio(): Promise<void> {
   const c = audio()
   if (c.state === 'suspended') {
     try {
-      await c.resume()
+      // Without a key press or click Chrome neither resumes nor rejects — the
+      // promise just waits for one. Don't let a hands-free start (voice,
+      // clap, auto-start) hang on it; the caller checks soundAllowed().
+      await Promise.race([c.resume(), new Promise((r) => setTimeout(r, 400))])
     } catch {
       /**
        * Swallowed on purpose, now that a clap can start the assistant.
@@ -75,6 +78,32 @@ export async function unlockAudio(): Promise<void> {
     }
   }
   void loadOverrides()
+}
+
+/**
+ * Whether the page may make sound right now. Chrome lets a page play audio
+ * without a click once you've used it enough (or when launched to allow it);
+ * otherwise the context stays suspended until a key press or click.
+ */
+export function soundAllowed(): boolean {
+  return audio().state === 'running'
+}
+
+/**
+ * Try to start sound without a click, and say whether it worked. Chrome
+ * allows it for a page it trusts — one you use a lot, or one that has the
+ * microphone open, as the intro does while listening for "Jarvis" or a clap.
+ */
+export async function probeSound(): Promise<boolean> {
+  const c = audio()
+  if (c.state !== 'running') {
+    try {
+      await Promise.race([c.resume(), new Promise((r) => setTimeout(r, 300))])
+    } catch {
+      /* not allowed yet */
+    }
+  }
+  return c.state === 'running'
 }
 
 /** Pick up any real audio files the user has dropped into public/audio/. */

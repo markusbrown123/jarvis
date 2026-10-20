@@ -1,12 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600&family=JetBrains+Mono:wght@300;400&display=swap');
-
 :root {
   /* The interface cyan. `--accent` is re-declared per phase and per panel;
      this one stays put and is what anything neutral pins itself to. */
   --interface: #00e5ff;
   --accent: var(--interface);
   --bg: #01060c;
-  font-family: 'Chakra Petch', system-ui, sans-serif;
+  font-family: 'Barlow', system-ui, sans-serif;
   color-scheme: dark;
 }
 
@@ -154,7 +152,7 @@ body::after {
   opacity: 0.82;
 }
 .rail-item.dim { opacity: 0.3; }
-.rail-item.mono { font-family: 'JetBrains Mono', monospace; letter-spacing: 0.1em; }
+.rail-item.mono { font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.1em; }
 
 .tick {
   width: 5px;
@@ -331,7 +329,7 @@ body::after {
 }
 
 kbd {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   border: 1px solid currentColor;
   padding: 1px 5px;
   font-size: 9px;
@@ -525,7 +523,7 @@ kbd {
 
 .hud-idx {
   flex: 0 0 auto;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
   opacity: 0.45;
   padding-top: 2px;
@@ -701,7 +699,7 @@ kbd {
 
 .hud-metric {
   display: block;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 40px;
   line-height: 1;
   color: #eafaff;
@@ -795,54 +793,11 @@ kbd {
   opacity: 0.45;
 }
 
-/* --------------------------------------------------------------- ignition */
 
-.ignition {
-  position: fixed;
-  inset: 0;
-  z-index: 7;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(ellipse at center, #04121c 0%, #01060c 70%);
-  border: 0;
-  cursor: pointer;
-  font-family: inherit;
-  color: #4fd6ff;
-}
 
-.ignition-ring {
-  position: absolute;
-  width: 240px;
-  height: 240px;
-  border: 1px solid rgba(79, 214, 255, 0.28);
-  border-top-color: rgba(79, 214, 255, 0.9);
-  border-radius: 50%;
-}
 
-.ignition-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
 
-.ignition-word {
-  font-size: 15px;
-  letter-spacing: 0.52em;
-  text-indent: 0.52em; /* balance the trailing letter-space */
-  text-shadow: 0 0 30px rgba(79, 214, 255, 0.7);
-}
 
-.ignition-sub {
-  font-size: 9px;
-  letter-spacing: 0.28em;
-  opacity: 0.4;
-  text-transform: uppercase;
-}
-
-.ignition:hover .ignition-word {
-  text-shadow: 0 0 44px rgba(79, 214, 255, 1);
-}
 
 /* ------------------------------------------------------------------- boot */
 
@@ -881,7 +836,7 @@ kbd {
 .boot-bar-title {
   display: inline-flex;
   align-items: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: clamp(18px, 3.4vw, 40px);
   font-weight: 300;
   letter-spacing: 0.14em;
@@ -913,7 +868,7 @@ kbd {
 
 .boot-log {
   margin-top: 14px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
   line-height: 1.9;
   letter-spacing: 0.06em;
@@ -949,7 +904,7 @@ kbd {
 }
 .boot-name {
   fill: #eafcff;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 20px;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -967,7 +922,7 @@ kbd {
 .boot-tag {
   fill: var(--accent);
   opacity: 0.55;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
   letter-spacing: 0.14em;
   text-anchor: middle;
@@ -1163,7 +1118,7 @@ kbd {
 .decode-ghost {
   /* Monospace on purpose: the noise should read as a readout rather than as a
      word that has been mistyped. */
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 0.92em;
   color: var(--accent);
   opacity: 0.62;
@@ -1264,7 +1219,7 @@ kbd {
 .blade-tool {
   display: block;
   white-space: nowrap;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
   letter-spacing: 0.3em;
   text-transform: uppercase;
@@ -1868,22 +1823,6 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   .hands-live::before { animation: none }
-}
-
-/* Spun in CSS, deliberately. Under framer this was an infinitely repeating
-   animation, and AnimatePresence will not unmount a subtree whose animations
-   never end — which left the whole ignition overlay on top of the interface
-   for the entire session, swallowing every click and every pinch. */
-.ignition-ring { animation: ignitionSpin 18s linear infinite }
-
-@keyframes ignitionSpin {
-  from { transform: rotate(0deg) }
-  to   { transform: rotate(360deg) }
-}
-
-
-@media (prefers-reduced-motion: reduce) {
-  .ignition-ring { animation: none }
 }
 
 /* The live camera inside a blade. Mirrored, because a person expects their own

@@ -8,7 +8,7 @@ import { Effects } from '../ui/Effects'
 import { Pointer } from '../ui/Pointer'
 import { GestureGuide } from '../ui/GestureGuide'
 import { Diagnostics } from '../ui/Diagnostics'
-import { Ignition } from '../ui/Ignition'
+import { Intro, SoundLockHint } from '../ui/Intro'
 import { Overview } from './Overview'
 import { Roblox } from './Roblox'
 import { Finance } from './Finance'
@@ -440,7 +440,8 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
       <Pointer />
       <GestureGuide live={gestures} />
       <Diagnostics />
-      <Ignition onStart={onStart} />
+      <SoundLockHint />
+      <Intro onStart={onStart} />
     </>
   )
 }

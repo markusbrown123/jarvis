@@ -1,0 +1,417 @@
+/* The intro: JARVIS's cold start. Same palette and type as the station. */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 520px) minmax(280px, 1fr);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'top top top'
+    'checks center brief'
+    'foot foot foot';
+  gap: 24px;
+  padding: 22px 32px 28px;
+  background: #050409;
+  color: var(--text, #f4f2fb);
+  font-family: var(--body, 'Barlow', system-ui, sans-serif);
+  cursor: pointer;
+  overflow: hidden;
+  animation: introIn 700ms ease-out both;
+}
+@keyframes introIn {
+  from {
+    opacity: 0;
+  }
+}
+.intro-leaving {
+  pointer-events: none;
+  animation: introOut 850ms ease-in forwards;
+}
+@keyframes introOut {
+  to {
+    opacity: 0;
+    transform: scale(1.04);
+    filter: blur(6px);
+  }
+}
+.intro-booting {
+  cursor: progress;
+}
+
+/* backdrop: two glows over a faint hex floor */
+.intro-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 55% 45% at 50% 46%, rgba(124, 92, 240, 0.22), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 50% 100%, rgba(94, 234, 212, 0.08), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 0 56 16.2v32.3L28 64.7 0 48.5V16.2zM28 64.7v32.3' fill='none' stroke='%23a78bfa' stroke-opacity='0.07'/%3E%3C/svg%3E");
+  mask-image: radial-gradient(ellipse 80% 75% at 50% 55%, #000 30%, transparent 85%);
+}
+
+.intro-top {
+  grid-area: top;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.intro-brand {
+  font: 600 20px var(--head, 'Barlow Condensed', sans-serif);
+  letter-spacing: 0.32em;
+}
+.intro-brand em {
+  margin-left: 10px;
+  font-style: normal;
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--violet, #a78bfa);
+}
+.intro-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font: 500 12px var(--head, sans-serif);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted, #a9a4bf);
+}
+.intro-clock b {
+  font: 500 22px var(--mono, monospace);
+  letter-spacing: 0.06em;
+  color: var(--text, #fff);
+}
+
+/* centre: the dial */
+.intro-center {
+  grid-area: center;
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-self: center;
+}
+.intro-dial {
+  width: min(460px, 52vh, 100%);
+  height: auto;
+  overflow: visible;
+}
+.intro-dial .d-tick {
+  stroke: rgba(169, 216, 255, 0.35);
+  stroke-width: 1;
+}
+.intro-dial .d-tick-long {
+  stroke: rgba(169, 216, 255, 0.85);
+  stroke-width: 1.6;
+}
+.intro-dial .d-track {
+  fill: none;
+  stroke: rgba(167, 139, 250, 0.14);
+  stroke-width: 3;
+}
+.intro-dial .d-progress {
+  fill: none;
+  stroke: #a78bfa;
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.9));
+  transition: stroke-dasharray 600ms ease;
+}
+.intro-dial .d-seg {
+  fill: none;
+  stroke: rgba(169, 216, 255, 0.55);
+  stroke-width: 7;
+}
+.intro-dial .d-dash {
+  fill: none;
+  stroke: rgba(167, 139, 250, 0.45);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 7;
+}
+.intro-dial .d-hex {
+  fill: none;
+  stroke: rgba(196, 181, 253, 0.5);
+  stroke-width: 1.2;
+}
+.intro-dial .d-core {
+  animation: introBreathe 4.5s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.intro-dial.live .d-core {
+  animation-duration: 1.2s;
+}
+.intro-dial .d-spin-slow,
+.intro-dial .d-spin-rev,
+.intro-dial .d-spin-fast {
+  /* Each spinning piece is symmetric about the centre, so its own box's
+     centre is the dial's centre. */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.intro-dial .d-spin-slow {
+  animation: introSpin 140s linear infinite;
+}
+.intro-dial .d-spin-rev {
+  animation: introSpin 60s linear infinite reverse;
+}
+.intro-dial .d-spin-fast {
+  animation: introSpin 24s linear infinite;
+}
+.intro-dial.live .d-spin-rev {
+  animation-duration: 8s;
+}
+.intro-dial.live .d-spin-fast {
+  animation-duration: 4s;
+}
+@keyframes introSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes introBreathe {
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+.intro-word {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin-left: 0.4em;
+  font: 600 34px var(--head, sans-serif);
+  letter-spacing: 0.4em;
+  text-shadow: 0 0 24px rgba(167, 139, 250, 0.8);
+  pointer-events: none;
+}
+.intro-state {
+  margin-top: 6px;
+  font: 500 12.5px var(--mono, monospace);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+/* side panels */
+.intro-panel {
+  align-self: center;
+  padding: 16px 18px;
+  border: 1px solid rgba(140, 220, 255, 0.2);
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(140, 220, 255, 0.03) 1px, transparent 1px) 0 0 / 100% 4px,
+    linear-gradient(160deg, rgba(20, 26, 44, 0.6), rgba(9, 10, 20, 0.5));
+  box-shadow: 0 0 40px rgba(110, 160, 255, 0.08);
+}
+.intro-panel h2 {
+  margin: 0 0 12px;
+  font: 600 14px var(--head, sans-serif);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #a9d8ff;
+}
+.intro-checks {
+  grid-area: checks;
+  transform: perspective(1200px) rotateY(10deg);
+  transform-origin: left center;
+}
+.intro-brief {
+  grid-area: brief;
+  transform: perspective(1200px) rotateY(-10deg);
+  transform-origin: right center;
+}
+.sys-row {
+  display: grid;
+  grid-template-columns: 12px 116px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(169, 216, 255, 0.07);
+  animation: sysIn 420ms ease-out both;
+}
+@keyframes sysIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+.sys-row i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4b4566;
+  align-self: center;
+}
+.sys-k {
+  font: 600 13px var(--head, sans-serif);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8f9ab0;
+}
+.sys-v {
+  font: 400 13.5px var(--mono, monospace);
+  color: #dfe6f2;
+  overflow-wrap: anywhere;
+}
+.s-ok i {
+  background: var(--cyan, #5eead4);
+  box-shadow: 0 0 8px var(--cyan, #5eead4);
+}
+.s-warn i {
+  background: var(--amber, #f5a524);
+  box-shadow: 0 0 8px var(--amber, #f5a524);
+}
+.s-warn .sys-v {
+  color: #ffd79a;
+}
+.s-fail i {
+  background: var(--red, #f05252);
+  box-shadow: 0 0 8px var(--red, #f05252);
+}
+.s-fail .sys-v {
+  color: #fca5a5;
+}
+.s-off .sys-v {
+  color: #6f6a86;
+}
+.s-pending i {
+  background: #a78bfa;
+  animation: pendingPulse 0.9s ease-in-out infinite;
+}
+@keyframes pendingPulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.brief-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 10px;
+}
+.brief-v {
+  min-width: 64px;
+  font: 500 28px var(--mono, monospace);
+  color: var(--text, #fff);
+}
+.brief-k {
+  font: 500 13px var(--head, sans-serif);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8f9ab0;
+}
+.brief-sub {
+  margin: 2px 0 0 76px;
+  font-size: 13.5px;
+  color: #b9c3d6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* bottom: the ways in */
+.intro-foot {
+  grid-area: foot;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  cursor: default;
+}
+.intro-ways {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.way {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 170px;
+  padding: 10px 18px;
+  border: 1px solid rgba(169, 216, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(12, 12, 24, 0.6);
+  color: var(--text, #fff);
+  cursor: pointer;
+}
+.way:hover {
+  border-color: rgba(167, 139, 250, 0.7);
+  box-shadow: 0 0 24px rgba(167, 139, 250, 0.25);
+}
+.way b {
+  font: 600 15px var(--head, sans-serif);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.way span {
+  font-size: 12.5px;
+  color: #8f9ab0;
+}
+.intro-auto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #a9a4bf;
+  cursor: pointer;
+}
+.intro-hold {
+  margin-left: 6px;
+  padding: 3px 10px;
+  border: 1px solid rgba(245, 165, 36, 0.6);
+  border-radius: 999px;
+  background: none;
+  color: var(--amber, #f5a524);
+  font: 500 12px var(--mono, monospace);
+  cursor: pointer;
+}
+.intro-note {
+  color: #6f6a86;
+}
+.intro-error {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 14px;
+}
+
+/* after a hands-free start: Chrome may be holding his voice */
+.sound-lock {
+  position: fixed;
+  left: 50%;
+  top: 74px;
+  z-index: 46;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border: 1px solid rgba(245, 165, 36, 0.55);
+  border-radius: 999px;
+  background: rgba(20, 14, 6, 0.9);
+  color: #ffd79a;
+  font: 500 13.5px var(--body, sans-serif);
+  pointer-events: none;
+}
+
+.reduced .intro-dial *,
+.reduced .sys-row {
+  animation: none !important;
+}
+
+@media (max-width: 1100px) {
+  .intro {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'top' 'center' 'checks' 'foot';
+    overflow-y: auto;
+  }
+  .intro-brief {
+    display: none;
+  }
+  .intro-checks {
+    transform: none;
+  }
+}

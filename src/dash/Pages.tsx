@@ -178,6 +178,10 @@ export function Settings() {
             </select>
           </label>
           <label className="check">
+            <input type="checkbox" checked={prefs.autoStart} onChange={(e) => setPrefs({ autoStart: e.target.checked })} />
+            Start by himself when the window opens (when Chrome allows sound without a click)
+          </label>
+          <label className="check">
             <input type="checkbox" checked={prefs.reducedMotion} onChange={(e) => setPrefs({ reducedMotion: e.target.checked })} />
             Reduced motion
           </label>

@@ -35,6 +35,11 @@
 }
 
 body.dash-mode {
+  /* The older surfaces (display windows, diagnostics, gesture guide) all
+     take their colour from --accent; give them the station's holo blue. */
+  --interface: #a9d8ff;
+  --accent: var(--interface);
+  --bg: #050409;
   background: var(--g0);
   font-family: var(--body);
   /* Barlow sits smaller than the sizes here were set for; match x-heights. */
@@ -2215,4 +2220,14 @@ kbd {
   .expense-breakdowns {
     grid-template-columns: 1fr;
   }
+}
+
+/* Display windows JARVIS opens: the station's holo-panel surface, solid
+   enough that nothing behind them bleeds through the text. */
+body.dash-mode .bl {
+  background:
+    linear-gradient(rgba(140, 220, 255, 0.03) 1px, transparent 1px) 0 0 / 100% 4px,
+    linear-gradient(160deg, rgb(19, 23, 38), rgb(8, 9, 18));
+  border-color: rgba(140, 220, 255, 0.3);
+  border-radius: 6px;
 }
