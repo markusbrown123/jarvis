@@ -25,6 +25,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomInt } from 'node:crypto'
 import * as hub from './store.mjs'
+import { saveReceipt } from './expenses.mjs'
 
 const FILE = join(hub.DATA_DIR, 'phone.json')
 const TG = process.env.TELEGRAM_API_BASE ?? 'https://api.telegram.org'
@@ -266,7 +267,27 @@ export function startPhone({ makeChat, transcribe, speak }) {
       return
     }
 
-    let said = text
+    // A photo (or an image sent as a file): most likely a receipt. Keep it,
+    // and let JARVIS read it — logging it only if the total is legible.
+    const photo = msg.photo?.at(-1) ?? (msg.document?.mime_type?.startsWith('image/') ? msg.document : null)
+    let image = null
+    if (photo) {
+      try {
+        await tg('sendChatAction', { chat_id: cfg.chatId, action: 'typing' })
+        const file = await tg('getFile', { file_id: photo.file_id })
+        const res = await fetch(`${TG}/file/bot${tgToken()}/${file.file_path}`, { signal: AbortSignal.timeout(60000) })
+        if (!res.ok) throw new Error(`download ${res.status}`)
+        const buf = Buffer.from(await res.arrayBuffer())
+        if (buf.length > 4.5 * 1024 * 1024) throw new Error('that image is too large; send it as a photo, not a file')
+        const type = photo.mime_type ?? 'image/jpeg'
+        const ext = type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
+        image = { type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(type) ? type : 'image/jpeg', data: buf.toString('base64'), path: saveReceipt(buf, ext) }
+      } catch (err) {
+        return sendText(`I couldn't get that photo (${err.message}).`)
+      }
+    }
+
+    let said = image ? (msg.caption ?? '').trim() : text
     const voice = msg.voice ?? msg.audio
     if (voice) {
       try {
@@ -280,13 +301,26 @@ export function startPhone({ makeChat, transcribe, speak }) {
         return sendText(`I couldn't hear that voice note (${err.message}). Text works.`)
       }
     }
-    if (!said) return
-    hub.term('phone', `markus${voice ? ' (voice note)' : ''} › ${said}`, 'user')
+    if (!said && !image) return
+    hub.term('phone', `markus${voice ? ' (voice note)' : image ? ' (photo)' : ''} › ${said || 'photo'}`, 'user')
+    const content = image
+      ? [
+          { type: 'image', source: { type: 'base64', media_type: image.type, data: image.data } },
+          {
+            type: 'text',
+            text:
+              `[Photo from Markus's phone, saved at ${image.path}.]${said ? ` He wrote: "${said}"` : ''}\n` +
+              'If it is a receipt or invoice, log it with expense_log (receipt set to that path): vendor, the total actually paid, the date and currency as printed. ' +
+              'Choose the business and category from what he wrote or the vendor; if you cannot tell which business, or the total is not clearly legible, ask him instead of guessing. ' +
+              'If it is not a receipt, just reply to the photo.',
+          },
+        ]
+      : said
 
     await tg('sendChatAction', { chat_id: cfg.chatId, action: 'typing' }).catch(() => {})
     try {
       chat ??= makeChat()
-      const answer = await chat.ask(said)
+      const answer = await chat.ask(content)
       hub.term('phone', `jarvis › ${answer}`, 'reply')
       await reply(answer || 'Done, sir.', Boolean(voice))
     } catch (err) {

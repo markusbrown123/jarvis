@@ -160,7 +160,7 @@ export function Settings() {
             <StatRow name="End of speech → first words" s={t.firstText} target="—" />
             <StatRow name="End of speech → voice starts" s={t.firstSound} target="1.5–2.5s" />
           </div>
-          <p className="fine">Keys: Space talk · Enter finish speaking · M mic on/off · Esc stand down · D diagnostics · T audio test · ⌘K commands</p>
+          <p className="fine">Keys: 0 station · 1–9 views · Space talk · Enter finish speaking · M mic on/off · Esc stand down · D diagnostics · T audio test · ⌘K commands</p>
         </section>
 
         <PhonePanel phone={s?.phone} />
@@ -169,6 +169,14 @@ export function Settings() {
           <header className="card-head">
             <h3>Appearance</h3>
           </header>
+          <label className="field">
+            <span>Station graphics</span>
+            <select className="input" value={prefs.graphics} onChange={(e) => setPrefs({ graphics: e.target.value as typeof prefs.graphics })}>
+              <option value="ultra">Ultra — soft shadows, ambient occlusion, full reflections, film grain</option>
+              <option value="high">High — shadows, reflections, light shafts</option>
+              <option value="low">Low — flat lighting, for battery or older Macs</option>
+            </select>
+          </label>
           <label className="check">
             <input type="checkbox" checked={prefs.reducedMotion} onChange={(e) => setPrefs({ reducedMotion: e.target.checked })} />
             Reduced motion

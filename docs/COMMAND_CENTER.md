@@ -12,27 +12,62 @@ jarvis stop         # stop
 jarvis logs         # follow ~/Library/Logs/jarvis.log
 jarvis setup-claude # forward Claude Code's status line + hooks (usage %, session activity)
 jarvis setup-claude --remove   # undo exactly that
+jarvis watch        # the live terminal feed, in colour, in this Terminal window
+jarvis setup-phone telegram|pushover|remove   # phone tokens into the Keychain
 ```
 
 Click **INITIALISE** once per page load (the browser needs one click before it
 will play sound). Write mode is unchanged: start the bridge yourself with
 `node scripts/start.mjs --writes`, then run `jarvis` to open the window.
 
+## Station
+
+The landing view (`0`, or **Station** in the nav): a 3D workshop built in code —
+no downloaded models. Everything in it is live:
+
+- **Core** over a lathe-turned holo-table, in an arc-reactor ring of twelve coils
+  and a gyroscope; its colour is JARVIS's state (orange listening, cyan speaking,
+  violet thinking, amber when a P1 needs you, red on an error). A light beam rises
+  from the table with his voice level.
+- **Two robot arms** (two-link IK) idle folded and reach in to the core, gripper
+  working and sparking, while JARVIS is thinking or one of his jobs runs.
+- **A drone per running job** orbits the core (amber = needs you, red = no
+  heartbeat). Hover for the job, click for Jobs.
+- **Server racks** whose lights blink faster the more has happened in the last minute.
+- **Back screen**: the latest studio render.
+- **Holo panels** standing in the room: Terminal (type to JARVIS), Business & money,
+  Needs Markus, Running. Each opens its full view.
+
+Drag to look around, scroll to move closer. Graphics: **Low** (flat, for battery),
+**High** (shadows, reflective floor, light shafts), **Ultra** (soft shadows, 4096
+shadow maps, ambient occlusion, full-res reflections, grain, lens fringing) —
+switch on the station's top bar or in Settings. A performance monitor lowers the
+resolution if frames drop; before INITIALISE the scene renders one still frame.
+
+## Terminal
+
+`7`, the station's left panel, or `jarvis watch` in Terminal: one line per thing
+happening — what you said and JARVIS's answer, every tool he uses, each
+background-job step, your Claude Code sessions' tool use (tool + file name +
+description — never commands or file contents), phone messages, studio events.
+Filters: Voice · Jobs · Code · Phone · Studio. Typing at the prompt talks to JARVIS.
+Memory only; the Activity log stays the durable record.
+
 ## Layout
 
 | Area | What it shows |
 |---|---|
 | Top bar | JARVIS's real input state, command-center link, model, 5-hour allowance |
-| Left | Overview · Roblox · Finance · Automaton · Needs Markus · Activity · Settings, plus active jobs |
+| Left | Station · Overview · Roblox · Finance · Automaton · Needs Markus · Jobs · Terminal · Activity · Settings, plus active jobs |
 | Overview | Constellation of live project state around the core, and a strip: running, changed, latest render, needs you, allowance |
 | Right | Needs Markus queue: what, why, where, what's ready, how it's verified, what resumes |
-| Bottom | Input state ("You paused — still listening"), level meter, transcript, text box, Talk / Finish / Stop talking / Cancel reply / Mic, talk mode |
+| Bottom | Transcript · the voice visualizer (centred; under the core on the overview) · text box, Talk / Finish / Stop talking / Cancel reply / Mic, talk mode |
 | `Voice view` / `I` | Immersive view: nebula, filaments, live words |
 
 Colours mean one thing everywhere: violet working, amber needs you, red
 failed, cyan healthy, grey dashed not connected.
 
-Keys (never while typing): `1`–`7` sections · `[` `]` collapse panels · `I`
+Keys (never while typing): `0` station · `1`–`9` sections · `[` `]` collapse panels · `I`
 voice view · `⌘K` command palette · `Space` talk · `Enter` finish speaking ·
 `M` mic on/off · `Esc` stand down · `D` diagnostics · `T` audio test.
 
@@ -58,6 +93,26 @@ as **background jobs** (`job_start`): separate agent sessions in the
 project's folder, behind the same read-only/write gate. Talking over him,
 "stop" and "cancel reply" never touch them; "cancel that task" or the job's
 cancel shows *cancellation requested* until the session has really stopped.
+
+## Business expenses
+
+Finance → **Expenses** (and the station's Business panel). A plain ledger in
+`~/.jarvis/expenses.json`; receipt photos kept in `~/.jarvis/receipts`.
+
+- **By voice:** "Jarvis, I paid $19 for Netlify, Automaton hosting" → `expense_log`
+  (amount, vendor, business, category, date). He confirms in one line and never
+  guesses an amount — if it's unclear he asks. "What did I spend this month?" →
+  `expense_report`. "That Netlify one was $21" → `expense_fix`.
+- **By phone:** text a receipt photo to the JARVIS bot (add a caption like "office
+  stuff for Automaton" if the business isn't obvious). He reads the vendor, total,
+  date and currency, keeps the photo, and logs it — or asks if the total isn't legible.
+- **On the dashboard:** month / last month / year totals, spend by business and by
+  category, an add form, every entry with its receipt, delete, and **Download CSV**
+  for your accountant.
+- Businesses: automaton · roblox · trading · jarvis · personal · other. Categories:
+  software · ai · hosting · marketing · contractors · equipment · office · travel ·
+  meals · fees · education · other. Mixed currencies are flagged, never converted.
+- Nothing here connects to a bank or card, imports anything, or pays anything.
 
 ## Phone
 

@@ -337,6 +337,12 @@ export function setProject(id, data) {
   changed()
 }
 
+/** The expense ledger's summary and recent entries (the ledger itself is its own file). */
+export function setExpenses(data) {
+  state.expenses = data
+  changed()
+}
+
 /** Phone link status (no secrets): what Settings → Phone shows. */
 export function setPhone(data) {
   if (JSON.stringify(state.phone) === JSON.stringify(data)) return

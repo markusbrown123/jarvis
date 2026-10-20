@@ -3,6 +3,7 @@ import { useHub, hubActions } from '../hub/client'
 import { ago } from '../hub/format'
 import { Chip, Empty } from './shared'
 import { useTick } from './state'
+import { Expenses } from './Expenses'
 
 /**
  * Finance: monitoring only.
@@ -30,7 +31,31 @@ function chartSrc(symbol: string) {
   return `https://s.tradingview.com/widgetembed/?${q}`
 }
 
+/** Finance: business expenses first, then market monitoring. */
 export function Finance() {
+  const [tab, setTab] = useState<'expenses' | 'markets'>('expenses')
+  return (
+    <div className="view view-finance">
+      <header className="view-head">
+        <div>
+          <h1>Finance</h1>
+          <p className="muted">{tab === 'expenses' ? 'Business expenses — logged by voice, phone receipt photo, or here.' : 'Market monitoring — research tools, charts, no broker.'}</p>
+        </div>
+        <div className="tabs">
+          <button className={`tab ${tab === 'expenses' ? 'on' : ''}`} onClick={() => setTab('expenses')}>
+            Expenses
+          </button>
+          <button className={`tab ${tab === 'markets' ? 'on' : ''}`} onClick={() => setTab('markets')}>
+            Markets
+          </button>
+        </div>
+      </header>
+      {tab === 'expenses' ? <Expenses /> : <Markets />}
+    </div>
+  )
+}
+
+function Markets() {
   useTick(15000)
   const s = useHub((x) => x.state)
   const prefs = useHub((x) => x.prefs)
@@ -41,13 +66,8 @@ export function Finance() {
   if (!f) return <Empty title="Checking finance services…" />
   const symbol = prefs.chartSymbol ?? f.charts[0]?.symbol ?? 'CME_MINI:MNQ1!'
   return (
-    <div className="view view-finance">
-      <header className="view-head">
-        <div>
-          <h1>Finance</h1>
-          <p className="muted">Checked {ago(f.updatedAt)}</p>
-        </div>
-      </header>
+    <>
+      <p className="muted small">Checked {ago(f.updatedAt)}</p>
       <div className="banner">
         <b>Monitoring only.</b> No broker, prop account or execution connection exists — nothing on this page can place, change or cancel an order.
         Live accounts, paper trading and backtests will each be labelled separately once a source for them is connected.
@@ -158,6 +178,6 @@ export function Finance() {
           </section>
         </div>
       </div>
-    </div>
+    </>
   )
 }

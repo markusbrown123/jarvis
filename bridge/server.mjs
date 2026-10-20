@@ -478,7 +478,12 @@ Markus's command center:
 - Anything that will take more than a minute — research, reading a codebase,
   writing a report — goes to job_start, and you say in a few words that it is
   running. Don't do long work inside the conversation.
-- Finance is monitoring only. Never claim to see positions, orders or P&L.`
+- Finance is monitoring only. Never claim to see positions, orders or P&L.
+- Business expenses: when he tells you he spent something, log it with
+  expense_log (amount, vendor, which business, category) and confirm in one
+  line; never guess an amount. "What did I spend…" is expense_report.
+- He can be reached on his phone with phone_notify when he asks to be texted
+  or reminded; urgent only for real emergencies or when he says urgent.`
 
 /**
  * ElevenLabs credentials, borrowed from the MCP server config.
@@ -804,6 +809,7 @@ function makePhoneChat() {
   })()
   let chain = Promise.resolve()
   return {
+    /** `text` is a string, or content blocks (an image and its instructions). */
     ask(text) {
       const turn = chain.then(
         () =>

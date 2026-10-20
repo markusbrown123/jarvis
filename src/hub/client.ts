@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { BRIDGE_HTTP_URL } from '../config'
-import type { HubState } from './types'
+import type { HubState, TermLine } from './types'
 
 /**
  * The live connection to the command center.
@@ -13,7 +13,9 @@ import type { HubState } from './types'
 
 export type Link = 'connecting' | 'live' | 'down'
 
-export type View = 'overview' | 'roblox' | 'finance' | 'automaton' | 'needs' | 'jobs' | 'activity' | 'settings'
+export type View = 'station' | 'overview' | 'roblox' | 'finance' | 'automaton' | 'needs' | 'jobs' | 'terminal' | 'activity' | 'settings'
+
+export type Graphics = 'low' | 'high' | 'ultra'
 
 type Prefs = {
   view: View
@@ -26,6 +28,8 @@ type Prefs = {
   selectedSite: string | null
   sitePreviewMode: 'desktop' | 'mobile'
   chartSymbol: string | null
+  graphics: Graphics
+  layoutVersion: number
 }
 
 const PREFS_KEY = 'jarvis.dashboard'
@@ -40,13 +44,18 @@ const DEFAULT_PREFS: Prefs = {
   selectedSite: null,
   sitePreviewMode: 'desktop',
   chartSymbol: null,
+  graphics: 'ultra',
+  layoutVersion: 2,
 }
 
 function loadPrefs(): Prefs {
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-    return { ...DEFAULT_PREFS, reducedMotion: prefersReduced, ...saved, immersive: false }
+    const prefs = { ...DEFAULT_PREFS, reducedMotion: prefersReduced, ...saved, immersive: false }
+    // The station arrived after people had a saved view; open there once.
+    if ((saved.layoutVersion ?? 1) < 2) Object.assign(prefs, { view: 'station', layoutVersion: 2 })
+    return prefs
   } catch {
     return DEFAULT_PREFS
   }
@@ -54,6 +63,7 @@ function loadPrefs(): Prefs {
 
 type HubStore = {
   state: HubState | null
+  term: TermLine[]
   link: Link
   lastUpdate: number
   prefs: Prefs
@@ -67,6 +77,7 @@ type HubStore = {
 
 export const useHub = create<HubStore>((set, get) => ({
   state: null,
+  term: [],
   link: 'connecting',
   lastUpdate: 0,
   prefs: loadPrefs(),
@@ -102,6 +113,22 @@ export function connectHub() {
       /* a malformed frame is skipped; the next one replaces it */
     }
   })
+  // Terminal lines arrive on their own: a backlog on connect, then one at a
+  // time. Ids make the reconnect backlog merge instead of repeat.
+  source.addEventListener('term', (e) => {
+    try {
+      const lines = JSON.parse((e as MessageEvent).data) as TermLine[]
+      const have = useHub.getState().term
+      const last = have.at(-1)?.id ?? 0
+      // Ids restart with the bridge; a batch that ends below what we hold is
+      // a new bridge, so it replaces rather than merges.
+      if (lines.length && lines[lines.length - 1].id < last) return useHub.setState({ term: lines })
+      const fresh = lines.filter((l) => l.id > last)
+      if (fresh.length) useHub.setState({ term: [...have, ...fresh].slice(-500) })
+    } catch {
+      /* skip a malformed frame */
+    }
+  })
   source.onopen = () => useHub.setState({ link: 'live' })
   source.onerror = () => useHub.setState({ link: 'down' })
   trackPresence()
@@ -128,6 +155,17 @@ export const hubActions = {
   startJob: (title: string, project: string, instructions: string) => post('/api/jobs/start', { title, project, instructions }),
   refresh: (project: 'roblox' | 'automaton' | 'finance') => post(`/api/refresh/${project}`),
   setQuantView: (name: string, url: string) => post('/api/config/quant-view', { name, url }),
+  addExpense: (e: Record<string, unknown>) => post('/api/expenses', e),
+  deleteExpense: (id: string) => post(`/api/expenses/${encodeURIComponent(id)}/delete`),
+  downloadExpenses: async (period = 'all') => {
+    const res = await fetch(`${BRIDGE_HTTP_URL}/api/expenses.csv?period=${encodeURIComponent(period)}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(await res.blob())
+    a.download = `jarvis-expenses-${period}.csv`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000)
+  },
   phonePair: () => post('/api/phone/pair'),
   phoneUnpair: () => post('/api/phone/unpair'),
   phoneSettings: (p: Record<string, unknown>) => post('/api/phone/settings', p),

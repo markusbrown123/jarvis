@@ -1883,3 +1883,336 @@ kbd {
 .brand-mark {
   letter-spacing: 0.24em;
 }
+
+/* ------------------------------------------------------------- terminal */
+
+.view-terminal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.view-terminal .term {
+  flex: 1;
+  min-height: 0;
+}
+.term {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+  border: 1px solid rgba(94, 234, 212, 0.18);
+  border-radius: 10px;
+  background:
+    linear-gradient(rgba(94, 234, 212, 0.025) 1px, transparent 1px) 0 0 / 100% 3px,
+    rgba(6, 8, 12, 0.92);
+  font: 400 13px/1.55 var(--mono);
+  color: #c9d4dc;
+  overflow: hidden;
+}
+.term-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(94, 234, 212, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+.term-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.term-lights {
+  display: inline-flex;
+  gap: 5px;
+}
+.term-lights i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #3a3548;
+}
+.term-lights i:first-child {
+  background: #ff5f57;
+}
+.term-lights i:nth-child(2) {
+  background: #febc2e;
+}
+.term-lights i:last-child {
+  background: #28c840;
+}
+.term-filters {
+  display: inline-flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.term-filter {
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--faint);
+  font: 500 11.5px var(--mono);
+  cursor: pointer;
+}
+.term-filter:hover {
+  color: var(--text);
+}
+.term-filter.on {
+  color: var(--cyan);
+  border-color: rgba(94, 234, 212, 0.3);
+}
+.term-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px;
+  scrollbar-width: thin;
+}
+.tl {
+  display: grid;
+  grid-template-columns: 66px auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 1px 0;
+  animation: tlIn 260ms ease-out;
+}
+@keyframes tlIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+.reduced .tl {
+  animation: none;
+}
+.tl-ts {
+  color: #4d5866;
+}
+.tl-src {
+  color: var(--violet);
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-src em {
+  font-style: normal;
+  color: #7a7395;
+  font-weight: 400;
+}
+.tl-src-code {
+  color: #60a5fa;
+}
+.tl-src-job {
+  color: #c4b5fd;
+}
+.tl-src-voice {
+  color: #ffb067;
+}
+.tl-src-phone {
+  color: #f0abfc;
+}
+.tl-src-studio {
+  color: #86efac;
+}
+.tl-text {
+  overflow-wrap: anywhere;
+}
+.tl-user .tl-text {
+  color: #ffd2a8;
+}
+.tl-reply .tl-text {
+  color: var(--cyan);
+}
+.tl-tool .tl-text {
+  color: #b9b1d6;
+}
+.tl-tool .tl-text::before {
+  content: '⚙ ';
+  color: #6d6590;
+}
+.tl-success .tl-text {
+  color: var(--green);
+}
+.tl-warn .tl-text {
+  color: var(--amber);
+}
+.tl-error .tl-text {
+  color: #fca5a5;
+}
+.tl-history {
+  opacity: 0.55;
+}
+.tl-cursor {
+  grid-template-columns: 66px minmax(0, 1fr);
+  color: #4d5866;
+}
+.term-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 6px;
+  vertical-align: -2px;
+  background: var(--cyan);
+  animation: caret 1.05s steps(1) infinite;
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+.term-jump {
+  position: absolute;
+  right: 14px;
+  bottom: 52px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 234, 212, 0.4);
+  background: rgba(6, 8, 12, 0.9);
+  color: var(--cyan);
+  font: 500 11.5px var(--mono);
+  cursor: pointer;
+}
+.term-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(94, 234, 212, 0.12);
+}
+.term-prompt {
+  color: var(--cyan);
+  white-space: nowrap;
+}
+.term-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+}
+.term-compact {
+  font-size: 12px;
+  min-height: 0;
+}
+.term-compact .tl {
+  grid-template-columns: 58px auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------- expenses */
+
+.expenses {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+.expense-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.expense-tiles .fine {
+  grid-column: 1 / -1;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tile-k {
+  font: 600 12px var(--head);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tile-v {
+  font: 500 30px var(--mono);
+  letter-spacing: -0.01em;
+}
+.tile-s {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.expense-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.bars {
+  display: grid;
+  gap: 8px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 96px;
+  gap: 10px;
+  align-items: center;
+  padding: 2px 0;
+}
+.bar-k {
+  color: var(--muted);
+  font-size: 14px;
+}
+.bar-track {
+  height: 10px;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--violet);
+}
+.bar-row:hover .bar-fill {
+  background: #c4b5fd;
+}
+.bar-v {
+  text-align: right;
+  font-size: 13.5px;
+}
+.expense-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+.expense-table-wrap {
+  overflow-x: auto;
+}
+.expense-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+.expense-table th {
+  text-align: left;
+  font: 600 12px var(--head);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.expense-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.expense-table .num {
+  text-align: right;
+}
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+@media (max-width: 1280px) {
+  .expense-breakdowns {
+    grid-template-columns: 1fr;
+  }
+}

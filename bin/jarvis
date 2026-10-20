@@ -9,6 +9,7 @@
 #   jarvis logs     follow the log
 #   jarvis setup-claude [--remove]   forward Claude Code usage + activity
 #   jarvis setup-phone telegram|pushover|remove   phone tokens → Keychain
+#   jarvis watch                     live terminal feed in this window
 #
 # Settings come from the environment, with defaults below. The ElevenLabs key
 # is read from the macOS Keychain (service "elevenlabs") so it never sits in a
@@ -143,6 +144,7 @@ setup_phone() {
 case "${1:-}" in
   stop) stop_all ;;
   setup-phone) shift; setup_phone "$@" ;;
+  watch) exec node "$DIR/scripts/watch.mjs" ;;
   setup-claude) shift; node "$DIR/scripts/setup-claude.mjs" "$@" ;;
   logs) tail -n 50 -f "$LOG" ;;
   "")
@@ -150,7 +152,7 @@ case "${1:-}" in
     open_window
     ;;
   *)
-    echo "usage: jarvis [stop|logs|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
+    echo "usage: jarvis [stop|logs|watch|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
     exit 1
     ;;
 esac

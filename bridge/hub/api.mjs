@@ -16,6 +16,7 @@ import { CONFIG_FILE, loadConfig, saveConfig } from './config.mjs'
 import { startRoblox } from './roblox.mjs'
 import { startAutomaton } from './automaton.mjs'
 import { startFinance } from './finance.mjs'
+import * as ledger from './expenses.mjs'
 
 const MAX_BODY = 1024 * 1024
 
@@ -310,6 +311,30 @@ export function startHub({ runner, phone } = {}) {
       if (req.method === 'POST' && m) {
         await sources[m[1]].refresh()
         return json(res, cors, 200, { ok: true })
+      }
+
+      // The expense ledger, for the dashboard. JARVIS uses the same ledger
+      // through its tools.
+      if (req.method === 'GET' && path === '/api/expenses') {
+        const period = url.searchParams.get('period') ?? 'this-month'
+        const list = ledger.listExpenses({ period })
+        return json(res, cors, 200, { period, list, summary: ledger.summarize(list) })
+      }
+      if (req.method === 'GET' && path === '/api/expenses.csv') {
+        const period = url.searchParams.get('period') ?? 'all'
+        res.writeHead(200, { ...cors, 'content-type': 'text/csv; charset=utf-8', 'cache-control': 'no-store', 'content-disposition': `attachment; filename="jarvis-expenses-${period}.csv"` })
+        return res.end(ledger.csv(period))
+      }
+      if (req.method === 'POST' && path === '/api/expenses') {
+        try {
+          return json(res, cors, 200, { ok: true, expense: ledger.addExpense({ ...JSON.parse(await readBody(req)), source: 'dashboard' }) })
+        } catch (err) {
+          return json(res, cors, 400, { error: err.message })
+        }
+      }
+      m = path.match(/^\/api\/expenses\/([\w-]+)\/delete$/)
+      if (req.method === 'POST' && m) {
+        return ledger.deleteExpense(m[1]) ? json(res, cors, 200, { ok: true }) : json(res, cors, 404, { error: 'no such expense' })
       }
 
       if (req.method === 'POST' && path === '/api/presence') {

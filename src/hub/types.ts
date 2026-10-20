@@ -207,6 +207,25 @@ export type Usage = {
   sources: Record<string, number>
 }
 
+export type Expense = {
+  id: string
+  date: string
+  amount: number
+  currency: string
+  vendor: string
+  category: string
+  business: string
+  note: string | null
+  receipt: string | null
+  source: string
+  recurring: 'monthly' | 'yearly' | null
+  createdAt: number
+}
+
+export type ExpenseSummary = { count: number; total: number; byBusiness: Record<string, number>; byCategory: Record<string, number>; currencies: string[] }
+
+export type TermLine = { id: number; ts: number; src: string; kind: string; text: string }
+
 export type PhoneStatus = {
   telegram: {
     configured: boolean
@@ -230,6 +249,7 @@ export type PhoneStatus = {
 export type HubState = {
   version: number
   phone?: PhoneStatus
+  expenses?: { month: ExpenseSummary; lastMonth: ExpenseSummary; year: ExpenseSummary; recent: Expense[]; total: number }
   presence?: { lastSeenAt?: number; phoneAt?: number }
   jobs: Record<string, Job>
   items: Record<string, Item>

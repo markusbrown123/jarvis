@@ -1,0 +1,412 @@
+/* JARVIS Station: the 3D room fills the screen; HUD and dock float over it. */
+
+.station {
+  position: fixed;
+  inset: 0;
+  /* Under the power-up screen (7) and palette/toasts, over nothing else. */
+  z-index: 5;
+  background: #050409;
+  overflow: hidden;
+  color: var(--text);
+}
+.station-canvas {
+  position: absolute !important;
+  inset: 0;
+}
+
+/* ------------------------------------------------------------ top HUD */
+
+.st-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  background: linear-gradient(rgba(5, 4, 9, 0.85), rgba(5, 4, 9, 0));
+  pointer-events: none;
+}
+.st-top > * {
+  pointer-events: auto;
+}
+.st-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.st-mark {
+  font: 600 20px var(--head);
+  letter-spacing: 0.32em;
+}
+.st-sub {
+  font: 500 13px var(--head);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--violet);
+}
+.st-link {
+  font: 500 11px var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+.st-link-live::before {
+  content: '● ';
+  color: var(--green);
+}
+.st-link-down {
+  color: var(--red);
+}
+.st-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font: 500 12px var(--head);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.st-clock .mono {
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.st-nav {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.st-nav > button {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: 500 13px var(--head);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.st-nav > button:hover {
+  color: var(--text);
+  border-color: var(--line);
+}
+.st-nav b {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--amber);
+  color: #1a1206;
+  font-size: 11.5px;
+}
+.st-quality {
+  display: inline-flex;
+  margin-left: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.st-quality button {
+  padding: 4px 9px;
+  border: 0;
+  background: rgba(10, 9, 16, 0.6);
+  color: var(--faint);
+  font: 500 11px var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.st-quality button.on {
+  background: rgba(167, 139, 250, 0.22);
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- dock */
+
+.st-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 30;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(820px, calc(100vw - 32px));
+}
+.st-line {
+  margin: 0;
+  max-width: 100%;
+  text-align: center;
+  font: 500 19px/1.4 var(--body);
+  text-shadow: 0 2px 14px #000;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.st-line.you {
+  color: #ffd2a8;
+}
+.st-hint {
+  position: absolute;
+  right: 18px;
+  bottom: 12px;
+  z-index: 30;
+  margin: 0;
+  font: 400 11.5px var(--mono);
+  color: #4e4964;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------- holo panels */
+
+.holo-anchor {
+  pointer-events: auto;
+}
+.holo {
+  position: relative;
+  width: 440px;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(140, 220, 255, 0.26);
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(140, 220, 255, 0.035) 1px, transparent 1px) 0 0 / 100% 4px,
+    linear-gradient(160deg, rgba(20, 26, 44, 0.78), rgba(9, 10, 20, 0.7));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 46px rgba(110, 160, 255, 0.12),
+    inset 0 0 30px rgba(120, 180, 255, 0.05);
+  color: #dfe6f2;
+  font-size: 15px;
+}
+.holo-wide {
+  width: 520px;
+}
+.holo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.holo-title {
+  font: 600 15px var(--head);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #a9d8ff;
+}
+.holo-count {
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(169, 216, 255, 0.35);
+  font: 500 12px var(--mono);
+  color: #a9d8ff;
+}
+.holo-count.need {
+  border-color: rgba(245, 165, 36, 0.6);
+  color: var(--amber);
+}
+.holo-open {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid rgba(169, 216, 255, 0.25);
+  border-radius: 5px;
+  background: none;
+  color: #a9d8ff;
+  font: 500 12px var(--head);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.holo-open:hover {
+  background: rgba(169, 216, 255, 0.1);
+}
+.holo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.holo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 1px solid rgba(169, 216, 255, 0.08);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.holo-row:hover {
+  border-color: rgba(169, 216, 255, 0.3);
+}
+.holo-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--violet);
+  box-shadow: 0 0 8px currentColor;
+}
+.pri-P1 .holo-dot {
+  background: var(--red);
+}
+.pri-P2 .holo-dot {
+  background: var(--amber);
+}
+.pri-P3 .holo-dot {
+  background: #7a7395;
+}
+.tone-need .holo-dot {
+  background: var(--amber);
+}
+.tone-fail .holo-dot {
+  background: var(--red);
+}
+.tone-ok .holo-dot {
+  background: var(--cyan);
+}
+.holo-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.holo-row-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.holo-row-sub {
+  font-size: 13px;
+  color: #8f9ab0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.holo-empty {
+  margin: 4px 0;
+  color: #8f9ab0;
+}
+.holo-corner {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: #a9d8ff;
+  border-style: solid;
+  border-width: 0;
+  opacity: 0.85;
+}
+.holo-corner.tl {
+  top: -1px;
+  left: -1px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+.holo-corner.tr {
+  top: -1px;
+  right: -1px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+.holo-corner.bl {
+  bottom: -1px;
+  left: -1px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+.holo-corner.br {
+  bottom: -1px;
+  right: -1px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
+.holo .term {
+  border-color: rgba(140, 220, 255, 0.16);
+  background:
+    linear-gradient(rgba(94, 234, 212, 0.025) 1px, transparent 1px) 0 0 / 100% 3px,
+    rgba(4, 6, 10, 0.72);
+}
+
+/* business strip */
+.biz {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.biz-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 1px solid rgba(169, 216, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.biz-cell:hover {
+  border-color: rgba(169, 216, 255, 0.32);
+}
+.biz-k {
+  font: 500 11.5px var(--head);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8f9ab0;
+}
+.biz-v {
+  font: 500 16px var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.biz-v.ok {
+  color: var(--cyan);
+}
+.biz-v.bad {
+  color: #fca5a5;
+}
+
+/* drone hover label */
+.drone-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 7px 10px;
+  border: 1px solid rgba(169, 216, 255, 0.35);
+  border-radius: 6px;
+  background: rgba(8, 10, 18, 0.88);
+  color: #e6ecf7;
+  font: 500 13px var(--body);
+  pointer-events: none;
+}
+.drone-tip b {
+  font: 500 12px var(--mono);
+  color: #a9d8ff;
+}
+.drone-tip span {
+  font-size: 12px;
+  color: #8f9ab0;
+}
+
+@media (max-width: 1100px) {
+  .st-clock {
+    display: none;
+  }
+  .st-top {
+    grid-template-columns: auto 1fr;
+  }
+}

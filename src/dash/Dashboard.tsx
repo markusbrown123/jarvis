@@ -15,6 +15,8 @@ import { Finance } from './Finance'
 import { Automaton } from './Automaton'
 import { Needs, Activity, Settings } from './Pages'
 import { Jobs } from './Jobs'
+import { Terminal } from './Terminal'
+import { Station } from '../station/Station'
 import { UsageChip } from './Usage'
 import { VoiceWave } from './VoiceWave'
 import { ItemCard } from './shared'
@@ -22,14 +24,16 @@ import { inputState, openItems, useTick } from './state'
 import './dash.css'
 
 const NAV: { id: View; label: string; key: string }[] = [
+  { id: 'station', label: 'Station', key: '0' },
   { id: 'overview', label: 'Overview', key: '1' },
   { id: 'roblox', label: 'Roblox', key: '2' },
   { id: 'finance', label: 'Finance', key: '3' },
   { id: 'automaton', label: 'Automaton', key: '4' },
   { id: 'needs', label: 'Needs Markus', key: '5' },
   { id: 'jobs', label: 'Jobs', key: '6' },
-  { id: 'activity', label: 'Activity', key: '7' },
-  { id: 'settings', label: 'Settings', key: '8' },
+  { id: 'terminal', label: 'Terminal', key: '7' },
+  { id: 'activity', label: 'Activity', key: '8' },
+  { id: 'settings', label: 'Settings', key: '9' },
 ]
 
 function TopBar() {
@@ -399,6 +403,8 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
         return <Needs />
       case 'jobs':
         return <Jobs />
+      case 'terminal':
+        return <Terminal />
       case 'activity':
         return <Activity />
       case 'settings':
@@ -408,15 +414,22 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
     }
   })()
 
+  const station = prefs.view === 'station' && !prefs.immersive
   return (
     <>
-      <div className={`dash ${prefs.navCollapsed ? 'nav-collapsed' : ''} ${prefs.needsCollapsed ? 'needs-collapsed' : ''} ${prefs.reducedMotion ? 'reduced' : ''}`}>
-        <TopBar />
-        <NavRail />
-        <main className="workspace">{prefs.immersive ? null : view}</main>
-        <NeedsPanel />
-        <ConversationBar />
-      </div>
+      {station ? (
+        <div className={prefs.reducedMotion ? 'reduced' : ''}>
+          <Station />
+        </div>
+      ) : (
+        <div className={`dash ${prefs.navCollapsed ? 'nav-collapsed' : ''} ${prefs.needsCollapsed ? 'needs-collapsed' : ''} ${prefs.reducedMotion ? 'reduced' : ''}`}>
+          <TopBar />
+          <NavRail />
+          <main className="workspace">{prefs.immersive ? null : view}</main>
+          <NeedsPanel />
+          <ConversationBar />
+        </div>
+      )}
       {prefs.immersive && <Immersive />}
       <div className="dash-overlay">
         <Blades />

@@ -10,6 +10,7 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import * as hub from './store.mjs'
+import * as ledger from './expenses.mjs'
 
 const ok = (text) => ({ content: [{ type: 'text', text }] })
 
@@ -112,7 +113,7 @@ function project(name, detail) {
   ].join('\n')
 }
 
-const VIEWS = ['overview', 'roblox', 'finance', 'automaton', 'needs', 'activity', 'settings']
+const VIEWS = ['station', 'overview', 'roblox', 'finance', 'automaton', 'needs', 'jobs', 'terminal', 'activity', 'settings']
 
 export function hubServer({ emit, runner, phone }) {
   return createSdkMcpServer({
@@ -188,6 +189,62 @@ export function hubServer({ emit, runner, phone }) {
           if (!target) return ok('No matching running job.')
           if (target.cancel !== 'supported') return ok(`${target.title} can't be cancelled from here (${target.source}); it has to be stopped where it runs.`)
           return ok(hub.cancelJob(target.id) ? `Cancellation requested for "${target.title}". It shows as cancelled once it has actually stopped.` : 'It had already finished.')
+        },
+      ),
+      tool(
+        'expense_log',
+        `Log a business expense Markus told you about (or that is on a receipt he sent). Only log what he actually said or what the receipt clearly shows — never guess an amount; if the amount or vendor is unclear, ask instead. date is YYYY-MM-DD (default today). business: ${ledger.BUSINESSES.join(' | ')}. category: ${ledger.CATEGORIES.join(' | ')} (ai = Claude/OpenAI/ElevenLabs etc; hosting = Netlify/Supabase/domains; software = other subscriptions). Confirm back in one short line with the amount, vendor and business.`,
+        {
+          amount: z.number().positive(),
+          vendor: z.string(),
+          business: z.enum(ledger.BUSINESSES),
+          category: z.enum(ledger.CATEGORIES),
+          date: z.string().optional(),
+          currency: z.string().optional().describe('ISO code, default USD'),
+          note: z.string().optional(),
+          recurring: z.enum(['monthly', 'yearly']).optional(),
+          receipt: z.string().optional().describe('Receipt file path, when logging from a receipt photo'),
+        },
+        async (args) => {
+          try {
+            const e = ledger.addExpense({ ...args, source: 'jarvis' })
+            const m = ledger.summarize(ledger.inPeriod('this-month').filter((x) => x.business === e.business))
+            return ok(`Logged ${ledger.describe(e)}. ${e.business} this month: ${ledger.money(m.total)} across ${m.count}.`)
+          } catch (err) {
+            return ok(`Not logged: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'expense_report',
+        'Business spending from the ledger: totals by business and category, and the entries. period: this-month | last-month | this-year | all | YYYY-MM. Optional business/category filters. Use for any "how much did I spend / what are my expenses" question — never estimate.',
+        { period: z.string().optional(), business: z.enum(ledger.BUSINESSES).optional(), category: z.enum(ledger.CATEGORIES).optional() },
+        async ({ period = 'this-month', business, category }) => {
+          const list = ledger.listExpenses({ period, business, category })
+          if (!list.length) return ok(`No expenses logged for ${period}${business ? ` in ${business}` : ''}${category ? ` (${category})` : ''}.`)
+          const sum = ledger.summarize(list)
+          const fmt = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${ledger.money(v)}`).join(', ')
+          return ok(
+            [
+              `${period}: ${ledger.money(sum.total)} in ${sum.count} expenses${sum.currencies.length > 1 ? ` (mixed currencies: ${sum.currencies.join(', ')} — totals are not converted)` : ''}.`,
+              `By business: ${fmt(sum.byBusiness)}.`,
+              `By category: ${fmt(sum.byCategory)}.`,
+              `Entries:\n${list.slice(0, 40).map(ledger.describe).join('\n')}`,
+            ].join('\n'),
+          )
+        },
+      ),
+      tool(
+        'expense_fix',
+        'Correct or delete a logged expense by id (ids are in expense_report). Use when Markus says an entry is wrong. delete=true removes it.',
+        { id: z.string(), delete: z.boolean().optional(), amount: z.number().positive().optional(), vendor: z.string().optional(), business: z.enum(ledger.BUSINESSES).optional(), category: z.enum(ledger.CATEGORIES).optional(), date: z.string().optional(), note: z.string().optional() },
+        async ({ id, delete: del, ...patch }) => {
+          try {
+            if (del) return ok(ledger.deleteExpense(id) ? `Deleted ${id}.` : `No expense ${id}.`)
+            return ok(`Updated ${ledger.describe(ledger.updateExpense(id, patch))}.`)
+          } catch (err) {
+            return ok(`Not changed: ${err.message}`)
+          }
         },
       ),
       tool(
