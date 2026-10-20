@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Dashboard } from './dash/Dashboard'
+import { useHub, hubActions, type View } from './hub/client'
 import { useStore } from './store'
 import { startVoice, diag as voiceDiag, type Voice, type VoiceHandlers, type VoiceMode } from './lib/voice'
 import { createSpeaker, cycleVoice, currentVoiceName } from './lib/tts'
@@ -73,6 +74,8 @@ const STOP_TALKING =
 const STOP_LISTENING =
   /^(?:stop listening|mute(?: yourself)?|(?:turn )?(?:the )?mic(?:rophone)? off|go to sleep)[.!]*$/i
 const CANCEL_REPLY = /^(?:cancel(?: that| it| the reply)?|never ?mind|forget (?:it|that))[.!]*$/i
+/** Background work, never the conversation: "cancel that task", "stop the job". */
+const CANCEL_TASK = /^(?:cancel|stop|kill) (?:that|the|this|my) (?:task|job|build|render|background (?:task|job))[.!]*$/i
 /** Opening words that mean "this belongs to what I just said". */
 const JOINS = /^(?:and|also|plus|or|but|then|actually|wait|sorry|no,|i mean)\b/i
 
@@ -374,6 +377,11 @@ export default function App() {
       void setMicArmed(false)
       return
     }
+    if (CANCEL_TASK.test(said)) {
+      carry.current = null
+      cancelLatestJob()
+      return
+    }
     if (CANCEL_REPLY.test(said)) {
       cancelReply()
       return
@@ -418,6 +426,22 @@ export default function App() {
   }
 
   const finishSpeaking = () => voice.current?.finish()
+
+  /** The newest background job JARVIS is running, cancelled for real: it
+   *  reads "cancellation requested" until the job has actually stopped. */
+  const cancelLatestJob = () => {
+    const jobs = Object.values(useHub.getState().state?.jobs ?? {})
+    const job = jobs.filter((j) => j.source === 'jarvis' && j.state === 'running').sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    const spk = createSpeaker()
+    speaker.current = spk
+    if (!job) spk.say('There is no background job of mine running, sir.')
+    else {
+      spk.say(`Cancelling ${job.title}.`)
+      void hubActions.cancelJob(job.id).catch((err: Error) => store.getState().setError(err.message))
+    }
+    void spk.end()
+    listen(FOLLOW_UP_MS)
+  }
 
   const startTalking = () => {
     const st = store.getState()
@@ -587,6 +611,17 @@ export default function App() {
         case 'reset':
           s.resetUi()
           break
+        case 'dash': {
+          // JARVIS moving the dashboard ("show me Turbo").
+          const d = (args ?? {}) as { view?: View; game?: string | null; immersive?: boolean }
+          const prefs = useHub.getState().prefs
+          useHub.getState().setPrefs({
+            view: d.view ?? prefs.view,
+            selectedGame: d.game ?? prefs.selectedGame,
+            immersive: Boolean(d.immersive),
+          })
+          break
+        }
         case 'screen':
           s.clearScreen(a.what ?? 'all')
           break

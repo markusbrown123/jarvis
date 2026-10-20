@@ -28,6 +28,8 @@ import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
 import { startHub } from './hub/api.mjs'
+import { hubServer } from './hub/tools.mjs'
+import { createRunner } from './hub/runner.mjs'
 import * as hub from './hub/store.mjs'
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
@@ -267,6 +269,10 @@ function decideTool(name) {
     // a write and would hold the whole surface back behind ALLOW_WRITES.
     if (server === 'jarvis' || server === 'jarvis_ui') return true
 
+    // The command center: reading it, moving the dashboard, and starting or
+    // cancelling background jobs (which run behind this same gate).
+    if (server === 'jarvis_hub') return true
+
     // The browser server gates itself, at construction: chromeServer() only
     // builds the acting tools — click, type, form input, close tab — when
     // ALLOW_WRITES is set, so anything that reaches here at all is something
@@ -290,6 +296,27 @@ function decideTool(name) {
     return READ_VERB.test(tool) ? true : ALLOW_WRITES
   }
   return ALLOW_WRITES
+}
+
+/**
+ * The one permission gate, shared by the conversation and background jobs.
+ * Signature is (toolName, input, options) and it must return a
+ * PermissionResult object; a bare boolean silently denies everything.
+ */
+async function permissionGate(toolName) {
+  const ok = decideTool(toolName)
+  console.log(`[jarvis] tool ${toolName} -> ${ok ? 'allow' : 'deny'}`)
+  return ok
+    ? { behavior: 'allow' }
+    : {
+        behavior: 'deny',
+        // Every word of this can end up spoken, so it carries no command
+        // to read out — the persona is forbidden from saying one aloud.
+        message:
+          'Blocked: JARVIS is running in read-only mode and cannot take' +
+          ' actions that change anything. Tell the user this action is' +
+          ' unavailable until they enable write access on the machine.',
+      }
 }
 
 const SYSTEM_PROMPT = `You are JARVIS. You are speaking out loud to one person.
@@ -438,7 +465,19 @@ Using tools:
   is read out loud, and a URL becomes "aitch tee tee pee colon slash slash".
   Put the source in the panel as a short tag like "REUTERS" instead.
 - If a tool fails or isn't connected, one plain sentence saying so.
-- If you don't know, say you don't know.`
+- If you don't know, say you don't know.
+
+Markus's command center:
+- His projects are the Roblox studio (14 games, worked on by a Windows PC and
+  cloud agents), Automaton (website business at automaton.llc) and finance
+  research (monitoring only, no broker). For any question about them, about
+  what is running, what needs him or how much Claude usage is left, call
+  hub_overview or hub_project first. Answer from that data, briefly.
+- "Show me …" means dashboard_show.
+- Anything that will take more than a minute — research, reading a codebase,
+  writing a report — goes to job_start, and you say in a few words that it is
+  running. Don't do long work inside the conversation.
+- Finance is monitoring only. Never claim to see positions, orders or P&L.`
 
 /**
  * ElevenLabs credentials, borrowed from the MCP server config.
@@ -665,6 +704,10 @@ function corsFor(req) {
 const http = await import('node:http')
 
 const hubApi = startHub()
+
+// Background jobs run as their own sessions, behind the same gate, with the
+// user's MCP servers but none of the per-connection interface ones.
+const runner = createRunner({ model: MODEL, effort: EFFORT, canUseTool: permissionGate, mcpServers: MCP_SERVERS })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
@@ -1227,6 +1270,8 @@ wss.on('connection', (socket) => {
         jarvis_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
         // The camera, which unlike everything else here has to ask and wait.
         jarvis_eyes: visionServer(ask),
+        // The command center: live project data, dashboard, background jobs.
+        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner }),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
@@ -1274,21 +1319,7 @@ wss.on('connection', (socket) => {
       // through a `Bash: echo hello` without asking, and only reaches us for
       // something with a consequence, like a `touch`. So a deny here is
       // reliable; an absence of a call here is not proof nothing ran.
-      canUseTool: async (toolName) => {
-        const ok = decideTool(toolName)
-        console.log(`[jarvis] tool ${toolName} -> ${ok ? 'allow' : 'deny'}`)
-        return ok
-          ? { behavior: 'allow' }
-          : {
-              behavior: 'deny',
-              // Every word of this can end up spoken, so it carries no command
-              // to read out — the persona is forbidden from saying one aloud.
-              message:
-                'Blocked: JARVIS is running in read-only mode and cannot take' +
-                ' actions that change anything. Tell the user this action is' +
-                ' unavailable until they enable write access on the machine.',
-            }
-      },
+      canUseTool: permissionGate,
     },
   })
 

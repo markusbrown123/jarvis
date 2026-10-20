@@ -1,0 +1,194 @@
+/**
+ * JARVIS's view of the command center, as tools.
+ *
+ * So "what's running?", "what needs me?" or "how is Turbo doing?" are
+ * answered from the same live data the dashboard shows — never from memory —
+ * and "show me Sky Spire" moves the dashboard. Background jobs are started,
+ * listed and cancelled here too.
+ */
+
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
+import { z } from 'zod'
+import * as hub from './store.mjs'
+
+const ok = (text) => ({ content: [{ type: 'text', text }] })
+
+function ago(ts) {
+  if (!ts) return 'unknown'
+  const m = Math.round((Date.now() - ts) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  return h < 36 ? `${h} h ago` : `${Math.round(h / 24)} days ago`
+}
+
+function until(ts) {
+  if (!ts) return 'unknown'
+  const m = Math.max(0, Math.round((ts - Date.now()) / 60000))
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`
+}
+
+const openItems = (s) =>
+  Object.values(s.items)
+    .filter((i) => ['open', 'in_progress', 'verifying'].includes(i.state))
+    .sort((a, b) => a.priority.localeCompare(b.priority))
+
+function allowance(s) {
+  const out = []
+  for (const [name, label] of [['five_hour', '5-hour'], ['seven_day', 'weekly']]) {
+    const w = s.usage.windows[name]
+    if (!w) out.push(`${label} window: unavailable (no status line reading)`)
+    else if (w.resetsAt && w.resetsAt < Date.now()) out.push(`${label} window: reset since the last reading; needs a fresh one`)
+    else out.push(`${label} window: ${w.usedPct.toFixed(0)}% used, resets in ${until(w.resetsAt)} (read ${ago(w.observedAt)})`)
+  }
+  return out.join('; ')
+}
+
+function overview() {
+  const s = hub.snapshot()
+  const jobs = Object.values(s.jobs)
+  const running = jobs.filter((j) => j.state === 'running')
+  const needs = openItems(s)
+  const recent = [...s.activity].reverse().slice(0, 6)
+  const rb = s.projects.roblox
+  const am = s.projects.automaton
+  const fi = s.projects.finance
+  const lines = [
+    `RUNNING (${running.length}): ${running.map((j) => `${j.taskId ?? j.id} "${j.title}" on ${j.worker ?? '?'}${j.stale ? ' (no heartbeat — may be stuck)' : ''}`).join('; ') || 'nothing'}`,
+    `NEEDS MARKUS (${needs.length}): ${needs.map((i) => `[${i.priority}] ${i.title}`).join('; ') || 'nothing'}`,
+    `RECENT: ${recent.map((a) => `${ago(a.ts)} ${a.title}`).join('; ')}`,
+    `ALLOWANCE: ${allowance(s)}`,
+    `ROBLOX: ${rb?.games ? `${rb.games.length} games, active ${rb.activeGame}, next ${rb.nextGame}; studio repo at ${rb.source?.commit.short} pushed ${ago(rb.source?.commit.committedAt)}` : rb?.error ? `cannot read: ${rb.error}` : 'not read yet'}`,
+    `AUTOMATON: site ${am?.site ? (am.site.ok ? 'up' : 'not answering') : 'unchecked'}; ${am?.sites ? `${am.sites.length} sites (${['needs_review', 'needs_edits', 'client_ready', 'deployed'].map((st) => `${am.sites.filter((x) => x.stage === st).length} ${st.replace('_', ' ')}`).join(', ')})` : `site pipeline unavailable (${am?.sitesError ?? 'no access'})`}`,
+    `FINANCE: monitoring only, no broker connected; ${(fi?.services ?? []).map((x) => `${x.name} ${x.up ? 'running' : 'not running'}`).join(', ')}`,
+  ]
+  return lines.join('\n')
+}
+
+function project(name, detail) {
+  const s = hub.snapshot()
+  const jobs = Object.values(s.jobs).filter((j) => j.project === name)
+  if (name === 'roblox') {
+    const rb = s.projects.roblox
+    if (!rb?.games) return `Roblox studio not read yet${rb?.error ? `: ${rb.error}` : ''}.`
+    const needle = (detail ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const game = needle ? rb.games.find((g) => g.id.replace(/-/g, '').includes(needle) || g.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(needle)) : null
+    if (game) {
+      const gj = jobs.filter((j) => j.game === game.id && j.state !== 'completed')
+      const done = jobs.filter((j) => j.game === game.id && j.state === 'completed').sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4)
+      return [
+        `${game.name} (${game.id})${game.active ? ' — the active game' : game.next ? ' — up next' : ''}.`,
+        `Status: ${game.readmeStatus ?? 'unknown'}. Published: ${game.published ? 'yes' : 'no'}.`,
+        `Last Studio playtest: ${game.playtest?.latest ? `${game.playtest.latest.date} — ${game.playtest.latest.heading} (${game.playtest.pass} PASS, ${game.playtest.fail} FAIL, ${game.playtest.runtimeVerified} runtime-verified)` : 'none'}.`,
+        `Open tasks: ${gj.map((j) => `${j.taskId} ${j.title} [${j.state}${j.stale ? ', stale' : ''}] next: ${j.nextStep ?? '-'}`).join(' | ') || 'none'}.`,
+        `Recently done: ${done.map((j) => `${j.taskId} ${j.title}`).join(' | ') || 'none in 3 days'}.`,
+      ].join('\n')
+    }
+    return [
+      `Active game ${rb.activeGame}, next ${rb.nextGame}. Repo ${rb.source?.commit.short} "${rb.source?.commit.subject}" pushed ${ago(rb.source?.commit.committedAt)}.`,
+      `Games: ${rb.games.map((g) => `${g.name} (${g.tasks.running} running, ${g.tasks.queued} queued, ${g.tasks.blocked} blocked${g.playtest?.latest ? `, playtest ${g.playtest.latest.date}` : ''})`).join('; ')}.`,
+      `Live gameplay preview: ${rb.live?.reason ?? 'unavailable'}`,
+    ].join('\n')
+  }
+  if (name === 'automaton') {
+    const am = s.projects.automaton
+    if (!am) return 'Automaton not checked yet.'
+    return [
+      `automaton.llc ${am.site?.ok ? `up (${am.site.ms} ms)` : `not answering (${am.site?.status || am.site?.error})`}, checked ${ago(am.site?.checkedAt)}.`,
+      am.repo?.commit ? `Repo ${am.repo.branch} @ ${am.repo.commit.short}, ${am.repo.changedFiles} uncommitted files.` : 'Repo not found on this Mac.',
+      am.sites ? `Sites: ${am.sites.slice(0, 12).map((x) => `${x.name} [${x.stage}]`).join('; ')}.` : `Site pipeline unavailable: ${am.sitesError ?? 'no access'}.`,
+      am.leads ? `Leads by stage: ${Object.entries(am.leads.byStage).map(([k, v]) => `${k} ${v}`).join(', ')}.` : `Leads unavailable: ${am.leadsError ?? 'no access'}.`,
+      am.board ? `Task board: ${am.board.active.length} active (${am.board.active.slice(0, 5).join(', ')}).` : '',
+    ].join('\n')
+  }
+  const fi = s.projects.finance
+  if (!fi) return 'Finance not checked yet.'
+  return [
+    'Monitoring only — no broker, account or execution connection exists; there are no positions or P&L to report.',
+    `Services: ${fi.services.map((x) => `${x.name} ${x.up ? 'running' : 'not running'} (${x.url})`).join('; ')}.`,
+    `Research: ${fi.research.map((r) => `${r.name} ${r.commit ? `@ ${r.commit.short}` : 'not on this Mac'}`).join('; ')}.`,
+    `Charts in the dashboard: ${fi.charts.map((c) => c.symbol).join(', ')} (TradingView widget, public data).`,
+    `Quant View: ${fi.quantView?.url ?? 'not identified yet — waiting on Markus'}.`,
+  ].join('\n')
+}
+
+const VIEWS = ['overview', 'roblox', 'finance', 'automaton', 'needs', 'activity', 'settings']
+
+export function hubServer({ emit, runner }) {
+  return createSdkMcpServer({
+    name: 'jarvis_hub',
+    version: '1.0.0',
+    // Small and asked for constantly: always in the prompt, so a project
+    // question never pays an extra tool-search round trip first.
+    alwaysLoad: true,
+    tools: [
+      tool(
+        'hub_overview',
+        'Live command-center summary: running jobs, things that need Markus, recent activity, Claude allowance, and one line per project (Roblox, Automaton, Finance). Use this for any "what\'s going on / what\'s running / what needs me / how much usage is left" question instead of guessing.',
+        {},
+        async () => ok(overview()),
+      ),
+      tool(
+        'hub_project',
+        'Detail for one project from live data. project: roblox | automaton | finance. For Roblox, pass a game name or id in `detail` (e.g. "turbo", "sky spire") to get that game\'s playtest, tasks and next steps.',
+        { project: z.enum(['roblox', 'automaton', 'finance']), detail: z.string().optional() },
+        async ({ project: p, detail }) => ok(project(p, detail)),
+      ),
+      tool(
+        'dashboard_show',
+        `Switch Markus's dashboard to a view: ${VIEWS.join(', ')}. Optionally select a Roblox game (id or name) or open the immersive voice view. Use when he asks to see or open something.`,
+        { view: z.enum(VIEWS), game: z.string().optional(), immersive: z.boolean().optional() },
+        async ({ view, game, immersive }) => {
+          let gameId = null
+          if (game) {
+            const needle = game.toLowerCase().replace(/[^a-z0-9]/g, '')
+            gameId = hub.snapshot().projects.roblox?.games?.find((g) => g.id.replace(/-/g, '').includes(needle) || g.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(needle))?.id ?? null
+          }
+          emit('dash', { view, game: gameId, immersive: Boolean(immersive) })
+          return ok(`Showing ${view}${gameId ? ` (${gameId})` : ''}.`)
+        },
+      ),
+      tool(
+        'job_start',
+        'Start a long piece of work as a background job (research, reading a codebase, writing a report, a multi-step check) so the conversation stays free. It runs as its own agent in that project\'s folder with the same read/write permissions as you, and shows on the dashboard with live progress. Say briefly that it has started; do not wait for it. Never use it for sending messages, deploying, publishing or payments.',
+        {
+          title: z.string().describe('Short title shown on the dashboard'),
+          project: z.enum(['roblox', 'automaton', 'finance', 'other']),
+          instructions: z.string().describe('Complete, standalone instructions for the job'),
+        },
+        async (args) => {
+          try {
+            const { id, cwd } = runner.start(args)
+            return ok(`Started background job ${id} in ${cwd}. It shows on the dashboard; it keeps running whatever happens in this conversation.`)
+          } catch (err) {
+            return ok(`Not started: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'job_list',
+        'List background and project jobs with their state, stage and last update.',
+        { include_finished: z.boolean().optional() },
+        async ({ include_finished }) => {
+          const jobs = Object.values(hub.snapshot().jobs)
+            .filter((j) => include_finished || !['completed', 'canceled'].includes(j.state))
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, 20)
+          return ok(jobs.map((j) => `${j.id} "${j.title}" [${j.state}${j.stale ? ', stale' : ''}] ${j.stage ?? ''} — ${ago(j.updatedAt)}${j.output ? ` — result: ${j.output.slice(0, 300)}` : ''}`).join('\n') || 'No jobs.')
+        },
+      ),
+      tool(
+        'job_cancel',
+        'Cancel a background job JARVIS started (id from job_list; omit to cancel the most recent running one). Only JARVIS\'s own jobs can be cancelled from here — Roblox studio tasks and Claude Code sessions are stopped where they run.',
+        { id: z.string().optional() },
+        async ({ id }) => {
+          const jobs = Object.values(hub.snapshot().jobs)
+          const target = id ? jobs.find((j) => j.id === id) : jobs.filter((j) => j.source === 'jarvis' && j.state === 'running').sort((a, b) => b.updatedAt - a.updatedAt)[0]
+          if (!target) return ok('No matching running job.')
+          if (target.cancel !== 'supported') return ok(`${target.title} can't be cancelled from here (${target.source}); it has to be stopped where it runs.`)
+          return ok(hub.cancelJob(target.id) ? `Cancellation requested for "${target.title}". It shows as cancelled once it has actually stopped.` : 'It had already finished.')
+        },
+      ),
+    ],
+  })
+}

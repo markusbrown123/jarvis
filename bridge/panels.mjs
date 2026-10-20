@@ -321,6 +321,8 @@ export function displayServer(emit, emitBlade) {
   return createSdkMcpServer({
     name: 'jarvis',
     version: '1.0.0',
+    // The display is used on most answers; skip the tool-search round trip.
+    alwaysLoad: true,
     instructions:
       'The JARVIS heads-up display. Use `display` to put content on screen ' +
       'alongside what you say.',
