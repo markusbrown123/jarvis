@@ -71,12 +71,12 @@ async function refresh(cfg) {
     project: 'finance',
     title: 'Which service is "Quant View"?',
     why: 'You asked for Quant View in the finance workspace, but no project, link or config mentions it (QuantVue? something else?), so JARVIS cannot connect or even link to it yet.',
-    instructions: `Send the exact site link, or put it in finance.quantView.url in ${hub.DATA_DIR}/projects.json.`,
+    instructions: `Tell JARVIS what it is ("Quant View is … at …") — he records it — or put it in finance.quantView in ${hub.DATA_DIR}/projects.json.`,
     prepared: 'Searched every repo (master-hub, futures-trader-scout, traderedge) and the Windows PC: no references.',
-    verify: { kind: 'config', key: 'finance.quantView.url', note: 'Resolves once a link is configured.' },
+    verify: { kind: 'config', key: 'finance.quantView.name', note: 'Resolves once you tell JARVIS what it is (or it is set in the config).' },
     resumes: 'A Quant View card with the right link and whatever it supports (embed, export or link only).',
     priority: 'P3',
-    state: qv.url ? 'resolved' : undefined,
+    state: qv.url || qv.name ? 'resolved' : undefined,
     actions: [{ kind: 'copy', label: 'Copy config path', value: `${hub.DATA_DIR}/projects.json` }, { kind: 'check', label: 'Check again' }],
   })
 }

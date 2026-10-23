@@ -2231,3 +2231,52 @@ body.dash-mode .bl {
   border-color: rgba(140, 220, 255, 0.3);
   border-radius: 6px;
 }
+
+/* Settings → Memory */
+.mem-h {
+  margin: 14px 0 6px;
+  font: 600 12.5px var(--head);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.mem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.mem-fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.mem-text {
+  font-size: 14.5px;
+}
+.mem-meta {
+  grid-row: 2;
+  font-size: 12px;
+  color: var(--faint);
+}
+.mem-fact .btn {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+}
+.mem-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+.mem-clear {
+  margin-top: 12px;
+}

@@ -8,6 +8,7 @@ import { ItemCard, Empty } from './shared'
 import { openItems, useTick } from './state'
 import { UsagePanel } from './Usage'
 import { PhonePanel } from './Phone'
+import { MemoryPanel } from './Memory'
 
 export function Needs() {
   const s = useHub((x) => x.state)
@@ -162,6 +163,8 @@ export function Settings() {
           </div>
           <p className="fine">Keys: 0 station · 1–9 views · Space talk · Enter finish speaking · M mic on/off · Esc stand down · D diagnostics · T audio test · ⌘K commands</p>
         </section>
+
+        <MemoryPanel />
 
         <PhonePanel phone={s?.phone} />
 

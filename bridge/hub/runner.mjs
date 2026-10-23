@@ -17,6 +17,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import * as hub from './store.mjs'
+import * as memory from './memory.mjs'
 import { expand, loadConfig } from './config.mjs'
 
 const MAX_RUNNING = 3
@@ -80,10 +81,16 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
+          // What JARVIS has learned and knows goes into every job, and every
+          // job hands back what it learned — so the work improves run to run.
           append:
             'You are running as a background job for JARVIS, Markus’s assistant. Nobody is watching this session live. ' +
             'Do the task, then end with a short plain-language result: what you did, what you found, and anything Markus must do. ' +
-            'Never send messages, emails or calls, never deploy, publish or pay, and never touch live customer data.',
+            'After the result, add one line per lesson worth keeping for next time — a mistake you made and fixed, a dead end, ' +
+            'something that worked notably well, a fact about the project you had to dig for — each starting exactly with "LESSON: ". ' +
+            'Skip lessons if there are none. ' +
+            'Never send messages, emails or calls, never deploy, publish or pay, and never touch live customer data.' +
+            memory.promptBlock({ conversation: false }),
         },
         canUseTool,
       },
@@ -118,6 +125,16 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
               costUsd: msg.total_cost_usd ?? 0,
             })
             const okResult = msg.subtype === 'success' && !msg.is_error
+            const output = String(msg.result ?? lastText)
+            // Keep what it learned, and the result itself, in JARVIS's memory.
+            for (const m of output.matchAll(/^\s*LESSON:\s*(.+)$/gm)) {
+              try {
+                memory.remember({ text: m[1].trim(), topic: project === 'other' ? 'lesson' : `lesson:${project}`, source: `job:${title}` })
+              } catch {
+                /* an empty lesson line */
+              }
+            }
+            memory.logTurn({ channel: 'job', role: 'jarvis', text: `Background job "${title}" (${project}) ${okResult ? 'finished' : 'ended early'}: ${output.slice(0, 3500)}` })
             hub.upsertJob({
               id,
               state: okResult ? 'completed' : 'failed',

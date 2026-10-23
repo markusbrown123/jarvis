@@ -32,6 +32,7 @@ import { hubServer } from './hub/tools.mjs'
 import { createRunner } from './hub/runner.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
+import * as memory from './hub/memory.mjs'
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
 
@@ -483,7 +484,27 @@ Markus's command center:
   expense_log (amount, vendor, which business, category) and confirm in one
   line; never guess an amount. "What did I spend…" is expense_report.
 - He can be reached on his phone with phone_notify when he asks to be texted
-  or reminded; urgent only for real emergencies or when he says urgent.`
+  or reminded; urgent only for real emergencies or when he says urgent.
+
+Memory:
+- You remember across restarts. Your saved facts and the recent conversation
+  are at the end of this prompt; every exchange is kept on his Mac.
+- When he tells you something worth knowing later — how something is set up,
+  what a tool or account is, a decision, a plan, a preference, a name — save it
+  right away with memory_save, as one short factual sentence, and carry on.
+  Don't announce it beyond a word. Don't save small talk.
+- If something you saved changes, save the new version (memory_save with the
+  same topic) and forget the old one with memory_forget.
+- You learn from mistakes. When he corrects you, says you got something
+  wrong, or something you tried fails, call learn_lesson with the rule to
+  follow next time — then fix it. Your lessons are at the end of this prompt;
+  follow them over your own habits.
+- Research builds up: background job results are kept too, so check
+  memory_recall before redoing research that may already exist.
+- "Do you remember…", "what did I say about…", or anything older than what
+  you can see: memory_recall first, then answer.
+- If he tells you what Quant View is (a name, a link), also call
+  finance_set_quant_view so the dashboard links to it.`
 
 /**
  * ElevenLabs credentials, borrowed from the MCP server config.
@@ -767,8 +788,8 @@ function makePhoneChat() {
   const session = query({
     prompt: prompts(),
     options: {
-      mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink() }) },
-      systemPrompt: PHONE_PROMPT,
+      mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink(), sources: hubApi.sources }) },
+      systemPrompt: PHONE_PROMPT + memory.promptBlock(),
       cwd: homedir(),
       settingSources: [],
       model: MODEL,
@@ -1399,13 +1420,15 @@ wss.on('connection', (socket) => {
         // The camera, which unlike everything else here has to ask and wait.
         jarvis_eyes: visionServer(ask),
         // The command center: live project data, dashboard, background jobs.
-        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner, phone }),
+        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner, phone, sources: hubApi.sources }),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
       // of input tokens on every turn. Replacing it makes the persona stick,
       // keeps answers short enough to speak, and cuts cost per turn.
-      systemPrompt: SYSTEM_PROMPT,
+      // Plus his memory: saved facts and the recent conversation, read fresh
+      // for every new session so a restart or reload loses nothing.
+      systemPrompt: SYSTEM_PROMPT + memory.promptBlock(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1543,6 +1566,7 @@ wss.on('connection', (socket) => {
             // silent. Say what happened instead.
             if (msg.subtype === 'success') {
               hub.term('voice', `jarvis › ${msg.result ?? ''}`, 'reply')
+              memory.logTurn({ channel: 'voice', role: 'jarvis', text: msg.result ?? '' })
               sendTurn({
                 type: 'done',
                 text: msg.result ?? '',
@@ -1620,6 +1644,7 @@ wss.on('connection', (socket) => {
       const text = msg.text
       const id = typeof msg.id === 'string' ? msg.id : null
       hub.term('voice', `markus › ${text}`, 'user')
+      memory.logTurn({ channel: 'voice', role: 'user', text })
       void settling.then(() => {
         answering = id
         if (deliver) {

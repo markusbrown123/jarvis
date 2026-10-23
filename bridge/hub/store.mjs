@@ -337,6 +337,12 @@ export function setProject(id, data) {
   changed()
 }
 
+/** Saved memories and how much conversation is on file (Settings → Memory). */
+export function setMemory(data) {
+  state.memory = data
+  changed()
+}
+
 /** The expense ledger's summary and recent entries (the ledger itself is its own file). */
 export function setExpenses(data) {
   state.expenses = data

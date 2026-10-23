@@ -168,6 +168,9 @@ export const hubActions = {
     a.click()
     setTimeout(() => URL.revokeObjectURL(a.href), 10000)
   },
+  addMemory: (text: string, topic: string) => post('/api/memory', { text, topic }),
+  forgetMemory: (id: string) => post(`/api/memory/${encodeURIComponent(id)}/forget`),
+  clearConversation: () => post('/api/memory/clear-conversation'),
   phonePair: () => post('/api/phone/pair'),
   phoneUnpair: () => post('/api/phone/unpair'),
   phoneSettings: (p: Record<string, unknown>) => post('/api/phone/settings', p),

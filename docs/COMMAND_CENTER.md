@@ -105,6 +105,27 @@ project's folder, behind the same read-only/write gate. Talking over him,
 "stop" and "cancel reply" never touch them; "cancel that task" or the job's
 cancel shows *cancellation requested* until the session has really stopped.
 
+## Memory and learning
+
+JARVIS remembers across restarts, reloads and `jarvis stop` — in read-only mode too
+(write mode is only about changing files and running commands on the Mac).
+
+- **Conversation log:** every exchange, voice and phone, is kept in
+  `~/.jarvis/conversation.jsonl`. Each new session starts with the last few days of it.
+- **Facts:** when you tell him how something is set up, a decision, a goal or a name, he
+  saves one short sentence (`memory_save`). Every session starts with all of them.
+  A near-identical fact on the same topic replaces the old one, so "make it 12, not 10"
+  updates rather than duplicates.
+- **Lessons:** when you correct him or something fails, he writes the rule to follow next
+  time (`learn_lesson`); lessons are put first in every session.
+- **Background jobs** start with his lessons and facts, end with `LESSON:` lines that are
+  saved automatically, and their results go into the conversation log — so research
+  builds on itself. "What did we find about …" searches all of it (`memory_recall`).
+- **Quant View:** telling him what it is records it (`finance_set_quant_view`), links it on
+  the Finance page and resolves the Needs Markus item.
+- Settings → **Memory** lists every lesson and fact (delete any, or add your own) and can
+  clear the conversation log. Files: `~/.jarvis/memory.json`, `~/.jarvis/conversation.jsonl`.
+
 ## Business expenses
 
 Finance → **Expenses** (and the station's Business panel). A plain ledger in

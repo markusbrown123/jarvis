@@ -11,6 +11,8 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import * as hub from './store.mjs'
 import * as ledger from './expenses.mjs'
+import * as memory from './memory.mjs'
+import { loadConfig, saveConfig } from './config.mjs'
 
 const ok = (text) => ({ content: [{ type: 'text', text }] })
 
@@ -115,7 +117,7 @@ function project(name, detail) {
 
 const VIEWS = ['station', 'overview', 'roblox', 'finance', 'automaton', 'needs', 'jobs', 'terminal', 'activity', 'settings']
 
-export function hubServer({ emit, runner, phone }) {
+export function hubServer({ emit, runner, phone, sources }) {
   return createSdkMcpServer({
     name: 'jarvis_hub',
     version: '1.0.0',
@@ -245,6 +247,70 @@ export function hubServer({ emit, runner, phone }) {
           } catch (err) {
             return ok(`Not changed: ${err.message}`)
           }
+        },
+      ),
+      tool(
+        'memory_save',
+        'Remember something for good — it survives restarts and is shown to you at the start of every session. One short factual sentence, written so it makes sense on its own later (who/what/where, numbers and names exact). topic: one word like automaton, roblox, trading, tradingview, quantview, tradovate, business, personal, setup.',
+        { fact: z.string(), topic: z.string().optional() },
+        async ({ fact, topic }) => {
+          try {
+            const f = memory.remember({ text: fact, topic, source: 'jarvis' })
+            return ok(`Saved (${f.id}).`)
+          } catch (err) {
+            return ok(`Not saved: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'learn_lesson',
+        'Write down a lesson so you never repeat a mistake. Use it whenever Markus corrects you, says you got something wrong, or something you tried failed — and when a job or approach worked notably well. State the rule to follow next time, concretely ("Before quoting Automaton numbers, call hub_project — I guessed once and was wrong"). project: automaton, finance, roblox, jarvis or general.',
+        { lesson: z.string(), project: z.enum(['automaton', 'finance', 'roblox', 'jarvis', 'general']).optional() },
+        async ({ lesson, project }) => {
+          try {
+            const f = memory.remember({ text: lesson, topic: project && project !== 'general' ? `lesson:${project}` : 'lesson', source: 'jarvis' })
+            return ok(`Lesson kept (${f.id}). It is in front of you from now on.`)
+          } catch (err) {
+            return ok(`Not kept: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'memory_recall',
+        'Search everything you remember: saved facts and every past conversation (voice and phone), including ones from before restarts. Use for "do you remember…", "what did I say about…", or anything not in the memory you were started with.',
+        { query: z.string() },
+        async ({ query }) => {
+          const r = memory.recall(query)
+          if (!r.facts.length && !r.turns.length) return ok(`Nothing on file about "${query}".`)
+          const when = (ts) => new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+          return ok(
+            [
+              r.facts.length ? `Saved facts:\n${r.facts.map((f) => `- (${f.id}) [${f.topic}] ${f.text}`).join('\n')}` : '',
+              r.turns.length ? `From past conversations:\n${r.turns.map((t) => `- ${when(t.ts)} ${t.role === 'user' ? 'Markus' : 'You'}: ${t.text.slice(0, 400)}`).join('\n')}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+          )
+        },
+      ),
+      tool(
+        'memory_forget',
+        'Delete a saved fact by id (ids come from memory_recall). Use when Markus says to forget something, or when a fact is replaced by a newer one.',
+        { id: z.string() },
+        async ({ id }) => ok(memory.forget(id) ? `Forgot ${id}.` : `No saved fact ${id}.`),
+      ),
+      tool(
+        'finance_set_quant_view',
+        'Record what "Quant View" is once Markus says (its name, and its link if he gives one), so the finance dashboard shows and links it. Only what he actually said — never guess a URL.',
+        { name: z.string(), url: z.string().optional(), note: z.string().optional() },
+        async ({ name, url, note }) => {
+          if (url && !/^https?:\/\/\S+$/.test(url)) return ok('Not saved: that link is not a web address.')
+          const cfg = loadConfig()
+          cfg.finance.quantView = { name: name.slice(0, 80), url: url ?? cfg.finance.quantView?.url ?? null, note: note?.slice(0, 300) ?? null }
+          saveConfig(cfg)
+          await sources?.finance?.refresh?.()
+          memory.remember({ text: `Quant View is ${name}${url ? ` (${url})` : ''}${note ? ` — ${note}` : ''}.`, topic: 'quantview', source: 'jarvis' })
+          return ok(`Quant View set to ${name}${url ? ` (${url})` : ''}; the finance page shows it now.`)
         },
       ),
       tool(

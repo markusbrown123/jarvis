@@ -17,6 +17,7 @@ import { startRoblox } from './roblox.mjs'
 import { startAutomaton } from './automaton.mjs'
 import { startFinance } from './finance.mjs'
 import * as ledger from './expenses.mjs'
+import * as memory from './memory.mjs'
 
 const MAX_BODY = 1024 * 1024
 
@@ -212,7 +213,7 @@ export function startHub({ runner, phone } = {}) {
       : { ok: null, detail: 'Asked the source to re-check; it still reports this as open.' }
   }
 
-  return async function hubApi(req, res, cors, originOk) {
+  async function hubApi(req, res, cors, originOk) {
     const url = new URL(req.url, 'http://x')
     const path = url.pathname
     const authed = originOk || tokenOk(req, token)
@@ -337,6 +338,22 @@ export function startHub({ runner, phone } = {}) {
         return ledger.deleteExpense(m[1]) ? json(res, cors, 200, { ok: true }) : json(res, cors, 404, { error: 'no such expense' })
       }
 
+      // Memory, for Settings → Memory: add, forget, clear the conversation log.
+      if (req.method === 'POST' && path === '/api/memory') {
+        const body = JSON.parse(await readBody(req))
+        try {
+          return json(res, cors, 200, { ok: true, fact: memory.remember({ text: body.text, topic: body.topic, source: 'markus' }) })
+        } catch (err) {
+          return json(res, cors, 400, { error: err.message })
+        }
+      }
+      m = path.match(/^\/api\/memory\/([\w-]+)\/forget$/)
+      if (req.method === 'POST' && m) return memory.forget(m[1]) ? json(res, cors, 200, { ok: true }) : json(res, cors, 404, { error: 'no such memory' })
+      if (req.method === 'POST' && path === '/api/memory/clear-conversation') {
+        memory.clearConversation()
+        return json(res, cors, 200, { ok: true })
+      }
+
       if (req.method === 'POST' && path === '/api/presence') {
         hub.observePresence({ where: 'dashboard' })
         return json(res, cors, 200, { ok: true })
@@ -375,4 +392,7 @@ export function startHub({ runner, phone } = {}) {
       return json(res, cors, 400, { error: err.message })
     }
   }
+  // The project sources, so JARVIS's tools can ask one to look again.
+  hubApi.sources = sources
+  return hubApi
 }

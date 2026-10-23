@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import { randomInt } from 'node:crypto'
 import * as hub from './store.mjs'
 import { saveReceipt } from './expenses.mjs'
+import { logTurn } from './memory.mjs'
 
 const FILE = join(hub.DATA_DIR, 'phone.json')
 const TG = process.env.TELEGRAM_API_BASE ?? 'https://api.telegram.org'
@@ -100,6 +101,7 @@ export function startPhone({ makeChat, transcribe, speak }) {
   const poUser = () => secret('PUSHOVER_USER_KEY', 'jarvis-pushover-user')
   const poApp = () => secret('PUSHOVER_APP_TOKEN', 'jarvis-pushover-token')
   let chat = null
+  let lastAsk = 0
   let lastError = null
   let lastInbound = 0
   let lastOutbound = 0
@@ -303,6 +305,7 @@ export function startPhone({ makeChat, transcribe, speak }) {
     }
     if (!said && !image) return
     hub.term('phone', `markus${voice ? ' (voice note)' : image ? ' (photo)' : ''} › ${said || 'photo'}`, 'user')
+    logTurn({ channel: 'phone', role: 'user', text: image ? `[sent a photo${said ? `: ${said}` : ''}]` : said })
     const content = image
       ? [
           { type: 'image', source: { type: 'base64', media_type: image.type, data: image.data } },
@@ -319,9 +322,14 @@ export function startPhone({ makeChat, transcribe, speak }) {
 
     await tg('sendChatAction', { chat_id: cfg.chatId, action: 'typing' }).catch(() => {})
     try {
+      // After a long quiet spell start a fresh phone session, so it picks up
+      // everything said at the Mac since (it reads memory when it starts).
+      if (chat && Date.now() - lastAsk > 2 * 3600000) chat = null
+      lastAsk = Date.now()
       chat ??= makeChat()
       const answer = await chat.ask(content)
       hub.term('phone', `jarvis › ${answer}`, 'reply')
+      logTurn({ channel: 'phone', role: 'jarvis', text: answer })
       await reply(answer || 'Done, sir.', Boolean(voice))
     } catch (err) {
       chat = null

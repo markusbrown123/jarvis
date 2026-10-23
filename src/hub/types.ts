@@ -224,6 +224,8 @@ export type Expense = {
 
 export type ExpenseSummary = { count: number; total: number; byBusiness: Record<string, number>; byCategory: Record<string, number>; currencies: string[] }
 
+export type MemoryFact = { id: string; text: string; topic: string; source: string; createdAt: number; updatedAt: number }
+
 export type TermLine = { id: number; ts: number; src: string; kind: string; text: string }
 
 export type PhoneStatus = {
@@ -249,6 +251,7 @@ export type PhoneStatus = {
 export type HubState = {
   version: number
   phone?: PhoneStatus
+  memory?: { facts: MemoryFact[]; turns: number }
   expenses?: { month: ExpenseSummary; lastMonth: ExpenseSummary; year: ExpenseSummary; recent: Expense[]; total: number }
   presence?: { lastSeenAt?: number; phoneAt?: number }
   jobs: Record<string, Job>
