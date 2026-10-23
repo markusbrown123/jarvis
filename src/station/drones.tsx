@@ -228,25 +228,22 @@ const TRAIL = 40
 const PROP_COLORS = ['#2fb8d0', '#3ac4da', '#2aaac4', '#41cde0', '#30b2cb', '#38bed4', '#e9eef2', '#e9eef2', '#e9eef2']
 
 /**
- * One drone's scene objects: its own copy of the model (shared geometry,
- * its own LEDs and props), a blur disc over each prop, the packet it
- * carries, its scan beam, and its light trail (in world space).
+ * One drone's scene objects: its own copy of the model's hierarchy (to fly,
+ * spin and aim; drawn by its Fleet, below), where the blur disc over each
+ * prop goes, the packet it carries, its scan beam, and its light trail (in
+ * world space).
  */
-function build(nodes: Record<string, THREE.Object3D>, kind: Kind, propColor: string) {
+function build(nodes: Record<string, THREE.Object3D>, kind: Kind) {
   const quad = kind === 'quad'
   const scale = quad ? 1.6 : 2.1
-  const led = new THREE.MeshStandardMaterial({ color: '#05060a', emissive: new THREE.Color('#7c8bff'), emissiveIntensity: 3, roughness: 0.4 })
-  const prop = new THREE.MeshStandardMaterial({ color: propColor, roughness: 0.25, transparent: true, opacity: 0.9 })
-  const blur = new THREE.MeshBasicMaterial({ color: '#d8deea', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })
+  const parts: THREE.Mesh[] = []
   const copy = (o: THREE.Object3D) => {
     const c = o.clone(true)
     c.traverse((m) => {
       const mesh = m as THREE.Mesh
       if (!mesh.isMesh) return
-      const name = (mesh.material as THREE.Material).name
-      if (name === 'prop' || name === 'prop_clear') mesh.material = prop
-      else if (name === 'led') mesh.material = led
-      mesh.castShadow = true
+      mesh.visible = false
+      parts.push(mesh)
     })
     return c
   }
@@ -257,13 +254,14 @@ function build(nodes: Record<string, THREE.Object3D>, kind: Kind, propColor: str
   // The FPV camera on its gimbal (fpv.py exports it level, at its pivot).
   const cam = copy(nodes[`${pre}_cam`])
   model.add(cam)
-  // Prop discs at the props' height (fpv.py), the size of the props.
-  const disc = new THREE.CircleGeometry(quad ? 0.067 : 0.0162, 32).rotateX(-Math.PI / 2)
+  // Prop discs at the props' height (fpv.py).
+  const discs: THREE.Object3D[] = []
   const rotors = ['fl', 'fr', 'rl', 'rr'].map((k) => {
     const r = copy(nodes[`${pre}_rotor_${k}`])
-    const d = new THREE.Mesh(disc, blur)
+    const d = new THREE.Object3D()
     d.position.set(r.position.x, quad ? 0.029 : 0.0098, r.position.z)
     model.add(r, d)
+    discs.push(d)
     return r
   })
   const packetMat = new THREE.MeshBasicMaterial({ color: '#7c8bff', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
@@ -282,8 +280,90 @@ function build(nodes: Record<string, THREE.Object3D>, kind: Kind, propColor: str
   trailGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(TRAIL * 3), 3))
   const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }))
   trail.frustumCulled = false
+  trail.visible = false
   const hist = Array.from({ length: TRAIL }, () => V(0, 0, 0))
-  return { root, tilt, model, cam, rotors, led, prop, blur, packet, packetMat, beam, beamMat, trail, hist }
+  return { kind, root, tilt, model, cam, rotors, parts, discs, packet, packetMat, beam, beamMat, trail, hist }
+}
+
+type Kit = ReturnType<typeof build>
+
+/** A per-instance attribute read in the fragment shader (vertex → varying). */
+function perInstance(m: THREE.Material, name: string, type: 'float' | 'vec3', apply: [string, string]) {
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\nattribute ${type} a${name};\nvarying ${type} v${name};`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nv${name} = a${name};`)
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nvarying ${type} v${name};`).replace(apply[0], `${apply[0]}\n${apply[1]}`)
+  }
+  m.customProgramCacheKey = () => `drone-${name}`
+  return m
+}
+
+/**
+ * Every drone of a kind drawn together: one instanced mesh per part of the
+ * model, put each frame where that part of each drone is. Nine drones cost
+ * the draw calls of one of each kind instead of some three hundred. Each
+ * drone's props have their own colour and fade as they spin up (a blur
+ * disc showing instead), and its LEDs glow in their own colour.
+ */
+class Fleet {
+  group = new THREE.Group()
+  private drawn: { mesh: THREE.InstancedMesh; of: THREE.Object3D[] }[] = []
+  private disc: THREE.InstancedMesh
+  private propFade: THREE.InstancedBufferAttribute
+  private blurFade: THREE.InstancedBufferAttribute
+  private ledGlow: THREE.InstancedBufferAttribute
+  private kit: Kit[]
+  constructor(kit: Kit[], colors: string[]) {
+    this.kit = kit
+    const n = kit.length
+    const quad = kit[0].kind === 'quad'
+    this.propFade = new THREE.InstancedBufferAttribute(new Float32Array(n).fill(0.9), 1)
+    this.blurFade = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 1)
+    this.ledGlow = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3)
+    for (const a of [this.propFade, this.blurFade, this.ledGlow]) a.setUsage(THREE.DynamicDrawUsage)
+    const prop = perInstance(new THREE.MeshStandardMaterial({ roughness: 0.25, transparent: true }), 'Fade', 'float', ['#include <color_fragment>', 'diffuseColor.a *= vFade;'])
+    const led = perInstance(new THREE.MeshStandardMaterial({ color: '#05060a', emissive: '#ffffff', roughness: 0.4 }), 'Glow', 'vec3', ['#include <emissivemap_fragment>', 'totalEmissiveRadiance *= vGlow;'])
+    const tint = new THREE.Color()
+    kit[0].parts.forEach((template, j) => {
+      const name = (template.material as THREE.Material).name
+      const isProp = name === 'prop' || name === 'prop_clear'
+      const isLed = name === 'led'
+      const geometry = template.geometry
+      if (isProp) geometry.setAttribute('aFade', this.propFade)
+      if (isLed) geometry.setAttribute('aGlow', this.ledGlow)
+      const mesh = new THREE.InstancedMesh(geometry, isProp ? prop : isLed ? led : template.material, n)
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      if (isProp) kit.forEach((_, k) => mesh.setColorAt(k, tint.set(colors[k])))
+      mesh.castShadow = true
+      mesh.frustumCulled = false
+      this.drawn.push({ mesh, of: kit.map((o) => o.parts[j]) })
+      this.group.add(mesh)
+    })
+    const blur = perInstance(new THREE.MeshBasicMaterial({ color: '#d8deea', transparent: true, depthWrite: false, side: THREE.DoubleSide }), 'Fade', 'float', ['#include <color_fragment>', 'diffuseColor.a *= vFade;'])
+    const disc = new THREE.CircleGeometry(quad ? 0.067 : 0.0162, 32).rotateX(-Math.PI / 2)
+    disc.setAttribute('aFade', this.blurFade)
+    this.disc = new THREE.InstancedMesh(disc, blur, n * 4)
+    this.disc.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    this.disc.frustumCulled = false
+    this.group.add(this.disc)
+  }
+  /** A drone's props (0..1 spun up) and LED colour. */
+  set(k: number, spin: number, glow: THREE.Color) {
+    this.propFade.setX(k, 0.9 - spin * 0.7)
+    for (let j = 0; j < 4; j++) this.blurFade.setX(k * 4 + j, spin * 0.13)
+    this.ledGlow.setXYZ(k, glow.r, glow.g, glow.b)
+  }
+  /** After the drones have moved: every part to where its drone has it. */
+  sync() {
+    for (const { mesh, of } of this.drawn) {
+      of.forEach((o, k) => mesh.setMatrixAt(k, o.matrixWorld))
+      mesh.instanceMatrix.needsUpdate = true
+    }
+    this.kit.forEach((o, k) => o.discs.forEach((d, j) => this.disc.setMatrixAt(k * 4 + j, d.matrixWorld)))
+    this.disc.instanceMatrix.needsUpdate = true
+    for (const a of [this.propFade, this.blurFade, this.ledGlow]) a.needsUpdate = true
+  }
 }
 
 // ---------------------------------------------------------------- the docks
@@ -315,7 +395,7 @@ function Dock({ i, parts, state }: { i: number; parts: DockParts; state: { curre
   const lift = useRef<THREE.Group>(null)
   const col = useRef<THREE.Mesh>(null)
   const col2 = useRef<THREE.Mesh>(null)
-  const vents = useRef<(THREE.Mesh | null)[]>([])
+  const vents = useRef<THREE.InstancedMesh>(null)
   const mats = useMemo(
     () => ({
       status: new THREE.MeshBasicMaterial({ color: STATUS.ok, toneMapped: false }),
@@ -325,6 +405,7 @@ function Dock({ i, parts, state }: { i: number; parts: DockParts; state: { curre
     [],
   )
   const c = useMemo(() => new THREE.Color(), [])
+  const vent = useMemo(() => ({ m: new THREE.Matrix4(), q: new THREE.Quaternion(), p: new THREE.Vector3(), s: new THREE.Vector3(1, 1, 1), up: new THREE.Vector3(0, 1, 0) }), [])
   useFrame((st) => {
     const d = state.current[i]
     if (!d) return
@@ -339,13 +420,17 @@ function Dock({ i, parts, state }: { i: number; parts: DockParts; state: { curre
       col2.current.scale.y = Math.max(0.001, L * LIFT + 0.2)
       col2.current.position.y = (L * LIFT) / 2 - 0.1
     }
-    // Vents slide out as the pedestal comes up.
-    vents.current.forEach((v, k) => {
-      if (!v) return
-      const a = (k / 6) * Math.PI * 2
-      const r = 0.42 + L * 0.06
-      v.position.set(Math.cos(a) * r, 0.006 + L * 0.004, Math.sin(a) * r)
-    })
+    // Vents slide out as the pedestal comes up (six in one draw).
+    const v = vents.current
+    if (v) {
+      for (const k of p.vents) {
+        const a = (k / 6) * Math.PI * 2
+        const r = 0.42 + L * 0.06
+        vent.p.set(Math.cos(a) * r, 0.006 + L * 0.004, Math.sin(a) * r)
+        v.setMatrixAt(k, vent.m.compose(vent.p, vent.q.setFromAxisAngle(vent.up, -a), vent.s))
+      }
+      v.instanceMatrix.needsUpdate = true
+    }
     // Green while charging, amber while launching or out, breathing.
     const out = !atHome(d)
     c.set(out ? STATUS.warn : STATUS.ok).multiplyScalar(out ? 1.2 + 0.8 * Math.sin(t * 6) : 0.9 + 0.4 * Math.sin(t * 1.5 + i))
@@ -359,9 +444,7 @@ function Dock({ i, parts, state }: { i: number; parts: DockParts; state: { curre
       <mesh geometry={p.ring} material={p.deck} rotation-x={-Math.PI / 2} position-y={0.004} receiveShadow />
       <mesh geometry={p.shaft} material={mats.shaft} rotation-x={-Math.PI / 2} position-y={0.001} />
       <mesh geometry={p.status} material={mats.status} rotation-x={Math.PI / 2} position-y={0.008} />
-      {p.vents.map((k) => (
-        <mesh key={k} ref={(m) => void (vents.current[k] = m)} geometry={p.ventGeo} material={p.pad} rotation-y={-(k / 6) * Math.PI * 2} />
-      ))}
+      <instancedMesh ref={vents} args={[p.ventGeo, p.pad, p.vents.length]} frustumCulled={false} />
       <mesh ref={col} geometry={p.column} material={p.deck} />
       <mesh ref={col2} geometry={p.column2} material={p.pad} />
       <group ref={lift}>
@@ -413,7 +496,11 @@ const signature = (m: NonNullable<ReturnType<typeof useStation.getState>['model'
 export function Drones() {
   const { nodes } = useGLTF('/station/fpv.glb', false) as unknown as { nodes: Record<string, THREE.Object3D> }
   const dockParts = useDockParts()
-  const kit = useMemo(() => Array.from({ length: 9 }, (_, i) => build(nodes, i < 6 ? 'quad' : 'whoop', PROP_COLORS[i])), [nodes])
+  const kit = useMemo(() => Array.from({ length: 9 }, (_, i) => build(nodes, i < 6 ? 'quad' : 'whoop')), [nodes])
+  const fleets = useMemo(
+    () => ({ quad: new Fleet(kit.slice(0, 6), PROP_COLORS.slice(0, 6)), whoop: new Fleet(kit.slice(6), PROP_COLORS.slice(6)) }),
+    [kit],
+  )
   const drones = useRef<Drone[]>(
     kit.map((_, i) => {
       const kind: Kind = i < 6 ? 'quad' : 'whoop'
@@ -628,11 +715,8 @@ export function Drones() {
       const rate = d.spin * (60 + 20 * Math.min(1, d.acc.length() / 4))
       o.rotors.forEach((r, k) => (r.rotation.y += (k === 1 || k === 2 ? -1 : 1) * rate * dt))
       // Spinning props are a blur: the blades fade and a disc shows instead.
-      o.blur.opacity = d.spin * 0.13
-      o.prop.opacity = 0.9 - d.spin * 0.7
       const lit = d.cargo ?? d.beam ?? reactorState().color
-      o.led.emissive.copy(lit)
-      o.led.emissiveIntensity = d.spin > 0.1 ? 3.5 : 1.2
+      fleets[d.kind].set(d.kind === 'quad' ? idx : idx - 6, d.spin, tmp.c.copy(lit).multiplyScalar(d.spin > 0.1 ? 3.5 : 1.2))
       const carrying = Boolean(d.cargo) && !d.legs.some((l) => l.kind === 'hold' && l.act === 'pick') && d.legs.some((l) => l.kind === 'hold' && l.act === 'drop')
       o.packet.visible = carrying
       if (carrying && d.cargo) {
@@ -654,6 +738,7 @@ export function Drones() {
       const col = o.trail.geometry.attributes.color as THREE.BufferAttribute
       const c = tmp.c.copy(d.cargo ?? lit)
       const on = carrying && speed > 0.5 ? (d.kind === 'whoop' ? 1.6 : 0.9) : 0
+      o.trail.visible = on > 0
       o.hist.forEach((p, k) => {
         pos.setXYZ(k, p.x, p.y, p.z)
         const f = on * (1 - k / TRAIL) ** 1.5
@@ -661,7 +746,10 @@ export function Drones() {
       })
       pos.needsUpdate = true
       col.needsUpdate = true
+      o.root.updateMatrixWorld(true)
     })
+    fleets.quad.sync()
+    fleets.whoop.sync()
   })
 
   return (
@@ -670,6 +758,8 @@ export function Drones() {
         <Dock key={i} i={i} parts={dockParts} state={drones} />
       ))}
       <Perches />
+      <primitive object={fleets.quad.group} />
+      <primitive object={fleets.whoop.group} />
       {kit.map((o, i) => (
         <group key={i}>
           <primitive object={o.root} />

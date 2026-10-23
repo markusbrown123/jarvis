@@ -63,6 +63,28 @@ def apply_mods(ob):
     return ob
 
 
+
+def tri_count(ob):
+    return sum(len(p.vertices) - 2 for p in ob.data.polygons)
+
+
+def budget(ob, tris):
+    """Bring a part down to a game budget: merge its flat faces (booleans and
+    joins leave them in slivers; the shape doesn't change), then thin what's
+    left if it's still over. These drones are a hand's width on screen."""
+    before = tri_count(ob)
+    m = ob.modifiers.new('flat', 'DECIMATE')
+    m.decimate_type = 'DISSOLVE'
+    m.angle_limit = math.radians(1.0)
+    m.delimit = {'MATERIAL'}
+    apply_mods(ob)
+    if tri_count(ob) > tris:
+        m = ob.modifiers.new('lod', 'DECIMATE')
+        m.ratio = tris / tri_count(ob)
+        apply_mods(ob)
+    print(ob.name, before, '->', tri_count(ob), 'tris', flush=True)
+    return ob
+
 def mesh_from(name, verts, faces, smooth=True):
     me = bpy.data.meshes.new(name)
     me.from_pydata([tuple(v) for v in verts], [], faces)
@@ -554,14 +576,14 @@ def quad(mats):
         rotor = join('quad_rotor_' + name, spin)
         for o in (rotor,):
             bake_transform(o)
-        rotor_full = join('quad_rotor_' + name, [rotor, p])
+        rotor_full = budget(join('quad_rotor_' + name, [rotor, p]), 1800)
         # Origin on the motor's axis, so it can spin in place.
         rotor_full.select_set(True)
         bpy.context.view_layer.objects.active = rotor_full
         bpy.context.scene.cursor.location = (sx * S, sy * S, 0)
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
         rotors.append(rotor_full)
-    body = join('quad_body', parts)
+    body = budget(join('quad_body', parts), 8000)
     return body, led, rotors, fpv_cam
 
 
@@ -634,6 +656,7 @@ def whoop(mats):
         bpy.data.objects.remove(o)
     bpy.data.collections.remove(coll)
     hub.name = 'whoop_frame'
+    budget(hub, 9000)
     parts.append(assign(hub, mats['whoop']))
     # The all-in-one board on its grommets: black, with its chips, the
     # receiver's red board and a few parts.

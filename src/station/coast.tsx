@@ -311,8 +311,9 @@ export function Coast({ graphics }: { graphics: Graphics }) {
   // oaks with real branches, all moving in the wind.
   const brush = useMemo(() => {
     const g = new THREE.Group()
-    g.add(grove(shrub(6), built.brush.filter((b) => !b.tree), null, mats.brush))
-    g.add(grove(broadleaf(21), built.brush.filter((b) => b.tree), mats.bark, mats.oak))
+    // Far beyond the shadow map's reach: no shadow casting.
+    g.add(grove(shrub(6), built.brush.filter((b) => !b.tree), null, mats.brush, { cell: 300, shadows: false }))
+    g.add(grove(broadleaf(21), built.brush.filter((b) => b.tree), mats.bark, mats.oak, { cell: 300, shadows: false }))
     return g
   }, [built, mats])
 
@@ -352,9 +353,9 @@ export function Coast({ graphics }: { graphics: Graphics }) {
         k++
       }
     }
+    // (Too far off for the house's shadow map to reach: no shadow casting.)
     for (const mesh of [walls, roofs, glass]) {
       mesh.count = k
-      mesh.castShadow = mesh !== glass
       mesh.receiveShadow = true
     }
     return { walls, roofs, glass }
@@ -366,7 +367,6 @@ export function Coast({ graphics }: { graphics: Graphics }) {
       mesh.setMatrixAt(i, b.m)
       mesh.setColorAt(i, b.c)
     })
-    mesh.castShadow = true
     mesh.receiveShadow = true
     return mesh
   }, [built, mats])

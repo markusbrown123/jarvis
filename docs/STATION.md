@@ -91,6 +91,16 @@ selected or hovered.
 | Detail | Opens on selection: what it is, where its data comes from, and only real actions. |
 | Needs Markus / Running | Click a row to select it in the room. |
 
+## Keeping it light
+
+The station only draws what the camera can see on the way in and from the desk:
+
+- The drones are drawn by kind, all at once (one instanced mesh per part of the model), not each on its own: about 45 draw calls for nine drones, not 300. `fpv.py` holds them to a game budget (a whoop's duct frame 9k triangles, each quad rotor 1.8k).
+- Trees, scrub, the estate's pavilions and the island's cliff are drawn in pieces by where they stand, so the pieces behind the camera are skipped. From the desk, looking out to sea, none of the estate is drawn.
+- Only what's near the house casts shadows (the shadow map covers just the house); the coast's scrub, rocks and homes don't.
+
+In development, `window.__gl` reads the last frame's draw calls and triangles.
+
 ## Files
 
 | File | Role |
@@ -106,6 +116,7 @@ selected or hovered.
 | `intro.tsx` | The opening flight and its letterbox overlay |
 | `outside.tsx` | Sky backdrop, sea, surf, wakes |
 | `estate.tsx`, `tools/blender/estate.py` | The estate's pavilions, helipad and walls; its grounds (palms, cypresses, trees, drive) |
+| `split.ts` | Splits a big mesh into pieces by where they lie, so those out of view aren't drawn |
 | `trees.ts`, `garden.ts`, `tools/textures/foliage.py`, `tools/garden.mjs` | Game-style trees and shrubs with wind sway; their leaf, frond and bark textures; where the house's garden plants stand (read from `lair.glb`) |
 | `tools/blender/showcase.py` | Cycles stills of the estate for the loading screen (uses the Blender Agent Skills) |
 | `coast.tsx`, `coastland.ts` | The land round the bay: cliffs, beaches, hills, houses, road; the bay's shape and the ground's shading (the house's cliff and garden use it too) |

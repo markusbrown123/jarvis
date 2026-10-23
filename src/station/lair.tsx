@@ -12,6 +12,7 @@ import { ROOM, roomify } from './houselight'
 const TERRACE_WARM = { value: new THREE.Color() }
 import { OUTDOOR } from './environment'
 import { landMaterial } from './coastland'
+import { sector, splitByPlace } from './split'
 import { SKY, SKY_COMMON } from './sky'
 
 /**
@@ -313,7 +314,8 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
   }, [maps])
   const led = useMemo(() => (nodes.led_warm ? splitByHeight(nodes.led_warm.geometry, 2.5) : null), [nodes])
   const floors = useMemo(() => (['floor', 'stage'] as const).filter((n) => nodes[n]).map((n) => ({ n, ...mirrorFloor(nodes[n]) })), [nodes])
-  const cliff = useMemo(() => (nodes.cliff ? unfold(nodes.cliff.geometry) : null), [nodes])
+  // The cliff all round the island, in slices: only those in view are drawn.
+  const cliff = useMemo(() => (nodes.cliff ? splitByPlace(unfold(nodes.cliff.geometry), sector(8)) : null), [nodes])
   const pool = HOUSE.pool
 
   useFrame(() => {
@@ -363,9 +365,10 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
           {stone(n)}
         </mesh>
       ))}
-      {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'cliff', 'frames', 'rail'] as const).map((n) =>
-        nodes[n] && show(n) ? <mesh key={n} geometry={n === 'cliff' && cliff ? cliff : nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
+      {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'frames', 'rail'] as const).map((n) =>
+        nodes[n] && show(n) ? <mesh key={n} geometry={nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
       )}
+      {cliff && nodes.cliff && show('cliff') && cliff.map((g, i) => <mesh key={`cliff${i}`} geometry={g} {...at(nodes.cliff)} material={mats.cliff} />)}
       {nodes.glass && <mesh geometry={nodes.glass.geometry} {...at(nodes.glass)} material={mats.glass} renderOrder={5} />}
       {led && nodes.led_warm && <mesh geometry={led.low} {...at(nodes.led_warm)} material={mats.led} />}
       {led && nodes.led_warm && inside && <mesh geometry={led.high} {...at(nodes.led_warm)} material={mats.led} />}

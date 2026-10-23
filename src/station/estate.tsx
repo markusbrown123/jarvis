@@ -8,6 +8,7 @@ import { ESTATE } from './layout'
 import { SKY } from './sky'
 import { cliffEdge, coastMaterial, ground, lawnNorm } from './coastland'
 import { GARDEN } from './garden'
+import { splitByPlace } from './split'
 import { broadleaf, cypress as cypressTree, grove, leafMaterial, palm, shrub, woodMaterial, type Plant } from './trees'
 
 /**
@@ -62,6 +63,14 @@ export function Estate({ graphics }: { graphics: Graphics }) {
     mats.lights.color.setRGB(0.2, 0.2, 0.2).lerp(EDGE, dusk)
   })
 
+  // Each pavilion, the helipad and the ramp drawn as pieces of their own,
+  // so from the desk (looking out to sea) none of them are drawn at all.
+  const pieces = useMemo(() => {
+    const anchors = [...ESTATE.wings.map(([x, z]) => [x, z]), [ESTATE.helipad.x, ESTATE.helipad.z], [ESTATE.turn.x, ESTATE.turn.z]]
+    const nearest = (c: THREE.Vector3) => anchors.reduce((best, [x, z], i) => (Math.hypot(c.x - x, c.z - z) < Math.hypot(c.x - anchors[best][0], c.z - anchors[best][1]) ? i : best), 0)
+    return Object.fromEntries(Object.entries(nodes).filter(([, o]) => o.isMesh).map(([n, o]) => [n, splitByPlace(o.geometry, nearest)]))
+  }, [nodes])
+
   const parts: [string, THREE.Material, boolean][] = [
     ['white', mats.white, true],
     ['pad', mats.pad, true],
@@ -74,7 +83,11 @@ export function Estate({ graphics }: { graphics: Graphics }) {
   return (
     <group>
       {parts.map(([n, m, cast]) =>
-        nodes[n] ? <mesh key={n} geometry={nodes[n].geometry} position={nodes[n].position} quaternion={nodes[n].quaternion} material={m} castShadow={cast} receiveShadow={n !== 'glass'} renderOrder={n === 'glass' ? 4 : 0} /> : null,
+        nodes[n]
+          ? pieces[n].map((g, i) => (
+              <mesh key={`${n}${i}`} geometry={g} position={nodes[n].position} quaternion={nodes[n].quaternion} material={m} castShadow={cast} receiveShadow={n !== 'glass'} renderOrder={n === 'glass' ? 4 : 0} />
+            ))
+          : null,
       )}
     </group>
   )

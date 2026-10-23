@@ -1,5 +1,5 @@
 import { Component, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PerformanceMonitor, Sparkles } from '@react-three/drei'
 import { Bloom, ChromaticAberration, DepthOfField, EffectComposer, N8AO, Noise, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { BlendFunction, ToneMappingMode } from 'postprocessing'
@@ -186,11 +186,19 @@ function BlankGuard({ graphics }: { graphics: Graphics }) {
   return null
 }
 
-/** Development only: lets the render test see that frames are being drawn. */
+/** Development only: lets the render test see that frames are being drawn, and what each one costs. */
 function FrameProbe() {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  useEffect(() => {
+    gl.info.autoReset = false
+    ;(window as unknown as { __three?: object }).__three = { gl, scene, THREE }
+  }, [gl, scene])
   useFrame(() => {
-    const w = window as unknown as { __stationFrames?: number }
+    const w = window as unknown as { __stationFrames?: number; __gl?: { calls: number; triangles: number } }
     w.__stationFrames = (w.__stationFrames ?? 0) + 1
+    w.__gl = { calls: gl.info.render.calls, triangles: gl.info.render.triangles }
+    gl.info.reset()
   })
   return null
 }

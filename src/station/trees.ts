@@ -105,20 +105,20 @@ export function palm(): TreeParts {
   const H = 10
   const wood = new Mesh()
   const trunk: THREE.Vector3[] = []
-  for (let i = 0; i <= 24; i++) {
-    const t = i / 24
+  for (let i = 0; i <= 14; i++) {
+    const t = i / 14
     trunk.push(new THREE.Vector3(1.1 * Math.pow(t, 1.7), t * H, 0))
   }
   // Flared at the foot: the first rings wider.
-  wood.tube(trunk.slice(0, 3), 0.42, 0.24, 12, (t) => 0.02 * t, 1.3)
-  wood.tube(trunk.slice(2), 0.24, 0.16, 12, (t) => 0.05 + 0.15 * t, 1.3)
+  wood.tube(trunk.slice(0, 2), 0.42, 0.24, 9, (t) => 0.02 * t, 1.3)
+  wood.tube(trunk.slice(1), 0.24, 0.16, 9, (t) => 0.05 + 0.15 * t, 1.3)
   const top = trunk[trunk.length - 1]
   const r = rng(5)
   // Coconuts in a bunch under the crown.
   for (let k = 0; k < 7; k++) {
     const a = r() * Math.PI * 2
     const c = top.clone().add(new THREE.Vector3(Math.cos(a) * 0.28, -0.45 - r() * 0.25, Math.sin(a) * 0.28))
-    const g = new THREE.SphereGeometry(0.13, 7, 5)
+    const g = new THREE.SphereGeometry(0.13, 6, 4)
     const p = g.attributes.position as THREE.BufferAttribute
     const n = g.attributes.normal as THREE.BufferAttribute
     const base = wood.pos.length / 3
@@ -145,7 +145,7 @@ export function palm(): TreeParts {
     const u0 = dead ? 0.5 : 0
     const shade = 0.85 + r() * 0.3
     const col: [number, number, number] = [shade, shade, shade * (0.9 + r() * 0.2)]
-    const n = 12
+    const n = 8
     const ids: number[][] = []
     for (let i = 0; i <= n; i++) {
       const s = i / n
@@ -176,14 +176,14 @@ export function broadleaf(seed: number): TreeParts {
   const grow = (from: THREE.Vector3, dir: THREE.Vector3, len: number, rad: number, depth: number) => {
     const pts: THREE.Vector3[] = []
     const bend = new THREE.Vector3(r() - 0.5, 0.15, r() - 0.5).multiplyScalar(0.35)
-    const segs = depth ? 3 : 5
+    const segs = depth === 2 ? 2 : depth ? 3 : 5
     for (let i = 0; i <= segs; i++) {
       const t = i / segs
       pts.push(from.clone().addScaledVector(dir, len * t).addScaledVector(bend, len * t * t))
     }
     const end = pts[pts.length - 1]
     const h0 = from.y / H
-    wood.tube(pts, rad, rad * 0.6, depth ? 5 : 9, (t) => Math.pow(Math.min(1.2, h0 + t * (len / H)), 2) * 0.6, 1.0)
+    wood.tube(pts, rad, rad * 0.6, depth === 2 ? 3 : depth ? 5 : 8, (t) => Math.pow(Math.min(1.2, h0 + t * (len / H)), 2) * 0.6, 1.0)
     if (depth >= 2) {
       tips.push(end)
       return
@@ -358,32 +358,42 @@ export function woodMaterial(texture: string, height: number) {
 export type Plant = { x: number; y: number; z: number; s: number; yaw: number; tint?: THREE.Color }
 
 /**
- * One kind of tree at many places: its wood and its leaves as two instanced
- * meshes (two draw calls however many trees), casting shadows that sway too.
+ * One kind of tree at many places: its wood and its leaves as instanced
+ * meshes, a pair per `cell` metres of ground, so only the cells in view get
+ * drawn (and only those near the house go into its shadow map). Shadows
+ * sway with the trees.
  */
-export function grove(parts: TreeParts, at: Plant[], wood: THREE.MeshStandardMaterial | null, leaves: THREE.MeshStandardMaterial) {
+export function grove(parts: TreeParts, at: Plant[], wood: THREE.MeshStandardMaterial | null, leaves: THREE.MeshStandardMaterial, { cell = 60, shadows = true } = {}) {
   const group = new THREE.Group()
   const m = new THREE.Matrix4()
   const q = new THREE.Quaternion()
   const up = new THREE.Vector3(0, 1, 0)
   const white = new THREE.Color(1, 1, 1)
-  for (const [geometry, material] of [
-    [parts.wood, wood],
-    [parts.leaves, leaves],
-  ] as const) {
-    if (!material || !geometry.attributes.position) continue
-    const mesh = new THREE.InstancedMesh(geometry, material, at.length)
-    at.forEach((p, i) => {
-      mesh.setMatrixAt(i, m.compose(new THREE.Vector3(p.x, p.y, p.z), q.setFromAxisAngle(up, p.yaw), new THREE.Vector3(p.s, p.s, p.s)))
-      mesh.setColorAt(i, p.tint ?? white)
-    })
-    const w = material.userData.wind as { height: number; flutter: number }
-    mesh.customDepthMaterial = windyDepth(w.height, w.flutter)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    // Instances spread far from the origin: bound them all, not the one tree.
-    mesh.computeBoundingSphere()
-    group.add(mesh)
+  const cells = new Map<string, Plant[]>()
+  for (const p of at) {
+    const k = `${Math.floor(p.x / cell)},${Math.floor(p.z / cell)}`
+    cells.set(k, [...(cells.get(k) ?? []), p])
   }
+  for (const here of cells.values())
+    for (const [geometry, material] of [
+      [parts.wood, wood],
+      [parts.leaves, leaves],
+    ] as const) {
+      if (!material || !geometry.attributes.position) continue
+      const mesh = new THREE.InstancedMesh(geometry, material, here.length)
+      here.forEach((p, i) => {
+        mesh.setMatrixAt(i, m.compose(new THREE.Vector3(p.x, p.y, p.z), q.setFromAxisAngle(up, p.yaw), new THREE.Vector3(p.s, p.s, p.s)))
+        mesh.setColorAt(i, p.tint ?? white)
+      })
+      if (shadows) {
+        const w = material.userData.wind as { height: number; flutter: number }
+        mesh.customDepthMaterial = windyDepth(w.height, w.flutter)
+        mesh.castShadow = true
+      }
+      mesh.receiveShadow = shadows
+      // Bound this cell's trees, not the one tree at the origin.
+      mesh.computeBoundingSphere()
+      group.add(mesh)
+    }
   return group
 }
