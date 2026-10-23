@@ -7,7 +7,9 @@ connected says so instead of showing a placeholder.
 ## Run it
 
 ```bash
-jarvis              # start (installs changed dependencies first), open http://localhost:5173 in Chrome
+jarvis              # start in write mode (installs changed dependencies first), link the phone the
+                    # first time, show what's running, open http://localhost:5173 in Chrome
+jarvis --safe       # the same, read-only: he looks things up but can't act
 jarvis stop         # stop
 jarvis logs         # follow ~/Library/Logs/jarvis.log
 jarvis setup-claude # forward Claude Code's status line + hooks (usage %, session activity)
@@ -27,8 +29,17 @@ page to make sound, which it does once the microphone is allowed for it. Esc hol
 the countdown. While he powers up, the intro shows the real steps (sound, brain
 link, microphone, voice loop), then fades into the station. If he was started
 hands-free and Chrome still holds his voice, a notice asks for one key press and
-he greets you right after it. Write mode is unchanged: start the bridge yourself with
-`node scripts/start.mjs --writes`, then run `jarvis` to open the window.
+he greets you right after it.
+
+**One command.** `jarvis` is the only thing to run. It starts him in **write mode**
+(he can act: files, shell, browser, phone, sending; `jarvis --safe` for read-only,
+and if he's already running in the other mode it restarts him in the one asked
+for). The first time, it offers to link your phone right there in the terminal
+(a Telegram bot token, then a `/start` code to send it); the paired chat is kept,
+so the same chat works on every start after that. Then it prints a status board —
+brain, write mode, voice, phone, urgent alerts, Claude Code forwarding — with the
+command that fixes anything not set up, and opens the window. Started by the clap
+(no terminal), it asks nothing.
 
 ## Station
 
@@ -218,13 +229,15 @@ Finance → **Expenses** (and the station's Business panel). A plain ledger in
 
 Telegram is the two-way line; Pushover is the urgent line. Both are optional.
 
-- **Set up:** `jarvis setup-phone telegram` (bot token from @BotFather) and
+- **Set up:** `jarvis` offers it the first time you run it; or any time,
+  `jarvis setup-phone telegram` (bot token from @BotFather) and
   `jarvis setup-phone pushover` (User Key + app token from pushover.net). Tokens go
   into the login Keychain (`jarvis-telegram`, `jarvis-pushover-user`,
   `jarvis-pushover-token`) — never a file or the repo. `jarvis setup-phone remove`
   deletes them.
-- **Pair:** Settings → Phone → Pair my phone, then send the `/start <code>` it shows
-  to your bot. Only that chat is answered; other chats are ignored and logged. Five
+- **Pair:** `jarvis` shows a `/start <code>` in the terminal and waits for it, or
+  Settings → Phone → Pair my phone; send the code to your bot. The pairing is kept
+  (`~/.jarvis/phone.json`): the same chat works every time he starts. Only that chat is answered; other chats are ignored and logged. Five
   wrong codes burn the code.
 - **Talk:** text or voice-note the bot. It is a real JARVIS conversation (same
   tools and permission gate, its own memory of the thread). Voice notes are

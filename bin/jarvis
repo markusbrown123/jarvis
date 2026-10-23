@@ -1,10 +1,12 @@
 #!/bin/bash
 #
 # One command for everything. Starts the brain and the face in the background
-# (no terminal to keep open, no `npm start`), then opens JARVIS in a new
-# full-size window of your normal Chrome. Click INITIALISE to wake him.
+# (no terminal to keep open, no `npm start`) in write mode, links your phone
+# the first time (and keeps the same chat after that), says what's running,
+# then opens JARVIS in a new full-size window of your normal Chrome.
 #
-#   jarvis          start if needed, then open his window
+#   jarvis          start if needed (write mode on), then open his window
+#   jarvis --safe   the same, read-only: he can look things up but not act
 #   jarvis stop     shut him down
 #   jarvis logs     follow the log
 #   jarvis setup-claude [--remove]   forward Claude Code usage + activity
@@ -24,6 +26,14 @@ CHROME_PROFILE="${JARVIS_CHROME_PROFILE:-Kus}"
 
 # launchd (the clap listener) starts us with a bare PATH.
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+
+# Write mode: on unless asked otherwise. With it JARVIS can act — files,
+# shell, browser, phone, sending — not only look things up.
+WRITES=1
+if [ "${1:-}" = "--safe" ]; then
+  WRITES=0
+  shift
+fi
 
 ready() {
   curl -s http://localhost:8788/health | grep -q '"ok":true' &&
@@ -48,7 +58,9 @@ start_servers() {
     echo "Installing updated dependencies (one time)..."
     npm install --no-audit --no-fund >>"$LOG" 2>&1 || { echo "npm install failed — see $LOG"; return 1; }
   fi
-  nohup node scripts/start.mjs >>"$LOG" 2>&1 &
+  local mode=()
+  [ "$WRITES" = 1 ] && mode=(--writes)
+  nohup node scripts/start.mjs "${mode[@]}" >>"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
 
   for _ in $(seq 60); do
@@ -99,7 +111,70 @@ stop_all() {
     kill "$(cat "$PIDFILE")" 2>/dev/null
     rm -f "$PIDFILE"
   fi
+  # Wait for the ports to come free, so a restart can take them.
+  for _ in $(seq 20); do
+    curl -s -o /dev/null http://localhost:8788/health || break
+    sleep 0.5
+  done
   echo "JARVIS stopped."
+}
+
+# Running already, but in the other mode from the one asked for?
+wrong_mode() {
+  local writes=0
+  curl -s http://localhost:8788/health | grep -q '"writes":true' && writes=1
+  [ "$writes" != "$WRITES" ]
+}
+
+# The phone, from the terminal: the first time, offer to link it (a bot
+# token from @BotFather) and pair your chat with a code; after that the same
+# chat is remembered (~/.jarvis/phone.json) and works on every start. Only
+# asks when there's someone at the terminal (not when the clap starts him),
+# and never again once you've said no (jarvis setup-phone does it any time).
+phone_link() {
+  [ -t 0 ] && [ -t 1 ] || return 0
+  local tg paired bot chat po
+  IFS='|' read -r tg paired bot chat po <<<"$(node "$DIR/scripts/launcher.mjs" phone)"
+  if [ "$tg" != 1 ] && [ ! -f "$HOME/.jarvis/phone-skip" ]; then
+    echo
+    echo "Your phone isn't linked yet. Linked, you can text or voice-note JARVIS from anywhere"
+    echo "and he reports back when jobs finish or something needs you."
+    printf 'Link it now? You need a Telegram bot token from @BotFather (a minute to make). [y/N] '
+    local yn
+    read -r yn
+    case "$yn" in
+      y | Y | yes) setup_phone telegram || return 0 ;;
+      *)
+        mkdir -p "$HOME/.jarvis" && touch "$HOME/.jarvis/phone-skip"
+        echo "Skipped. Any time: jarvis setup-phone telegram"
+        return 0
+        ;;
+    esac
+    tg=1
+  fi
+  [ "$tg" = 1 ] && [ "$paired" != 1 ] || return 0
+  local code
+  code="$(node "$DIR/scripts/launcher.mjs" pair)"
+  [ -n "$code" ] || { echo "Couldn't get a pairing code; pair in JARVIS → Settings → Phone."; return 0; }
+  echo
+  echo "Pair your phone: in Telegram, open your bot${bot:+ (@$bot)} and send"
+  echo
+  echo "    /start $code"
+  echo
+  echo "Waiting for it (up to 5 minutes; Ctrl-C to do it later)..."
+  local skip=0
+  trap 'skip=1' INT
+  for _ in $(seq 150); do
+    [ "$skip" = 1 ] && break
+    sleep 2
+    IFS='|' read -r tg paired bot chat po <<<"$(node "$DIR/scripts/launcher.mjs" phone)"
+    if [ "$paired" = 1 ]; then
+      echo "Paired with ${chat:-your chat}. That chat stays linked from now on."
+      break
+    fi
+  done
+  trap - INT
+  [ "$paired" = 1 ] || echo "Not paired yet. The code works for 15 minutes; or pair in JARVIS → Settings → Phone."
 }
 
 # Phone tokens go into the login Keychain, never a file or the repo. The
@@ -134,11 +209,8 @@ setup_phone() {
       return 1
       ;;
   esac
-  if ready; then
-    echo "Restarting JARVIS so it picks this up..."
-    stop_all >/dev/null
-    start_servers && echo "Done. Finish in JARVIS → Settings → Phone."
-  fi
+  # The bridge reads the Keychain as it goes: no restart needed.
+  echo "JARVIS picks this up within a few seconds."
 }
 
 case "${1:-}" in
@@ -148,11 +220,18 @@ case "${1:-}" in
   setup-claude) shift; node "$DIR/scripts/setup-claude.mjs" "$@" ;;
   logs) tail -n 50 -f "$LOG" ;;
   "")
+    if ready && wrong_mode; then
+      echo "Restarting JARVIS $([ "$WRITES" = 1 ] && echo 'in write mode' || echo 'read-only')..."
+      stop_all >/dev/null
+      ready && echo "It wasn't started by this command, so it's still running as it was: stop it, then run jarvis again."
+    fi
     ready || start_servers || exit 1
+    phone_link
+    node "$DIR/scripts/launcher.mjs" board
     open_window
     ;;
   *)
-    echo "usage: jarvis [stop|logs|watch|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
+    echo "usage: jarvis [--safe] [stop|logs|watch|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
     exit 1
     ;;
 esac

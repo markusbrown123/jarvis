@@ -340,8 +340,10 @@ export function startPhone({ makeChat, transcribe, speak }) {
   async function poll() {
     let warned = false
     for (;;) {
+      // Not set up yet: look again soon, so a token added from the
+      // terminal (jarvis setup-phone) starts the link within seconds.
       if (!tgToken()) {
-        await sleep(60000)
+        await sleep(10000)
         continue
       }
       try {
