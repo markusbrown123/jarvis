@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
+import { CHAIR, linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
 import { useStation } from './stationStore'
 import { describe } from './describe'
 
@@ -46,7 +46,8 @@ function ZoneLabel({ id }: { id: ZoneId }) {
     const st = s.model?.zones[id].state
     return (s.selected?.zone === id ? 10 : 0) + (st === 'error' ? 5 : st === 'attention' ? 4 : st === 'active' ? 3 : 1)
   })
-  const cinematic = mode === 'cinematic'
+  // Talk and Cinematic keep the room quiet: names only.
+  const cinematic = mode !== 'command'
   return (
     <div
       ref={ref}
@@ -115,7 +116,7 @@ export function LabelLayer() {
   const mode = useStation((s) => s.mode)
   const linkIds = useStation((s) => s.model?.links.map((l) => l.id).join('|') ?? '')
   return (
-    <div className="st-labels" aria-hidden={mode === 'cinematic'}>
+    <div className="st-labels" aria-hidden={mode !== 'command'}>
       {ZONES.map((z) => (
         <ZoneLabel key={z.id} id={z.id} />
       ))}
@@ -124,6 +125,12 @@ export function LabelLayer() {
     </div>
   )
 }
+
+/** The reactor and the desk stay clear: no label is ever drawn over them. */
+const KEEP_CLEAR = [
+  [-1, 0.3, 0, 1, 3.8, 0, 0, 2.45, 1, 0, 2.45, -1],
+  [CHAIR[0] - 1.1, 0.2, CHAIR[2] - 1.1, CHAIR[0] + 1.1, 1.6, CHAIR[2] + 0.5],
+].map((c) => Array.from({ length: c.length / 3 }, (_, i) => new THREE.Vector3(c[i * 3], c[i * 3 + 1], c[i * 3 + 2])))
 
 /** Inside the canvas: place every label for this frame. */
 export function LabelProjector() {
@@ -141,6 +148,20 @@ export function LabelProjector() {
         return [r.left, r.top, r.right, r.bottom]
       })
     const placed: Box[] = [...hud.current]
+    for (const pts of KEEP_CLEAR) {
+      const b: Box = [Infinity, Infinity, -Infinity, -Infinity]
+      for (const p of pts) {
+        v.copy(p).project(camera)
+        if (v.z > 1) continue
+        const sx = (v.x * 0.5 + 0.5) * size.width
+        const sy = (-v.y * 0.5 + 0.5) * size.height
+        b[0] = Math.min(b[0], sx)
+        b[1] = Math.min(b[1], sy)
+        b[2] = Math.max(b[2], sx)
+        b[3] = Math.max(b[3], sy)
+      }
+      if (b[0] < b[2]) placed.push(b)
+    }
     const list = [...anchors.values()].sort((a, b) => b.pri() - a.pri())
     for (const a of list) {
       // Sizes only change with content; re-measure now and then.

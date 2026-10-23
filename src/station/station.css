@@ -758,6 +758,193 @@
   margin-top: 8px;
 }
 
+/* -------------------------------------------------------- talk mode */
+
+.st-talk {
+  position: absolute;
+  top: 100px;
+  left: 24px;
+  bottom: 150px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: clamp(340px, 28vw, 440px);
+  box-sizing: border-box;
+  border: 1px solid rgba(140, 220, 255, 0.24);
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(140, 220, 255, 0.03) 1px, transparent 1px) 0 0 / 100% 4px,
+    linear-gradient(160deg, rgba(18, 24, 42, 0.8), rgba(8, 9, 18, 0.74));
+  box-shadow: 0 0 46px rgba(110, 160, 255, 0.1);
+  backdrop-filter: blur(6px);
+}
+.st-talk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid rgba(140, 220, 255, 0.12);
+}
+.st-talk-title {
+  font: 600 16px var(--head);
+  letter-spacing: 0.32em;
+  color: #dff1ff;
+}
+.st-talk-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 500 12px var(--mono);
+  color: #b9c3d6;
+}
+.st-talk-state i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7c8bff;
+  box-shadow: 0 0 10px currentColor;
+}
+.st-talk-state.p-listening i,
+.st-talk-state.p-waking i {
+  background: #ff9a3c;
+}
+.st-talk-state.p-thinking i,
+.st-talk-state.p-tooling i {
+  background: #b69cff;
+  animation: st-pulse 0.9s ease-in-out infinite;
+}
+.st-talk-state.p-speaking i {
+  background: #5eead4;
+}
+.st-talk-state.p-offline i {
+  background: #5b5874;
+}
+@keyframes st-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.reduced .st-talk-state i {
+  animation: none;
+}
+.st-talk-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.st-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.st-turn-who {
+  font: 600 11.5px var(--head);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6f8fb8;
+}
+.st-turn.you .st-turn-who {
+  color: #c99a6e;
+}
+.st-turn p {
+  margin: 0;
+  font: 400 16px/1.5 var(--body);
+  color: #e6ecf7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.st-turn.you p {
+  color: #ffd9b8;
+}
+.st-turn.live p {
+  font-style: italic;
+  opacity: 0.85;
+}
+.st-turn-tools {
+  font: 400 11px var(--mono);
+  color: #6f7a90;
+}
+.st-talk-empty {
+  margin: auto 0;
+  text-align: center;
+  font: 400 15px var(--body);
+  color: #8f9ab0;
+}
+.st-talk-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(140, 220, 255, 0.12);
+}
+.st-talk-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(140, 220, 255, 0.22);
+  border-radius: 6px;
+  background: rgba(4, 6, 12, 0.7);
+  color: #e6ecf7;
+  font: 400 15px var(--body);
+  outline: none;
+}
+.st-talk-input input:focus {
+  border-color: rgba(140, 220, 255, 0.55);
+}
+.st-talk-input button {
+  padding: 0 14px;
+  border: 1px solid rgba(140, 220, 255, 0.35);
+  border-radius: 6px;
+  background: rgba(140, 220, 255, 0.12);
+  color: #dff1ff;
+  font: 600 12px var(--head);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.st-talk-input button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.st-waiting {
+  position: absolute;
+  top: 100px;
+  right: 24px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 300px;
+  padding: 9px 13px;
+  border: 1px solid rgba(245, 165, 36, 0.5);
+  border-radius: 7px;
+  background: rgba(24, 16, 6, 0.72);
+  color: #f3e3c8;
+  text-align: left;
+  cursor: pointer;
+}
+.st-waiting b {
+  font: 600 12px var(--head);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.st-waiting span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 400 13.5px var(--body);
+}
+
 /* --------------------------------------------------- cinematic caption */
 
 .st-cine {

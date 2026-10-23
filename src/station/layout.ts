@@ -61,6 +61,18 @@ export function zoneOfProject(project: string | undefined): ZoneId {
   return 'core'
 }
 
+/**
+ * The talk station: a desk and chair at the front of the reactor, facing it.
+ * In Talk mode the camera sits behind the chair, looking over it at JARVIS.
+ */
+export const CHAIR: [number, number, number] = [0, 0.16, 4.0]
+export function seatCamera(aspect: number): { pos: [number, number, number]; target: [number, number, number] } {
+  const k = Math.max(1, 1.6 / aspect)
+  // Behind and above the chair: the chair and desk in the lower middle, the
+  // reactor straight ahead above them, the front pads either side.
+  return { pos: [0, 3.6 * k, CHAIR[2] + 7.9 * k], target: [0, 0.76, 0] }
+}
+
 /** Camera presets: where the camera sits and what it looks at. */
 export type View = 'overview' | ZoneId
 export function cameraFor(view: View, aspect: number): { pos: [number, number, number]; target: [number, number, number] } {

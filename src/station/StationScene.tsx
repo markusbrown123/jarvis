@@ -10,6 +10,7 @@ import { BackScreen, Racks, RobotArm, Room } from './parts'
 import { Floor, Island } from './floor'
 import { Reactor } from './reactor'
 import { Clusters } from './clusters'
+import { Desk } from './desk'
 import { Links } from './links'
 import { CameraRig, Controls } from './camera'
 import { LabelProjector } from './labels'
@@ -131,6 +132,7 @@ function Post({ q }: { q: (typeof QUALITY)[Graphics] }) {
 
 export function StationScene({ graphics }: { graphics: Graphics }) {
   const q = QUALITY[graphics]
+  const mode = useStation((s) => s.mode)
   const [dpr, setDpr] = useState(Math.min(q.maxDpr, window.devicePixelRatio || 1))
   // Nothing to draw behind the power-up screen. (Rendering on demand there
   // instead breaks the first-frame environment and shadow setup.)
@@ -183,10 +185,12 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <Island />
       <Room />
       <Racks />
-      <BackScreen />
+      {/* Talk mode keeps the view over the desk clear. */}
+      {mode !== 'talk' && <BackScreen />}
       <Reactor />
       <Links />
       <Clusters />
+      <Desk />
       {/* Between the pads, front left and right: each serves the three zones on its side. */}
       <RobotArm position={[2.6, 0.16, 1.5]} side={1} seed={2} zones={['automaton', 'finance', 'jobs']} />
       <RobotArm position={[-2.6, 0.16, 1.5]} side={-1} seed={1} zones={['needs', 'core', 'roblox']} />

@@ -3,15 +3,15 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
-import { cameraFor } from './layout'
+import { cameraFor, seatCamera } from './layout'
 import { useStation } from './stationStore'
 
 /**
  * The camera. Orbit with damping; presets fly smoothly to a zone (or back
  * to the overview) whenever the station's view changes — a click on a
  * system, a toolbar button, Reset. Grabbing the view mid-flight hands
- * control straight back. Cinematic mode pulls back and drifts round the
- * whole station on its own.
+ * control straight back. Talk mode sits behind the chair at the desk, facing
+ * the reactor; Cinematic pulls back and drifts round the whole station.
  */
 
 type Orbit = { target: THREE.Vector3; update: () => void; addEventListener: (t: 'start', f: () => void) => void; removeEventListener: (t: 'start', f: () => void) => void }
@@ -29,7 +29,8 @@ export function CameraRig() {
   useEffect(() => {
     // The first measurement can be 0×0, and a NaN camera never recovers.
     if (!size.width || !size.height) return
-    const c = cameraFor(view, size.width / size.height)
+    const aspect = size.width / size.height
+    const c = mode === 'talk' && view === 'overview' ? seatCamera(aspect) : cameraFor(view, aspect)
     const pos = new THREE.Vector3(...c.pos)
     const target = new THREE.Vector3(...c.target)
     if (mode === 'cinematic' && view === 'overview') {
@@ -71,7 +72,7 @@ export function Controls() {
   const mode = useStation((s) => s.mode)
   const reduced = useHub((s) => s.prefs.reducedMotion)
   const cinematic = mode === 'cinematic'
-  const limits = useMemo(() => (cinematic ? { min: -Infinity, max: Infinity } : { min: -1.15, max: 1.15 }), [cinematic])
+  const limits = useMemo(() => (cinematic ? { min: -Infinity, max: Infinity } : mode === 'talk' ? { min: -0.6, max: 0.6 } : { min: -1.15, max: 1.15 }), [cinematic, mode])
   return (
     <OrbitControls
       makeDefault

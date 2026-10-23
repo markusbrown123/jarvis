@@ -14,12 +14,13 @@ comparing one hub snapshot with the next — never from a timer.
 
 | Control | What it does |
 |---|---|
+| **Talk** mode (`J`, the default) | Sat at the desk in front of the reactor, camera just behind the chair: JARVIS straight ahead, the full conversation on the left with a line to type to him, his current state (and the tool he's using), and what's waiting on you, if anything. The room stays quiet: names only, no panels. |
 | **Command** mode | Panels, zone labels, tooltips, detail panel. For working. |
 | **Cinematic** mode (`C`) | Panels away; camera pulls back and drifts round the station; names only on the zones; a caption strip with every system's live state and each event as it lands. Same data, so it never becomes a screensaver. |
 | Camera presets | Overview, Roblox, Automaton, Finance, Jobs, Needs Markus, Jarvis Core. Smooth flights; grabbing the view mid-flight hands control back. |
 | Reset (`R`) | Clears the selection and flies back to the overview. |
 | Connections (`L`) | Brightens every link and labels it with its state and what it carries. |
-| Click | Anything in the room, a zone label, a job or a Needs item in the panels: selects it, flies to its zone, opens the detail panel and narrows the terminal to lines about it. Click empty space to deselect. |
+| Click | (In Talk or Cinematic, clicking something switches to Command.) Anything in the room, a zone label, a job or a Needs item in the panels: selects it, flies to its zone, opens the detail panel and narrows the terminal to lines about it. Click empty space to deselect. |
 | Hover | A tooltip with the thing's status and its source. |
 | Quality | Low / High / Ultra on the top bar (or Settings). A blank-frame guard steps down automatically if a setting renders nothing on this machine. |
 | Reduced motion | Settings → reduced motion: flows stop, flights jump, rotations slow to a crawl. |
@@ -33,6 +34,7 @@ comparing one hub snapshot with the next — never from a timer.
 | Reactor amber halo | Open Needs Markus items, jobs waiting on Markus | Hub update | Something needs your input | — | — |
 | Reactor completion wave | `complete` events | A job finishes | A ring of light leaves the core | — | — |
 | Reactor red segment | Voice error or bridge down | Error appears/clears | Localised on the base ring only, so the rest stays readable | — | — |
+| **Talk station** (desk and chair in front of the reactor) | JARVIS's state, Markus's typing | Every frame | The desk's edge lights and the chair's back strips are JARVIS's colour (standby blue, listening orange, thinking violet, speaking cyan) and brighten with his voice; the holo keyboard lights while you type to him | — | Dims with the reactor when offline |
 | **Robot arms** (front left serves Needs, Core, Roblox; front right serves Automaton, Finance, Jobs) | Events and zone states | A transfer event, a zone going active, JARVIS thinking | Swing over to the zone that just sent or received work and light their stripe in its colour; tend the busiest active zone; work at the reactor while he thinks; dock folded when nothing is happening | — | Docked |
 | Rack lights (back wall) | Terminal lines in the last minute | Every 0.1 s | Blink faster the more is happening | — | — |
 | Back screen | Latest studio ASSET render | New render | The newest picture from the Roblox studio | — | Hidden when there is none |
@@ -88,6 +90,7 @@ selected or hovered.
 | `links.tsx` | Pathways, arcs, packets |
 | `parts.tsx` | Arms, racks, room, back screen |
 | `camera.tsx` | Orbit controls, flights, cinematic drift |
-| `labels.tsx` | Zone/link labels with collision avoidance, tooltip |
+| `desk.tsx` | The talk station: desk and chair |
+| `labels.tsx` | Zone/link labels with collision avoidance (never over the reactor or desk), tooltip |
 | `describe.ts` | Words for any selected thing, and which terminal lines are about it |
-| `Detail.tsx`, `Station.tsx` | Detail panel; HUD, toolbar, modes |
+| `Detail.tsx`, `Station.tsx` | Detail panel; HUD, toolbar, modes, Talk panel |

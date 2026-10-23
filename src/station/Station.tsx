@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useHub, type Graphics, type View } from '../hub/client'
 import { useStore } from '../store'
 import { ago, clock, elapsed, JOB_LABEL, tone, until } from '../hub/format'
@@ -6,7 +6,8 @@ import { TerminalFeed, type TermFocus } from '../dash/Terminal'
 import { VoiceWave } from '../dash/VoiceWave'
 import { openItems, useTick } from '../dash/state'
 import { StationScene } from './StationScene'
-import { useStation } from './stationStore'
+import { useStation, type Mode } from './stationStore'
+import { typing } from './shared'
 import { useStationModel } from './model'
 import { useLiveEvents } from './events'
 import { ZONE, ZONES, type View as Focus } from './layout'
@@ -20,9 +21,11 @@ import './station.css'
  * and money, the terminal, what needs Markus, what's running — the voice
  * visualizer under the reactor, and a detail panel for whatever is selected.
  *
- * Two modes on the same live data: Command (panels, labels, details — for
- * working) and Cinematic (C: panels away, camera pulled back and drifting,
- * a strip of every system's live state and the events as they happen).
+ * Three modes on the same live data: Talk (J — sat at the desk facing
+ * JARVIS, the conversation clear in front of you), Command (panels,
+ * labels, details — for working) and Cinematic (C — panels away, camera
+ * pulled back and drifting, a strip of every system's live state and the
+ * events as they happen).
  */
 
 /** Builds the live state → scene model once and shares it; turns changes into events. */
@@ -187,27 +190,34 @@ function ViewBar() {
             {v === 'overview' ? 'Overview' : ZONE[v].label}
           </button>
         ))}
-      <button
-        onClick={() => {
-          select(null, false)
-          fly('overview')
-        }}
-        title="Reset the view (R)"
-      >
-        Reset
-      </button>
+      {mode !== 'talk' && (
+        <button
+          onClick={() => {
+            select(null, false)
+            fly('overview')
+          }}
+          title="Reset the view (R)"
+        >
+          Reset
+        </button>
+      )}
       {mode === 'command' && (
         <button className={connections ? 'on' : ''} onClick={toggleConnections} title="Show every connection and what it carries (L)">
           Connections
         </button>
       )}
       <span className="st-mode" role="group" aria-label="Mode">
-        <button className={mode === 'command' ? 'on' : ''} onClick={() => setMode('command')} title="Panels and details, for working (C)">
-          Command
-        </button>
-        <button className={mode === 'cinematic' ? 'on' : ''} onClick={() => setMode('cinematic')} title="The whole station, live, camera drifting (C)">
-          Cinematic
-        </button>
+        {(
+          [
+            ['talk', 'Talk', 'Sit at the desk and talk to JARVIS (J)'],
+            ['command', 'Command', 'Panels and details, for working (C)'],
+            ['cinematic', 'Cinematic', 'The whole station, live, camera drifting (C)'],
+          ] as [Mode, string, string][]
+        ).map(([m, label, title]) => (
+          <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)} title={title}>
+            {label}
+          </button>
+        ))}
       </span>
     </div>
   )
@@ -314,19 +324,115 @@ function TopHud() {
   )
 }
 
-function Dock() {
+function Dock({ captionOnly }: { captionOnly: boolean }) {
   useTick(250)
   const turns = useStore((s) => s.turns)
   const caption = useStore((s) => s.caption)
   const phase = useStore((s) => s.phase)
   const last = turns.at(-1)
   const live = phase === 'listening' || phase === 'waking'
-  const line = live && caption && caption !== '…' ? { you: true, text: caption } : last ? { you: last.role === 'user', text: last.text } : null
+  const line = live && caption && caption !== '…' ? { you: true, text: caption } : last && !captionOnly ? { you: last.role === 'user', text: last.text } : null
   return (
     <div className="st-dock">
       {line && <p className={`st-line ${line.you ? 'you' : 'him'}`}>{line.text}</p>}
       <VoiceWave size="large" />
     </div>
+  )
+}
+
+const PHASE_WORD: Record<string, string> = {
+  offline: 'Offline',
+  boot: 'Starting up…',
+  dormant: 'Standing by',
+  waking: 'Listening…',
+  listening: 'Listening…',
+  thinking: 'Thinking…',
+  tooling: 'Working…',
+  speaking: 'Speaking',
+}
+
+/**
+ * Talk mode's conversation: what Markus said and what JARVIS answered, in
+ * full and easy to read, what he's doing right now, and a line to type to
+ * him — the same conversation as voice, the phone and the terminal.
+ */
+function TalkPanel() {
+  const turns = useStore((s) => s.turns)
+  const phase = useStore((s) => s.phase)
+  const caption = useStore((s) => s.caption)
+  const tool = useStore((s) => s.activeTool)
+  const c = useStore((s) => s.controls)
+  const [text, setText] = useState('')
+  const body = useRef<HTMLDivElement>(null)
+  const live = (phase === 'listening' || phase === 'waking') && caption && caption !== '…'
+  useEffect(() => {
+    if (body.current) body.current.scrollTop = body.current.scrollHeight
+  }, [turns, live, caption])
+  const shown = turns.slice(-14)
+  return (
+    <section className="st-talk" aria-label="Conversation with JARVIS">
+      <header className="st-talk-head">
+        <span className="st-talk-title">JARVIS</span>
+        <span className={`st-talk-state p-${phase}`}>
+          <i />
+          {PHASE_WORD[phase] ?? phase}
+          {phase === 'tooling' && tool ? ` · ${tool.replace(/^mcp__\w+?__/, '').replace(/_/g, ' ')}` : ''}
+        </span>
+      </header>
+      <div className="st-talk-body" ref={body}>
+        {shown.map((t) => (
+          <div key={t.id} className={`st-turn ${t.role === 'user' ? 'you' : 'him'}`}>
+            <span className="st-turn-who">{t.role === 'user' ? 'You' : 'JARVIS'}</span>
+            <p>{t.text}</p>
+            {t.role === 'jarvis' && t.tools && t.tools.length > 0 && <span className="st-turn-tools">used {[...new Set(t.tools)].map((x) => x.replace(/^mcp__\w+?__/, '').replace(/_/g, ' ')).join(' · ')}</span>}
+          </div>
+        ))}
+        {live && (
+          <div className="st-turn you live">
+            <span className="st-turn-who">You</span>
+            <p>{caption}</p>
+          </div>
+        )}
+        {!shown.length && !live && <p className="st-talk-empty">Say “Hey Jarvis”, hold Space, or type below.</p>}
+      </div>
+      <form
+        className="st-talk-input"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const t = text.trim()
+          if (!t) return
+          c.sendText(t)
+          setText('')
+        }}
+      >
+        <input
+          value={text}
+          onChange={(e) => {
+            typing.at = performance.now()
+            setText(e.target.value)
+          }}
+          placeholder="Talk to JARVIS…"
+          aria-label="Type to JARVIS"
+          spellCheck={false}
+        />
+        <button type="submit" disabled={!text.trim()}>
+          Send
+        </button>
+      </form>
+    </section>
+  )
+}
+
+/** Talk mode's one other thing: what's waiting on Markus, if anything. */
+function TalkWaiting() {
+  const items = useStation((s) => s.model?.items)
+  const select = useStation((s) => s.select)
+  if (!items?.length) return null
+  return (
+    <button className="st-waiting" onClick={() => select({ kind: 'item', id: items[0].id, zone: 'needs' })} title="Open it in Command mode">
+      <b>{items.length} waiting on you</b>
+      <span>{items[0].title}</span>
+    </button>
   )
 }
 
@@ -336,14 +442,15 @@ export function Station() {
   const mode = useStation((s) => s.mode)
   // With a selection open the right column makes room for its detail.
   const selected = useStation((s) => Boolean(s.selected))
-  // C: Command / Cinematic. R: reset the view. L: Connections View.
+  // J: Talk. C: Cinematic / Command. R: reset the view. L: Connections View.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement
       if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT' || el?.isContentEditable) return
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
       const st = useStation.getState()
-      if (e.key === 'c') st.setMode(st.mode === 'command' ? 'cinematic' : 'command')
+      if (e.key === 'c') st.setMode(st.mode === 'cinematic' ? 'command' : 'cinematic')
+      else if (e.key === 'j') st.setMode('talk')
       else if (e.key === 'r') {
         st.select(null, false)
         st.fly('overview')
@@ -355,11 +462,11 @@ export function Station() {
   // The panels are a HUD over the room. (Placed inside the 3D scene they
   // blank the frame once the reflective floor is on.)
   return (
-    <div className={`station st-${mode}`}>
+    <div className={`station is-${mode}`}>
       <ModelSync />
       <StationScene graphics={graphics} />
       <LabelLayer />
-      {mode === 'command' ? (
+      {mode === 'command' && (
         <>
           <div className="st-panels st-left">
             <BusinessHolo go={go} />
@@ -371,13 +478,18 @@ export function Station() {
             <JobsHolo go={go} rows={selected ? 2 : 5} />
           </div>
         </>
-      ) : (
-        <CineStrip />
       )}
+      {mode === 'talk' && (
+        <>
+          <TalkPanel />
+          <TalkWaiting />
+        </>
+      )}
+      {mode === 'cinematic' && <CineStrip />}
       <TopHud />
       <ViewBar />
-      <Dock />
-      {mode === 'command' && <p className="st-hint">Drag to orbit · click a system · R reset · L links · C cinematic</p>}
+      <Dock captionOnly={mode === 'talk'} />
+      {mode === 'command' && <p className="st-hint">Drag to orbit · click a system · R reset · L links · C cinematic · J talk</p>}
     </div>
   )
 }

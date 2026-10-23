@@ -23,8 +23,12 @@ export type StationEvent = { id: number; at: number; kind: 'assign' | 'complete'
 type StationStore = {
   selected: Sel | null
   hovered: Sel | null
-  /** Command: panels and labels, built for working. Cinematic: the same live room, camera pulled back and drifting. */
-  mode: 'command' | 'cinematic'
+  /**
+   * Talk: sat at the desk facing JARVIS, the conversation in front of you.
+   * Command: panels and labels, built for working. Cinematic: the same live
+   * room, camera pulled back and drifting.
+   */
+  mode: Mode
   connections: boolean
   view: View
   /** Bumped to re-fly to the same view (e.g. Reset). */
@@ -35,7 +39,7 @@ type StationStore = {
   setModel: (m: StationModel) => void
   select: (s: Sel | null, focus?: boolean) => void
   hover: (s: Sel | null) => void
-  setMode: (m: 'command' | 'cinematic') => void
+  setMode: (m: Mode) => void
   toggleConnections: () => void
   fly: (v: View) => void
   push: (e: Omit<StationEvent, 'id' | 'at'>) => void
@@ -43,10 +47,23 @@ type StationStore = {
 
 let seq = 0
 
+export type Mode = 'talk' | 'command' | 'cinematic'
+
+// The mode is remembered between visits (and the room opens at the desk).
+const MODE_KEY = 'jarvis.station.mode'
+function savedMode(): Mode {
+  try {
+    const m = localStorage.getItem(MODE_KEY)
+    return m === 'command' || m === 'cinematic' ? m : 'talk'
+  } catch {
+    return 'talk'
+  }
+}
+
 export const useStation = create<StationStore>((set, get) => ({
   selected: null,
   hovered: null,
-  mode: 'command',
+  mode: savedMode(),
   connections: false,
   view: 'overview',
   viewNonce: 0,
@@ -54,6 +71,8 @@ export const useStation = create<StationStore>((set, get) => ({
   model: null,
   setModel: (model) => set({ model }),
   select: (selected, focus = true) => {
+    // Picking something to look at is work: details live in Command mode.
+    if (selected && get().mode !== 'command') get().setMode('command')
     set({ selected })
     if (focus && selected) get().fly(selected.zone)
   },
@@ -62,7 +81,14 @@ export const useStation = create<StationStore>((set, get) => ({
     if (h?.id === hovered?.id && h?.kind === hovered?.kind) return
     set({ hovered })
   },
-  setMode: (mode) => set({ mode, view: 'overview', viewNonce: get().viewNonce + 1 }),
+  setMode: (mode) => {
+    try {
+      localStorage.setItem(MODE_KEY, mode)
+    } catch {
+      /* private window: the mode just isn't remembered */
+    }
+    set({ mode, view: 'overview', viewNonce: get().viewNonce + 1 })
+  },
   toggleConnections: () => set({ connections: !get().connections }),
   fly: (view) => set({ view, viewNonce: get().viewNonce + 1 }),
   push: (e) => {

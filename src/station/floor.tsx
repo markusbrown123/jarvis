@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { MeshReflectorMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
-import { hexPoints, ZONES } from './layout'
+import { DECK_TOP, hexPoints, ZONES } from './layout'
 import { useStation, type StationEvent } from './stationStore'
 
 /**
@@ -344,10 +344,11 @@ function blobTexture() {
   return blobTex
 }
 
-export function Blob({ radius, position = [0, 0, 0], opacity = 0.75 }: { radius: number; position?: [number, number, number]; opacity?: number }) {
+/** Defaults to the island deck, where everything now stands. */
+export function Blob({ radius, position = [0, DECK_TOP, 0], opacity = 0.75 }: { radius: number; position?: [number, number, number]; opacity?: number }) {
   const mat = useMemo(() => new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, opacity, toneMapped: false }), [opacity])
   return (
-    <mesh rotation-x={-Math.PI / 2} position={[position[0], 0.012, position[2]]} material={mat} renderOrder={1}>
+    <mesh rotation-x={-Math.PI / 2} position={[position[0], position[1] + 0.012, position[2]]} material={mat} renderOrder={1}>
       <planeGeometry args={[radius * 2, radius * 2]} />
     </mesh>
   )

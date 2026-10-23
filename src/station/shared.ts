@@ -22,6 +22,9 @@ export function useMaterials() {
   )
 }
 
+/** When Markus last typed to JARVIS (the desk's holo keyboard lights up). */
+export const typing = { at: 0 }
+
 export const motion = () => (useHub.getState().prefs.reducedMotion ? 0.15 : 1)
 
 /** The reactor's colours, one per state. */
