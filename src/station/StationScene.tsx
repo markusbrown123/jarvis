@@ -6,10 +6,12 @@ import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import * as THREE from 'three'
 import { useHub, type Graphics } from '../hub/client'
 import { useStore } from '../store'
-import { BackScreen, Racks, RobotArm, Room, RoomShell } from './parts'
-import { Floor, Island } from './floor'
+import { ZoneLight } from './floor'
 import { Clusters } from './clusters'
 import { Console } from './console'
+import { Lair } from './lair'
+import { Outside } from './outside'
+import { MOON_DIR } from './layout'
 import { WalkControls } from './walk'
 import { Links } from './links'
 import { CameraRig, Controls, TalkFraming } from './camera'
@@ -17,11 +19,14 @@ import { LabelProjector } from './labels'
 import { useStation } from './stationStore'
 
 /**
- * The station: a control room round the reactor. An illuminated hex floor,
- * a raised island carrying the reactor and the six systems on their pads,
- * the pathways between them, two arms, racks and the curved back wall — lit
- * for real (PBR metals, image-based reflections, shadow maps, a reflective
- * floor) and finished with bloom, and ambient occlusion on Ultra.
+ * The station: a lair cut into a sea cliff (lair.tsx) — rock walls and vault,
+ * a polished stone floor and stage, and a wall of glass over the sea at blue
+ * hour (outside.tsx). On the stage: the command console (console.tsx), the
+ * six systems on their pads and the pathways between them. The
+ * room's light is baked in Blender with Cycles; what's live — JARVIS, the
+ * zones, the console — is lit for real (PBR, image-based
+ * reflections, a moonlight shadow map, mirror reflections in the stone) and
+ * finished with bloom, depth of field in Talk, and ambient occlusion on Ultra.
  *
  * Everything that moves or glows is driven by live state through the
  * station model (model.ts); see docs/STATION.md for the full mapping.
@@ -42,33 +47,34 @@ const QUALITY: Record<
   ultra: { maxDpr: 2, shadows: true, map: 4096, reflector: 1024, ao: true, soft: true, dust: 120, msaa: 4, lens: true, env: 256 },
 }
 
-/** Sky fill, a shadow-throwing key over the island, cool and teal rims. */
+/**
+ * Live light for the live things, matched to the baked room: moonlight in
+ * through the window (the one shadow-caster), a cool sky fill, and the warm
+ * glow of the vault's coves from above.
+ */
 function Lights({ q }: { q: (typeof QUALITY)[Graphics] }) {
+  const moon = MOON_DIR.clone().multiplyScalar(30)
   return (
     <>
-      <hemisphereLight args={['#4a4878', '#0a0910', 0.9]} />
-      {/* Key: high front-right, the light that throws the shadows. */}
-      <spotLight
-        position={[7, 14, 9]}
-        angle={0.62}
-        penumbra={0.7}
-        intensity={1500}
-        distance={50}
-        decay={2}
-        color="#f0ecff"
+      <hemisphereLight args={['#2c3a66', '#07070b', 0.35]} />
+      <directionalLight
+        position={[moon.x, moon.y, moon.z]}
+        intensity={0.3}
+        color="#b9c9ff"
         castShadow={q.shadows}
         shadow-mapSize={[q.map || 512, q.map || 512]}
-        shadow-bias={-0.00012}
-        shadow-normalBias={0.025}
-        shadow-radius={q.soft ? 5 : 2}
-        shadow-camera-near={6}
-        shadow-camera-far={36}
+        shadow-bias={-0.0002}
+        shadow-normalBias={0.03}
+        shadow-radius={q.soft ? 4 : 2}
+        shadow-camera-left={-11}
+        shadow-camera-right={11}
+        shadow-camera-top={11}
+        shadow-camera-bottom={-11}
+        shadow-camera-near={5}
+        shadow-camera-far={60}
       />
-      {/* Cool rim from back-left, teal rim from back-right. */}
-      <spotLight position={[-10, 7, -7]} angle={0.6} penumbra={1} intensity={520} distance={34} decay={2} color="#7c6cff" />
-      <spotLight position={[10, 6, -6]} angle={0.6} penumbra={1} intensity={380} distance={34} decay={2} color="#4fd1c5" />
-      {/* A low warm bounce so the front faces aren't black. */}
-      <pointLight position={[0, 1.2, 9]} intensity={10} distance={16} decay={2} color="#ff9a5a" />
+      <pointLight position={[0, 8.2, 0]} intensity={60} distance={22} decay={2} color="#ffb877" />
+      <pointLight position={[0, 1.4, 7]} intensity={8} distance={12} decay={2} color="#ff9a5a" />
     </>
   )
 }
@@ -117,16 +123,16 @@ function FrameProbe() {
 }
 
 /**
- * If the console's model or textures can't be loaded (a file missing after
- * an update), the rest of the room still draws, and JARVIS says why.
+ * If a model or its textures can't be loaded (a file missing after an
+ * update), the rest of the station still draws, and JARVIS says why.
  */
-class ConsoleGuard extends Component<{ children: ReactNode }, { failed: boolean }> {
+class ConsoleGuard extends Component<{ what: string; children: ReactNode }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() {
     return { failed: true }
   }
   componentDidCatch(err: Error) {
-    useHub.getState().say(`The centre console couldn't load (${err.message}) — run git pull in ~/jarvis`)
+    useHub.getState().say(`The station's ${this.props.what} couldn't load (${err.message}) — run git pull in ~/jarvis`)
   }
   render() {
     return this.state.failed ? null : this.props.children
@@ -170,7 +176,7 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       shadows={q.shadows}
       dpr={dpr}
       gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
-      camera={{ position: [0, 9.6, 15.2], fov: 38, near: 0.1, far: 90 }}
+      camera={{ position: [0, 9.6, 15.2], fov: 38, near: 0.12, far: 2400 }}
       onPointerMissed={() => useStation.getState().select(null, false)}
       onCreated={({ gl }) => {
         // If the graphics card drops the context (too much for it, or a
@@ -191,38 +197,35 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
         onIncline={() => setDpr((d) => Math.min(q.maxDpr, Math.min(window.devicePixelRatio || 1, d + 0.25)))}
         onFallback={() => setDpr(1)}
       />
-      <color attach="background" args={['#050409']} />
-      <fog attach="fog" args={['#060510', 26, 62]} />
+      <color attach="background" args={['#04060c']} />
+      {/* What metal and glass reflect: the moonlit window wall, the warm vault coves, dark rock. */}
       <Environment resolution={q.env} frames={1}>
-        <color attach="background" args={['#06050b']} />
-        <Lightformer form="rect" intensity={2.2} color="#8b7cff" position={[0, 7, -6]} scale={[14, 1.5, 1]} />
-        <Lightformer form="ring" intensity={2.6} color="#5eead4" position={[-7, 3, 4]} scale={3} target={[0, 1.5, 0]} />
-        <Lightformer form="rect" intensity={1.8} color="#ffffff" position={[7, 4, 5]} scale={[5, 3, 1]} target={[0, 1.5, 0]} />
-        <Lightformer form="rect" intensity={3} color="#ff9a3c" position={[0, -1, 9]} scale={[10, 0.4, 1]} target={[0, 1, 0]} />
-        <Lightformer form="circle" intensity={4} color="#e8e2ff" position={[0, 8, 0]} rotation-x={Math.PI / 2} scale={4} />
+        <color attach="background" args={['#05060a']} />
+        <Lightformer form="rect" intensity={0.7} color="#5f78c8" position={[0, 4, -14]} scale={[26, 7, 1]} />
+        <Lightformer form="circle" intensity={2} color="#dfe8ff" position={[MOON_DIR.x * 40, MOON_DIR.y * 40, MOON_DIR.z * 40]} scale={1.5} target={[0, 0, 0]} />
+        <Lightformer form="ring" intensity={3} color="#ffb877" position={[0, 9, 0]} rotation-x={Math.PI / 2} scale={6} />
+        <Lightformer form="rect" intensity={0.8} color="#ff9a5a" position={[0, 0.5, 13]} scale={[18, 1, 1]} target={[0, 1, 0]} />
       </Environment>
       {import.meta.env.DEV && <FrameProbe />}
       <BlankGuard graphics={graphics} />
       <Lights q={q} />
-      <Floor reflector={q.reflector} />
-      <Island />
-      <Room />
-      <Racks />
-      <BackScreen />
-      {/* The console streams in its model and textures; the room draws meanwhile. */}
-      <ConsoleGuard>
+      <Outside />
+      {/* The room and the console stream in their models and textures; what's ready draws meanwhile. */}
+      <ConsoleGuard what="room">
+        <Suspense fallback={null}>
+          <Lair graphics={graphics} reflector={q.reflector} />
+        </Suspense>
+      </ConsoleGuard>
+      <ZoneLight />
+      <ConsoleGuard what="centre console">
         <Suspense fallback={null}>
           <Console graphics={graphics} />
         </Suspense>
       </ConsoleGuard>
       <Links />
       <Clusters />
-      {/* Between the pads, front left and right: each serves the three zones on its side. */}
-      <RobotArm position={[2.6, 0.16, 1.5]} side={1} seed={2} zones={['automaton', 'finance', 'jobs']} />
-      <RobotArm position={[-2.6, 0.16, 1.5]} side={-1} seed={1} zones={['needs', 'core', 'roblox']} />
-      {q.dust > 0 && <Sparkles count={q.dust} scale={[20, 6, 18]} position={[0, 3.2, 0]} size={1.4} speed={0.12} opacity={0.22} color="#c4b5fd" noise={1} />}
-      {/* On foot the room closes round you: front wall with windows, ceiling. */}
-      {mode === 'walk' && <RoomShell />}
+      {/* Dust hanging in the moonlight. */}
+      {q.dust > 0 && <Sparkles count={q.dust} scale={[16, 6, 14]} position={[0, 3.2, -3]} size={1.2} speed={0.08} opacity={0.18} color="#cdd8ff" noise={1} />}
       {mode === 'walk' && <WalkControls />}
       <Controls />
       <CameraRig />

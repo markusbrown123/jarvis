@@ -1,10 +1,9 @@
 import { useMemo, useRef, type ReactNode } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { motion, reactorState, useCanvasTex, useMaterials } from './shared'
 import { useStation, type Sel } from './stationStore'
-import { hexPoints, PAD, STATUS, ZONE, type ZoneId } from './layout'
+import { PAD, STATUS, ZONE, type ZoneId } from './layout'
 import { Blob } from './floor'
 import type { StationModel, ZoneModel } from './model'
 
@@ -20,8 +19,18 @@ const PAD_H = 0.2
 export const PAD_TOP = DECK + PAD_H
 
 
-/** Brushed steel for the structures on the pads: light enough to read against the deck. */
-const steel = new THREE.MeshStandardMaterial({ color: '#6b7386', metalness: 0.55, roughness: 0.32, envMapIntensity: 1.2 })
+/** Brushed steel for the hardware on the pads. */
+const steel = new THREE.MeshStandardMaterial({ color: '#4a5162', metalness: 0.75, roughness: 0.3, envMapIntensity: 1.2 })
+
+/**
+ * The data itself is projected light, not objects: translucent, additive,
+ * with a brighter outline — the same holographic look as the console's
+ * monitors, standing over solid metal projectors.
+ */
+function holo(color: string, opacity = 0.28) {
+  return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+}
+const boxEdges = (w: number, h: number, d: number) => new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d))
 
 /** Pointer handlers that hover and select a thing. */
 function useHit(sel: Sel) {
@@ -57,22 +66,24 @@ function Pad({ zone, model, children }: { zone: ZoneId; model: ZoneModel | undef
   const m = useMaterials()
   const hit = useHit({ kind: 'zone', id: zone, zone })
   const on = useEmphasis('zone', zone)
+  // A round projector base: dark machined metal, chamfered, with a lit lens ring.
   const geo = useMemo(() => {
-    const shape = new THREE.Shape()
-    hexPoints(PAD).forEach((p, i) => (i ? shape.lineTo(p.x, p.z) : shape.moveTo(p.x, p.z)))
-    const g = new THREE.ExtrudeGeometry(shape, { depth: PAD_H - 0.04, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.04, bevelSegments: 2 })
-    g.rotateX(Math.PI / 2)
-    g.translate(0, PAD_TOP - 0.02, 0)
+    const g = new THREE.LatheGeometry(
+      [
+        [0, 0],
+        [PAD, 0],
+        [PAD, PAD_H * 0.55],
+        [PAD - 0.08, PAD_H],
+        [0.62, PAD_H],
+        [0.58, PAD_H - 0.03],
+        [0, PAD_H - 0.03],
+      ].map(([x, y]) => new THREE.Vector2(x, y)),
+      96,
+    )
+    g.translate(0, PAD_TOP - PAD_H, 0)
     return g
   }, [])
   const rim = useMemo(() => new THREE.MeshBasicMaterial({ color: z.color, toneMapped: false }), [z.color])
-  const edges = useMemo(() => {
-    const pts = hexPoints(PAD + 0.01, PAD_TOP + 0.005)
-    return pts.slice(0, 6).map((a, i) => {
-      const b = pts[i + 1]
-      return { pos: a.clone().add(b).multiplyScalar(0.5), len: a.distanceTo(b), rot: -Math.atan2(b.z - a.z, b.x - a.x) }
-    })
-  }, [])
   const label = useCanvasTex(
     512,
     128,
@@ -89,7 +100,7 @@ function Pad({ zone, model, children }: { zone: ZoneId; model: ZoneModel | undef
     },
     [z.label],
   )
-  const labelMat = useMemo(() => new THREE.MeshBasicMaterial({ map: label, transparent: true, depthWrite: false, toneMapped: false }), [label])
+  const labelMat = useMemo(() => new THREE.MeshBasicMaterial({ map: label, transparent: true, depthWrite: false, toneMapped: false, opacity: 0.75 }), [label])
   const base = useMemo(() => new THREE.Color(z.color), [z.color])
   const warn = useMemo(() => new THREE.Color(STATUS.error), [])
   useFrame((st) => {
@@ -97,19 +108,20 @@ function Pad({ zone, model, children }: { zone: ZoneId; model: ZoneModel | undef
     const t = st.clock.elapsedTime * motion()
     const pulse = s === 'active' ? 0.25 * Math.sin(t * 3) : s === 'attention' ? 0.35 * Math.sin(t * 4) : 0
     rim.color.copy(s === 'error' ? warn : base).multiplyScalar(STATE_RIM[s] + pulse + (on ? 0.6 : 0))
-    labelMat.opacity = s === 'unavailable' ? 0.45 : 1
+    labelMat.opacity = s === 'unavailable' ? 0.35 : 0.75
   })
   return (
     <group position={z.pos}>
       <Blob radius={PAD * 1.45} opacity={0.7} />
       <mesh geometry={geo} material={m.gunmetal} castShadow receiveShadow {...hit} />
-      {edges.map((e, i) => (
-        <mesh key={i} position={e.pos} rotation-y={e.rot} material={rim}>
-          <boxGeometry args={[e.len, 0.018, 0.035]} />
-        </mesh>
-      ))}
-      <mesh rotation-x={-Math.PI / 2} position={[0, PAD_TOP + 0.006, PAD * 0.64]} material={labelMat}>
-        <planeGeometry args={[1.5, 0.375]} />
+      <mesh rotation-x={Math.PI / 2} position-y={PAD_TOP - 0.004} material={rim}>
+        <torusGeometry args={[PAD - 0.09, 0.012, 6, 128]} />
+      </mesh>
+      <mesh rotation-x={Math.PI / 2} position-y={PAD_TOP - 0.028} material={rim}>
+        <torusGeometry args={[0.6, 0.008, 6, 96]} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position={[0, PAD_TOP - 0.024, PAD * 0.62]} material={labelMat}>
+        <planeGeometry args={[1.2, 0.3]} />
       </mesh>
       {children}
     </group>
@@ -121,13 +133,16 @@ function Pad({ zone, model, children }: { zone: ZoneId; model: ZoneModel | undef
 function GameNodeMesh({ g, x, z, y }: { g: StationModel['games'][number]; x: number; z: number; y: number }) {
   const hit = useHit({ kind: 'game', id: g.id, zone: 'roblox' })
   const on = useEmphasis('game', g.id)
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#1f2a44', metalness: 0.5, roughness: 0.35, emissive: '#4f8bff', emissiveIntensity: 0.4 }), [])
+  const mat = useMemo(() => holo('#4f8bff'), [])
+  const line = useMemo(() => new THREE.LineBasicMaterial({ color: '#8fb7ff', transparent: true, toneMapped: false }), [])
+  const outline = useMemo(() => boxEdges(0.15, 0.15, 0.15), [])
   const ref = useRef<THREE.Group>(null)
   useFrame((st) => {
     const t = st.clock.elapsedTime * motion()
-    const c = g.status === 'blocked' ? STATUS.warn : g.status === 'building' ? '#8fb7ff' : '#4f8bff'
-    mat.emissive.set(c)
-    mat.emissiveIntensity = g.status === 'building' ? 1.6 + Math.sin(t * 4 + x) * 0.6 : g.status === 'blocked' ? 1.3 : g.active ? 1.0 : 0.35
+    const c = g.status === 'blocked' ? STATUS.warn : g.status === 'building' ? '#a9c8ff' : '#4f8bff'
+    const k = g.status === 'building' ? 1.4 + Math.sin(t * 4 + x) * 0.5 : g.status === 'blocked' ? 1.2 : g.active ? 1.0 : 0.45
+    mat.color.set(c).multiplyScalar(k * 0.5)
+    line.color.set(c).multiplyScalar(k * 1.6)
     if (ref.current) {
       ref.current.position.y = y + Math.sin(t * 1.2 + x * 3) * 0.02
       ref.current.rotation.y += 0.004 * motion()
@@ -136,7 +151,10 @@ function GameNodeMesh({ g, x, z, y }: { g: StationModel['games'][number]; x: num
   })
   return (
     <group position={[x, y, z]} ref={ref}>
-      <RoundedBox args={[0.17, 0.17, 0.17]} radius={0.03} smoothness={3} material={mat} castShadow {...hit} />
+      <mesh material={mat} {...hit}>
+        <boxGeometry args={[0.15, 0.15, 0.15]} />
+      </mesh>
+      <lineSegments geometry={outline} material={line} />
       {g.active && (
         <mesh rotation-x={Math.PI / 2}>
           <torusGeometry args={[0.17, 0.008, 6, 40]} />
@@ -168,8 +186,8 @@ function Roblox({ model }: { model: StationModel }) {
   const games = model.games.slice(0, 14)
   return (
     <Pad zone="roblox" model={zm}>
-      <mesh position-y={PAD_TOP + 0.25} material={steel} castShadow>
-        <cylinderGeometry args={[0.26, 0.34, 0.5, 6]} />
+      <mesh position-y={PAD_TOP + 0.04} material={steel} castShadow>
+        <cylinderGeometry args={[0.16, 0.22, 0.08, 48]} />
       </mesh>
       <lineSegments ref={cube} geometry={edges} material={cubeMat} position-y={PAD_TOP + 0.9} />
       {games.map((g, i) => {
@@ -190,12 +208,12 @@ function StagePillar({ st, i, n, available }: { st: StationModel['stages'][numbe
   const mat = useMemo(
     () =>
       available
-        ? new THREE.MeshStandardMaterial({ color: '#0f2a33', emissive: new THREE.Color('#22d3ee').multiplyScalar(0.35 + (i / n) * 0.9), emissiveIntensity: 1, metalness: 0.4, roughness: 0.3 })
-        : new THREE.MeshBasicMaterial({ color: '#3b4a55', wireframe: true, transparent: true, opacity: 0.45 }),
+        ? holo(`#${new THREE.Color('#22d3ee').multiplyScalar(0.45 + (i / n) * 0.55).getHexString()}`, 0.4)
+        : new THREE.MeshBasicMaterial({ color: '#3b4a55', wireframe: true, transparent: true, opacity: 0.35 }),
     [available, i, n],
   )
   return (
-    <mesh position={[Math.cos(a) * 1.0, PAD_TOP + h / 2, Math.sin(a) * 0.82]} material={mat} scale={on ? [1.3, 1, 1.3] : 1} castShadow {...hit}>
+    <mesh position={[Math.cos(a) * 1.0, PAD_TOP + h / 2, Math.sin(a) * 0.82]} material={mat} scale={on ? [1.3, 1, 1.3] : 1} {...hit}>
       <boxGeometry args={[0.13, h, 0.13]} />
     </mesh>
   )
@@ -206,7 +224,7 @@ function Automaton({ model }: { model: StationModel }) {
   const lead = useRef<THREE.InstancedMesh>(null)
   const wire = useMemo(() => new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(0.4, 2)), [])
   const wireMat = useMemo(() => new THREE.LineBasicMaterial({ color: '#22d3ee', toneMapped: false, transparent: true, opacity: 0.8 }), [])
-  const innerMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#0c3640', transparent: true, opacity: 0.6, toneMapped: false }), [])
+  const innerMat = useMemo(() => holo('#0c3640', 0.5), [])
   const dotMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#a5f3fc', toneMapped: false }), [])
   const hit = useHit({ kind: 'zone', id: 'automaton', zone: 'automaton' })
   const zm = model.zones.automaton
@@ -334,7 +352,7 @@ function Finance({ model }: { model: StationModel }) {
 function JobCapsule({ j, x, y, z, color, pulse }: { j: StationModel['jobs']['running'][number]; x: number; y: number; z: number; color: string; pulse: boolean }) {
   const hit = useHit({ kind: 'job', id: j.id, zone: 'jobs' })
   const on = useEmphasis('job', j.id)
-  const mat = useMemo(() => new THREE.MeshBasicMaterial({ color, toneMapped: false }), [color])
+  const mat = useMemo(() => holo(color, 0.55), [color])
   const ref = useRef<THREE.Mesh>(null)
   const c = useMemo(() => new THREE.Color(color), [color])
   useFrame((st) => {

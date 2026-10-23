@@ -98,21 +98,13 @@ export function cameraFor(view: View, aspect: number): { pos: [number, number, n
   }
 }
 
-/** Flat-top hexagon outline points at a radius. */
-export function hexPoints(r: number, y = 0, flat = true) {
-  return Array.from({ length: 7 }, (_, i) => {
-    const a = ((flat ? 0 : 30) + i * 60) * (Math.PI / 180)
-    return new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r)
-  })
-}
-
-/** The pathways run from just off the reactor's base to just short of each pad. */
+/** The pathways run from just off the console's platform to just short of each pad. */
 export const PATH_FROM = BASE + 0.12
 export const PATH_TO = RING - PAD * 0.866 - 0.06
-/** The island deck's top surface. */
+/** The stage's top surface. */
 export const DECK_TOP = 0.16
 
-/** Where a zone's pathway starts and ends on the deck. */
+/** Where a zone's pathway starts and ends on the stage. */
 export function along(zone: ZoneId, f: number, out: THREE.Vector3, y = DECK_TOP + 0.08) {
   const [x, , z] = ZONE[zone].pos
   const len = Math.hypot(x, z)
@@ -135,24 +127,26 @@ export function linkAnchor(l: LinkModel): [number, number, number] {
 
 /**
  * What a person walking the station can't walk through, as circles on the
- * floor (x, z, radius): the console, each pad, the two arms and the four
- * pillars. The room's wall bounds the rest.
+ * floor (x, z, radius): the console and each pad. The cave's
+ * rock (lair.py: 15 m, bulging in by up to ~1.5 m) bounds the rest.
  */
-export const WALL_R = 9.6
+export const WALL_R = 13.0
 export const OBSTACLES: [number, number, number][] = [
   [0, 0, CONSOLE_R],
   ...ZONES.map((z): [number, number, number] => [z.pos[0], z.pos[2], 1.35]),
-  [2.6, 1.5, 0.7],
-  [-2.6, 1.5, 0.7],
-  ...[-1, 1].flatMap((side) => [0.62, 0.8].map((f): [number, number, number] => [Math.sin(side * Math.PI * f) * 8.6, Math.cos(side * Math.PI * f) * 8.6, 0.55])),
 ]
 
-/** Is a floor point on the raised island (its hex deck)? */
+/** The raised stone stage in the middle of the lair. */
+export const STAGE_R = 8.1
+
+/** Is a floor point up on the stage? */
 export function onIsland(x: number, z: number) {
-  const ap = 8.1 * Math.cos(Math.PI / 6)
-  for (let k = 0; k < 3; k++) {
-    const a = Math.PI / 6 + (k * Math.PI) / 3
-    if (Math.abs(x * Math.cos(a) + z * Math.sin(a)) > ap) return false
-  }
-  return true
+  return Math.hypot(x, z) < STAGE_R
 }
+
+/**
+ * Where the moon is, seen from the lair: 17° up, a little right of straight
+ * out of the window. The baked moonlight (lair.py) and the live sky, sea
+ * and shadows all use it.
+ */
+export const MOON_DIR = new THREE.Vector3(0.231, 0.292, -0.928).normalize()

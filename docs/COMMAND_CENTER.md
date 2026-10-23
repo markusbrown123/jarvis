@@ -50,8 +50,10 @@ code — no downloaded models — where every light and moving part is live stat
   filled in.
 - **Connections** from the console to each zone flow, pulse, break or flash
   with what is really happening; packets travel them as events land.
-- **Two arms** swing to the zone that just sent or received work and dock when idle.
-- **Racks** blink with activity; the **back screen** shows the latest studio render.
+- **The room** is a lair cut into a sea cliff: rock walls and vault, polished
+  stone floor, and a wall of glass over the sea at blue hour — modelled in
+  Blender with its light ray-traced in Cycles (`tools/blender/lair.py`), the
+  sky and sea drawn live with the moon glittering on the water.
 - **Panels** over the room: Business & money (each figure with its source and
   age), Terminal (filters incl. Errors; narrows to the selection), Needs
   Markus, Running, and a detail panel for whatever is selected.

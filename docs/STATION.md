@@ -14,7 +14,7 @@ comparing one hub snapshot with the next — never from a timer.
 
 | Control | What it does |
 |---|---|
-| **Walk** mode (`F`) | On foot, first person. `W A S D` / arrows to move, `Shift` to run, the mouse to look (click the room to capture it, `Esc` lets go — or just drag). You can't walk through the console, pads, arms or pillars; the room closes round you with its front wall, windows and ceiling. `E` sits you at the console when you're facing it, or opens the zone you're facing. Talking works as usual. While walking, W A S D and E are taken for walking before the app's own shortcuts (D diagnostics, E panels). |
+| **Walk** mode (`F`) | On foot, first person. `W A S D` / arrows to move, `Shift` to run, the mouse to look (click the room to capture it, `Esc` lets go — or just drag). You can't walk through the console, pads or pillars; the room closes round you with its front wall, windows and ceiling. `E` sits you at the console when you're facing it, or opens the zone you're facing. Talking works as usual. While walking, W A S D and E are taken for walking before the app's own shortcuts (D diagnostics, E panels). |
 | **Talk** mode (`J`, the default) | Sat at the centre console, camera just behind the chair, looking out over the desk and its monitors to the room — with a shallow depth of field on High and Ultra: the full conversation on the left with a line to type to him, his current state (and the tool he's using), and what's waiting on you, if anything. The room stays quiet: names only, no panels. |
 | **Command** mode | Panels, zone labels, tooltips, detail panel. For working. |
 | **Cinematic** mode (`C`) | Panels away; camera pulls back and drifts round the station; names only on the zones; a caption strip with every system's live state and each event as it lands. Same data, so it never becomes a screensaver. |
@@ -30,7 +30,10 @@ comparing one hub snapshot with the next — never from a timer.
 
 | Element | Source | Changes when | Means | Click / hover | When unavailable |
 |---|---|---|---|---|---|
-| **Floor and deck light** (hex seams, circuit traces, scan) | Static pattern, plus each zone's state | A zone's state or events change | Pools of light round each zone: brighter when active, steady when it needs you, a red-orange pulse when it's in error; a ripple from the zone when an event lands there; a red flash when something fails there | — | The zone's pool goes dark |
+| **The lair** (rock walls and vault, polished stone floor and stage, a 130° wall of glass) | Modelled and lit in Blender (`tools/blender/lair.py`): a 4K detail map and a Cycles lightmap per surface — moonlight through the window with the mullions' shadows, the blue-hour sky, warm vault coves, uplights grazing the rock — bounced and denoised | — | The room itself; the stone also mirrors the window, sky and holograms live on High and Ultra. In Command the front rock and vault are cut away to look in from above | — | If its files are missing the rest of the station still draws and JARVIS says why |
+| **Outside** (sea, sky, moon, coast) | Drawn in shaders (`outside.tsx`) | Every frame | Blue hour over the sea: the last sunset glow, stars, the moon where the baked moonlight comes from, its path glittering on per-pixel waves, coast lights across the bay | — | — |
+| Vault halo over the console, line of light round the stage | JARVIS's state | Every frame | His colour, brightening with his voice | — | — |
+| **Zone light on the stage** | Each zone's state and events | A zone's state or events change | Pools of light round each zone: brighter when active, steady when it needs you, a red-orange pulse when it's in error; a ripple from the zone when an event lands there; a red flash when something fails there | — | The zone's pool goes dark |
 | **Centre console** (platform, command desk, chair) | Modelled in Blender, surfaces baked with Cycles (`tools/blender/console.py`) | — | Brushed steel, seamed panels, vented plinth and plated platform with ray-traced ambient occlusion; 4096 px textures on Ultra, 2048 on High, 1024 on Low | Walk up and press `E` to sit | — |
 | Console light strips (platform ring, back step, desk edges, monitor shelf, end panels, chair back) | JARVIS's voice phase (`useStore.phase`, `level`) | Every frame | His colour: standby blue, listening orange, thinking / working violet, speaking cyan — brightening with his voice; a light over the desk takes the same colour | — | Offline: dim |
 | Desk holo pads | Open Needs Markus items, jobs waiting on Markus | Hub update | Amber and pulsing while something needs your input; his colour otherwise | — | — |
@@ -41,9 +44,6 @@ comparing one hub snapshot with the next — never from a timer.
 | Desk monitor: **Zones** | Each zone's state and headline | Hub update | All six systems at a glance | — | "reading…" |
 | Desk monitor: **Work** | Jobs and open items | Hub update | Running / queued counts, the first four jobs (stale ones flagged), how many wait on you and the first | — | "Connecting…" |
 | Desk monitor: **Business** | Site probe, pipeline, leads, finance services, expense ledger, allowance | Hub update | One row each, only with real figures — "unavailable — reason" otherwise; "No broker connected — no positions or P&L" | — | As stated per row |
-| **Robot arms** (front left serves Needs, Core, Roblox; front right serves Automaton, Finance, Jobs) | Events and zone states | A transfer event, a zone going active, JARVIS thinking | Swing over to the zone that just sent or received work and light their stripe in its colour; tend the busiest active zone; work over the console's monitor shelf while he thinks; dock folded when nothing is happening | — | Docked |
-| Rack lights (back wall) | Terminal lines in the last minute | Every 0.1 s | Blink faster the more is happening | — | — |
-| Back screen | Latest studio ASSET render | New render | The newest picture from the Roblox studio | — | Hidden when there is none |
 
 ## Zones
 
@@ -90,11 +90,12 @@ selected or hovered.
 | `events.ts` | Snapshot diffs → one-shot events |
 | `stationStore.ts` | Selection, hover, mode, camera view, Connections View, events |
 | `layout.ts` | Where everything is; camera presets; pathway geometry |
-| `floor.tsx` | Procedural hex floor and island deck, zone light |
+| `lair.tsx` | The room: Blender model, detail maps and baked lightmaps, live mirror floor, glass |
+| `outside.tsx` | Sky, sea, moon, stars and coast, in shaders |
+| `floor.tsx` | Zone light on the stage; contact shadows |
 | `console.tsx` | The centre console: Blender model and baked textures, live lights, the four monitors |
 | `clusters.tsx` | The six zone structures |
 | `links.tsx` | Pathways, arcs, packets |
-| `parts.tsx` | Arms, racks, room, back screen |
 | `camera.tsx` | Orbit controls, flights, cinematic drift |
 | `walk.tsx` | Walk mode: first-person movement, collisions, E to use |
 | `labels.tsx` | Zone/link labels with collision avoidance (never over the console), tooltip |
