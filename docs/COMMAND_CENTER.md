@@ -54,10 +54,13 @@ code — no downloaded models — where every light and moving part is live stat
   is a tower rising floor by floor as it reports its steps, with a crane
   lowering the next floor; queued jobs are empty plots, finished ones stand
   lit, failed ones fall in.
-- **Drones** fly the station's real deliveries — work out to a zone, a
-  finished job to the build bay, new leads in from outside through the open
-  glass — and hover over zones that are busy or need you; their docks rise
-  out of the floor to launch them. The floor plates round the console lift
+- **Drones** — 5-inch FPV quads and tiny whoops, modelled in Blender
+  (`tools/blender/fpv.py`) and flown like FPV drones — fly the station's
+  real deliveries (work out to a zone, a finished job to the build bay, new
+  leads in from outside through the open glass), carry data from a zone to
+  the console when its live data changes, hover over zones that are busy or
+  need you, and circle the console while JARVIS works. Their docks rise out
+  of the floor to launch them. At the desk, nothing flies across the view. The floor plates round the console lift
   in a wave while JARVIS listens or speaks.
 - **The house** is a round glass pavilion on a sea cliff, Malibu-style:
   travertine floors round a black marble stage, concrete behind, a curved
@@ -65,7 +68,13 @@ code — no downloaded models — where every light and moving part is live stat
   Blender with its light ray-traced in Cycles (`tools/blender/lair.py`).
   Outside is the real sky for this moment where you are: the sun and moon
   where they really are, sunsets, stars, and the actual weather (clouds,
-  rain on the glass, storms), over a live sea with boats and jet skis.
+  rain on the glass, storms), over a live sea with boats and jet skis, in a
+  bay of sandstone cliffs and chaparral hills with houses and the coast road.
+
+Each time it opens, the station plays an **opening flight**, like a game's
+loading screen: letterboxed, with the place, time and weather, it holds over
+the sea while the house loads, then flies in over the waves, through the open
+glass and round the room to the desk. Any key or a click skips it.
 - **Panels** over the room: Business & money (each figure with its source and
   age), Terminal (filters incl. Errors; narrows to the selection), Needs
   Markus, Running, and a detail panel for whatever is selected.

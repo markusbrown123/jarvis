@@ -6,6 +6,9 @@ import { Boats } from './boats'
 import { MAX_BOATS, WAKES } from './wakes'
 import { HOUSE } from './layout'
 import { ATMOSPHERE_GLSL, SKY, SKY_COMMON, SKY_STATE, skyMaterial } from './sky'
+import { Coast } from './coast'
+import { SHORE_GLSL } from './coastland'
+import type { Graphics } from '../hub/client'
 
 /**
  * What's outside the glass: the real sky over the sea, for this moment.
@@ -20,8 +23,7 @@ import { ATMOSPHERE_GLSL, SKY, SKY_COMMON, SKY_STATE, skyMaterial } from './sky'
  * The sea far below works out its own waves per pixel and reflects that
  * sky and those clouds: the sun's glitter path by day, the moon's by night,
  * surf breaking white round the foot of the cliffs, boats' wakes and their
- * lights after dark (boats.tsx). Distant headlands fade into the haze, and
- * the towns along them light up at dusk.
+ * lights after dark (boats.tsx). The land round the bay is coast.tsx.
  */
 
 const lutVert = /* glsl */ `
@@ -62,6 +64,7 @@ void main() {
 
 const seaFrag = /* glsl */ `
 ${SKY_COMMON}
+${SHORE_GLSL}
 #define BOATS ${MAX_BOATS}
 uniform float uWaves;
 uniform vec4 uBoats[BOATS];
@@ -137,8 +140,8 @@ void main() {
     foam += ((trail * (0.55 + 0.7 * n) + arms * 0.5 * n) * decay + bow * 0.6) * k;
     s += vec2(-f.y, f.x) * sign(side) * arms * 0.08 * decay * k;
   }
-  // Surf round the foot of the cliffs.
-  float shore = length(vWorld.xz) - cliffFoot(vWorld.xz);
+  // Surf round the foot of the cliffs, and up the beaches along the bay.
+  float shore = min(length(vWorld.xz) - cliffFoot(vWorld.xz), -coastShore(vWorld.xz) - 1.0);
   float surge = 0.55 + 0.45 * sin(shore * 1.1 - uTime * 1.4 + vnoise(vWorld.xz * 0.15) * 5.0);
   foam += exp(-max(shore + 3.0, 0.0) / 4.0) * surge * (0.5 + 0.6 * vnoise(vWorld.xz * 0.6 + uTime * 0.25)) * step(-6.0, shore);
 
@@ -153,7 +156,9 @@ void main() {
   float shade = 1.0 - 0.75 * cloudShadow(vWorld);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   vec4 cr = clouds(R, 3);
-  vec3 refl = mix(skyLut(R), cr.rgb, cr.a * 0.65);
+  // (Clouds low over the horizon smear out in the reflection rather than
+  // breaking into speckles.)
+  vec3 refl = mix(skyLut(R), cr.rgb, cr.a * 0.65 * smoothstep(0.02, 0.16, R.y));
   // The water itself: dark blue-green, lit by the sky; greener in the
   // shallows by the rocks, and through the backs of waves facing the sun.
   vec3 skyUp = skyLut(vec3(0.0, 1.0, 0.0));
@@ -183,54 +188,6 @@ void main() {
   c += vec3(0.6, 0.65, 0.85) * uFlash * 0.12;
   gl_FragColor = vec4(c, 1.0);
 }`
-
-const hillFrag = /* glsl */ `
-${SKY_COMMON}
-varying vec3 vWorld;
-void main() {
-  vec3 d = normalize(vWorld - cameraPosition);
-  vec3 skyUp = skyLut(vec3(0.0, 1.0, 0.0));
-  float shade = 0.7 + 0.3 * vnoise(vWorld.xz * 0.02 + vWorld.y * 0.05);
-  vec3 land = vec3(0.05, 0.06, 0.045) * shade * (skyUp * 1.3 + uSunColor * 0.25 * max(uSun.y, 0.0));
-  vec3 haze = skyLut(normalize(vec3(d.x, 0.02, d.z)));
-  gl_FragColor = vec4(mix(land, haze, 0.62), 1.0);
-}`
-
-function hillsGeometry(a0: number, a1: number, r: number, height: number, seed: number) {
-  const n = 128
-  const pos: number[] = []
-  const idx: number[] = []
-  for (let i = 0; i <= n; i++) {
-    const a = a0 + ((a1 - a0) * i) / n
-    const t = i / n
-    const env = Math.sin(t * Math.PI) ** 0.6
-    const h = height * env * (0.6 + 0.25 * Math.sin(a * 23 + seed) + 0.15 * Math.sin(a * 61 + seed * 2))
-    pos.push(Math.sin(a) * r, HOUSE.sea - 2, -Math.cos(a) * r, Math.sin(a) * r, HOUSE.sea + h, -Math.cos(a) * r)
-    if (i < n) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2)
-  }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  g.setIndex(idx)
-  return g
-}
-
-function coastLights(a0: number, a1: number, r: number, count: number, seed: number) {
-  const pos: number[] = []
-  const col: number[] = []
-  let s = seed
-  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647
-  for (let i = 0; i < count; i++) {
-    const a = a0 + (a1 - a0) * rnd()
-    const rr = r - 6 - rnd() * 22
-    pos.push(Math.sin(a) * rr, HOUSE.sea + 0.4 + rnd() * 5 * Math.sin(((a - a0) / (a1 - a0)) * Math.PI), -Math.cos(a) * rr)
-    const warm = rnd() > 0.25
-    col.push(...(warm ? [1.0, 0.72, 0.42] : [0.75, 0.85, 1.0]).map((v) => v * (0.8 + rnd() * 1.6)))
-  }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
-  return g
-}
 
 /**
  * The sky table: the atmosphere's colour in every direction, recomputed
@@ -265,25 +222,14 @@ function SkyTable() {
   return null
 }
 
-export function Outside() {
+export function Outside({ graphics }: { graphics: Graphics }) {
   const sky = useMemo(() => skyMaterial(true), [])
   const uniforms = useMemo(() => ({ ...SKY, ...WAKES, uWaves: { value: 1 } }), [])
   const sea = useMemo(() => new THREE.ShaderMaterial({ vertexShader: seaVert, fragmentShader: seaFrag, uniforms }), [uniforms])
-  const land = useMemo(() => new THREE.ShaderMaterial({ vertexShader: seaVert, fragmentShader: hillFrag, uniforms: SKY }), [])
-  const dots = useMemo(() => new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, toneMapped: false, transparent: true, depthWrite: false, opacity: 0 }), [])
-  const coasts = useMemo(
-    () => [
-      { hills: hillsGeometry(-2.3, -0.55, 850, 38, 1), lights: coastLights(-2.2, -0.65, 850, 420, 7) },
-      { hills: hillsGeometry(0.75, 1.9, 1050, 30, 4), lights: coastLights(0.85, 1.8, 1050, 260, 13) },
-    ],
-    [],
-  )
   useFrame((st) => {
     const still = useHub.getState().prefs.reducedMotion
     SKY.uTime.value = st.clock.elapsedTime
     uniforms.uWaves.value = still ? 0 : 1
-    // The towns light up as it gets dark.
-    dots.opacity = Math.min(1, Math.max(0, (SKY.uExposure.value - 1.5) / 4))
   })
   return (
     <group>
@@ -294,12 +240,7 @@ export function Outside() {
       <mesh material={sea} rotation-x={-Math.PI / 2} position-y={HOUSE.sea} renderOrder={-9}>
         <planeGeometry args={[4400, 4400, 1, 1]} />
       </mesh>
-      {coasts.map((c, i) => (
-        <group key={i}>
-          <mesh geometry={c.hills} material={land} />
-          <points geometry={c.lights} material={dots} />
-        </group>
-      ))}
+      <Coast graphics={graphics} />
       <Boats />
     </group>
   )

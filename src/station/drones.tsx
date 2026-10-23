@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
 import { DECK_TOP, FOUNDRY, STATUS, ZONE, ZONES, type ZoneId } from './layout'
@@ -8,17 +9,16 @@ import { reactorState } from './shared'
 import { useStation, type StationEvent } from './stationStore'
 
 /**
- * JARVIS's drones: six hover-drones that do the station's fetching and
- * carrying, the way the workshop's robots do in the films — and only when
- * there's real work, so when they fly it means something.
+ * JARVIS's drones: a squad of FPV quads and tiny whoops (modelled in
+ * Blender, tools/blender/fpv.py) that fly the station's real work — so
+ * when they fly it means something.
  *
- * They live in a row of docks in the floor behind the build bay. A dock's
- * pedestal rises out of the floor to launch its drone, its vents slide open
- * and its ring turns amber; it waits raised while the drone is out and
- * sinks back with it when it lands, ring green while it charges.
- *
- * Every live event becomes a delivery, a glowing crate in the colour of
- * what's being carried:
+ * The six 5-inch quads live in docks in the floor behind the build bay. A
+ * dock's pedestal rises out of the floor to launch its quad, its vents
+ * slide open and its ring turns amber; it waits raised while the quad is
+ * out and sinks back with it when it lands, ring green while it charges.
+ * Every live event is a delivery, a glowing packet in the colour of what's
+ * being carried:
  * - work handed out (assign): from the console out to the zone
  * - a job finished (complete): from its zone to the build bay
  * - something new needs Markus (need): from its project to Needs Markus
@@ -26,26 +26,40 @@ import { useStation, type StationEvent } from './stationStore'
  *   back over the terrace — to Automaton
  * - the Roblox queue moved (studio): from the build bay to Roblox
  * - a voice turn (voice): from the console to Jarvis Core
- * - a failure (fail): a drone flies over and holds a red scan on the zone
+ * - a failure (fail): a quad flies over and holds a red scan on the zone
  * Between deliveries, zones that are busy, need Markus or are in error get
- * a drone hovering over them, scanning in the zone's colour (amber, red).
- * With nothing happening they stay docked.
+ * a quad hovering over them, scanning in the zone's colour (amber, red).
+ *
+ * The three tiny whoops perch on the build bay's rim and carry data: when
+ * a zone's live data changes they zip from it to the console, trailing its
+ * colour; while JARVIS is thinking or working they circle high over the
+ * console. They fly like FPV drones — nose down into speed, banked hard
+ * into turns, the odd roll on a long straight.
+ *
+ * Sat at the desk in Talk mode, nothing flies through the view: anything
+ * passing over the desk and its monitors goes up near the ceiling, above
+ * the picture.
  */
 
-const N = 6
+type V3 = THREE.Vector3
+const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
+const G = 9.81
+
 const DOCK_R = 7.25
 const DOCK_DEG = [-27, -16, -5, 5, 16, 27]
 const LIFT = 0.26
-const SPEED = 3.2
-type V3 = THREE.Vector3
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
-
 const DOCKS = DOCK_DEG.map((d) => {
   const a = (d * Math.PI) / 180
   return V(DOCK_R * Math.sin(a), DECK_TOP, -DOCK_R * Math.cos(a))
 })
-/** Where a drone sits on its dock's pedestal (lift 0..1). */
-const seat = (i: number, lift: number) => V(DOCKS[i].x, DECK_TOP + 0.045 + lift * LIFT + 0.115, DOCKS[i].z)
+/** The top of a dock's pedestal (lift 0..1), where its quad sits. */
+const padTop = (i: number, lift: number) => V(DOCKS[i].x, DECK_TOP + 0.05 + lift * LIFT, DOCKS[i].z)
+/** Where the whoops sit, on their pads on the build bay's rim. */
+const TABLE_TOP = FOUNDRY[1] + 0.85
+const PERCHES = [200, 225, 248].map((deg) => {
+  const a = (deg * Math.PI) / 180
+  return V(FOUNDRY[0] + Math.sin(a) * 0.97, TABLE_TOP + 0.012 + 0.025, FOUNDRY[2] - Math.cos(a) * 0.97)
+})
 
 const CONSOLE_DROP = V(0, 2.45, 0.35)
 const BAY_DROP = V(FOUNDRY[0], 3.0, FOUNDRY[2] + 1.0)
@@ -62,8 +76,11 @@ const zoneHover = (z: ZoneId) => V(ZONE[z].pos[0], 2.4, ZONE[z].pos[2])
 // ---------------------------------------------------------------- flight plans
 
 type Leg =
-  | { kind: 'move'; a: V3; b: V3; c: V3; d: V3; dur: number }
+  | { kind: 'move'; a: V3; b: V3; c: V3; d: V3; dur: number; flip?: boolean }
   | { kind: 'hold'; at: V3; dur: number; act?: 'pick' | 'drop' | 'launch' | 'land'; beam?: THREE.Color; until?: () => boolean }
+  | { kind: 'orbit'; center: V3; r: number; dur: number; until: () => boolean }
+  // Back home from wherever the leg before it ended.
+  | { kind: 'home' }
 
 function bez(l: Extract<Leg, { kind: 'move' }>, t: number, out: V3) {
   const u = 1 - t
@@ -76,191 +93,165 @@ function bez(l: Extract<Leg, { kind: 'move' }>, t: number, out: V3) {
 }
 
 /** Up to cruise height, across, and down: clear of the console and the crane. */
-function hop(from: V3, to: V3, cruise: number): Leg {
+function hop(from: V3, to: V3, cruise: number, speed: number, flips = false): Leg {
   const hiA = V(from.x, Math.max(from.y, cruise), from.z)
   const hiB = V(to.x, Math.max(to.y, cruise), to.z)
   const b = hiA.clone().lerp(hiB, 0.22)
   const c = hiB.clone().lerp(hiA, 0.22)
   const len = from.distanceTo(b) + b.distanceTo(c) + c.distanceTo(to)
-  return { kind: 'move', a: from.clone(), b, c, d: to.clone(), dur: Math.max(1.2, len / SPEED) }
+  const dur = Math.max(1.0, len / speed)
+  return { kind: 'move', a: from.clone(), b, c, d: to.clone(), dur, flip: flips && dur > 2.2 && Math.random() < 0.4 }
 }
 
-function straight(from: V3, to: V3, speed = SPEED * 0.6): Leg {
-  return { kind: 'move', a: from.clone(), b: from.clone().lerp(to, 1 / 3), c: from.clone().lerp(to, 2 / 3), d: to.clone(), dur: Math.max(0.7, from.distanceTo(to) / speed) }
+function straight(from: V3, to: V3, speed: number): Leg {
+  return { kind: 'move', a: from.clone(), b: from.clone().lerp(to, 1 / 3), c: from.clone().lerp(to, 2 / 3), d: to.clone(), dur: Math.max(0.5, from.distanceTo(to) / speed) }
 }
 
+type Kind = 'quad' | 'whoop'
 type Drone = {
   i: number
+  kind: Kind
   legs: Leg[]
   t: number
   pos: V3
+  prev: V3
   vel: V3
-  yaw: number
-  pitch: number
-  roll: number
+  acc: V3
+  heading: number
+  quat: THREE.Quaternion
   cargo: THREE.Color | null
   lift: number
   spin: number
   beam: THREE.Color | null
   cruise: number
-  /** What it's doing: docked, flying a delivery, or tending a zone. */
-  job: 'docked' | 'delivery' | 'tend'
+  speed: number
+  job: 'home' | 'delivery' | 'tend' | 'data' | 'swarm'
   tend: ZoneId | null
 }
 
-type Mission = { kind: StationEvent['kind']; zone: ZoneId; at: number; color: THREE.Color }
+type Mission = { kind: StationEvent['kind'] | 'data'; zone: ZoneId; at: number; color: THREE.Color }
 
-const atDock = (d: Drone) => d.job === 'docked' && d.legs.length === 0
+const homeSpot = (d: Drone, lift = d.lift) => (d.kind === 'quad' ? padTop(d.i, lift) : PERCHES[d.i - 6].clone())
+const atHome = (d: Drone) => d.job === 'home' && d.legs.length === 0
 
-/** Out of the dock (if it's in it) to wherever the drone is going next. */
+/** Out of the dock or off the perch, if it's there, to wherever it's going next. */
 function departure(d: Drone): { legs: Leg[]; from: V3 } {
-  if (!atDock(d)) return { legs: [], from: d.pos.clone() }
-  const top = seat(d.i, 1)
-  const up = top.clone().setY(top.y + 1.2)
-  return { legs: [{ kind: 'hold', at: top, dur: 1.0, act: 'launch' }, straight(top, up)], from: up }
+  if (!atHome(d)) return { legs: [], from: d.pos.clone() }
+  const spot = homeSpot(d, 1)
+  const up = spot.clone().setY(spot.y + (d.kind === 'quad' ? 1.2 : 0.7))
+  return { legs: [{ kind: 'hold', at: spot, dur: d.kind === 'quad' ? 1.0 : 0.45, act: 'launch' }, straight(spot, up, d.speed * 0.5)], from: up }
 }
 
 function homeward(d: Drone, from: V3): Leg[] {
-  const top = seat(d.i, 1)
-  const above = top.clone().setY(top.y + 1.3)
-  return [hop(from, above, d.cruise), straight(above, top, 1.1), { kind: 'hold', at: top, dur: 1.0, act: 'land' }]
+  const spot = homeSpot(d, 1)
+  const above = spot.clone().setY(spot.y + (d.kind === 'quad' ? 1.3 : 0.8))
+  return [hop(from, above, d.cruise, d.speed), straight(above, spot, d.speed * 0.3), { kind: 'hold', at: spot, dur: d.kind === 'quad' ? 1.0 : 0.3, act: 'land' }]
 }
 
 function deliver(d: Drone, A: V3, B: V3, outside: boolean): Leg[] {
   const { legs, from } = departure(d)
   const hiA = A.clone().setY(A.y + 0.7)
   const hiB = B.clone().setY(B.y + 0.7)
+  const s = d.speed
   if (outside) {
     // Out through the open glass, over the terrace, and back in.
-    legs.push(hop(from, DOOR_IN, d.cruise), straight(DOOR_IN, DOOR_OUT, SPEED), straight(DOOR_OUT, A, SPEED))
-    legs.push({ kind: 'hold', at: A, dur: 0.7, act: 'pick' }, straight(A, DOOR_OUT, SPEED), straight(DOOR_OUT, DOOR_IN, SPEED), hop(DOOR_IN, hiB, d.cruise))
+    legs.push(hop(from, DOOR_IN, d.cruise, s), straight(DOOR_IN, DOOR_OUT, s), straight(DOOR_OUT, A, s))
+    legs.push({ kind: 'hold', at: A, dur: 0.6, act: 'pick' }, straight(A, DOOR_OUT, s), straight(DOOR_OUT, DOOR_IN, s), hop(DOOR_IN, hiB, d.cruise, s))
   } else {
-    legs.push(hop(from, hiA, d.cruise), straight(hiA, A), { kind: 'hold', at: A, dur: 0.7, act: 'pick' }, straight(A, hiA), hop(hiA, hiB, d.cruise))
+    legs.push(hop(from, hiA, d.cruise, s, true), straight(hiA, A, s * 0.6), { kind: 'hold', at: A, dur: 0.6, act: 'pick' }, straight(A, hiA, s * 0.6), hop(hiA, hiB, d.cruise, s, true))
   }
-  legs.push(straight(hiB, B), { kind: 'hold', at: B, dur: 0.7, act: 'drop' }, straight(B, hiB))
-  return [...legs, ...homeward(d, hiB)]
+  legs.push(straight(hiB, B, s * 0.6), { kind: 'hold', at: B, dur: 0.6, act: 'drop' }, straight(B, hiB, s * 0.6), { kind: 'home' })
+  return legs
 }
 
 function scan(d: Drone, z: ZoneId, color: THREE.Color, until: () => boolean, maxSec: number): Leg[] {
   const { legs, from } = departure(d)
   const over = zoneHover(z)
-  legs.push(hop(from, over, d.cruise), { kind: 'hold', at: over, dur: maxSec, beam: color, until })
-  return [...legs, ...homeward(d, over)]
+  legs.push(hop(from, over, d.cruise, d.speed), { kind: 'hold', at: over, dur: maxSec, beam: color, until }, { kind: 'home' })
+  return legs
 }
 
-// ---------------------------------------------------------------- the drone
-
-function useDroneParts() {
-  return useMemo(() => {
-    const shell = plated({ color: '#e9edf2', repeat: 0.6, roughness: 0.75, metalness: 0.35, normal: 0.5 })
-    const frame = plated({ color: '#3a414d', repeat: 1.5, roughness: 1, metalness: 1 })
-    const glassMat = new THREE.MeshStandardMaterial({ color: '#05070b', roughness: 0.05, metalness: 0.9 })
-    const blade = new THREE.MeshStandardMaterial({ color: '#15181e', roughness: 0.4, metalness: 0.6 })
-    const ducts: [number, number][] = [
-      [-0.25, -0.2],
-      [0.25, -0.2],
-      [-0.25, 0.2],
-      [0.25, 0.2],
-    ]
-    return {
-      shell,
-      frame,
-      glassMat,
-      blade,
-      ducts,
-      body: new THREE.SphereGeometry(1, 32, 16),
-      arm: new THREE.BoxGeometry(0.035, 0.022, 1),
-      duct: new THREE.TorusGeometry(0.1, 0.016, 10, 36),
-      rotor: new THREE.BoxGeometry(0.18, 0.004, 0.024),
-      disc: new THREE.CircleGeometry(0.095, 24),
-      glow: new THREE.CircleGeometry(0.055, 18),
-      skid: new THREE.BoxGeometry(0.014, 0.014, 0.34),
-      strut: new THREE.BoxGeometry(0.012, 0.08, 0.012),
-      claw: new THREE.BoxGeometry(0.02, 0.07, 0.05),
-      crate: new THREE.BoxGeometry(0.17, 0.17, 0.17),
-      crateEdges: new THREE.EdgesGeometry(new THREE.BoxGeometry(0.17, 0.17, 0.17)),
-      eye: new THREE.SphereGeometry(0.028, 16, 10),
-      led: new THREE.SphereGeometry(0.012, 8, 6),
-      strip: new THREE.TorusGeometry(1, 0.012, 6, 48),
-      beam: new THREE.ConeGeometry(0.75, 2.0, 32, 1, true).translate(0, -1.0, 0),
-    }
-  }, [])
+function swarm(d: Drone, until: () => boolean): Leg[] {
+  const { legs, from } = departure(d)
+  const r = 2.4 + (d.i % 3) * 0.35
+  const center = V(0, 3.85 + (d.i % 3) * 0.12, -0.4)
+  legs.push(hop(from, V(center.x + r, center.y, center.z), d.cruise, d.speed), { kind: 'orbit', center, r, dur: 600, until }, { kind: 'home' })
+  return legs
 }
 
-type Parts = ReturnType<typeof useDroneParts>
-
-function DroneModel({ parts, refs }: { parts: Parts; refs: DroneRefs }) {
-  const p = parts
-  return (
-    <group ref={refs.root}>
-      <group ref={refs.tilt}>
-        {/* Body: a white shell over a dark frame, a glass canopy, JARVIS's eye. */}
-        <mesh geometry={p.body} material={p.shell} scale={[0.17, 0.07, 0.25]} castShadow />
-        <mesh geometry={p.body} material={p.glassMat} scale={[0.09, 0.045, 0.13]} position={[0, 0.045, -0.06]} />
-        <mesh geometry={p.body} material={p.frame} scale={[0.13, 0.05, 0.2]} position-y={-0.03} />
-        <mesh ref={refs.eye} geometry={p.eye} material={refs.eyeMat} position={[0, 0.0, -0.245]} />
-        <mesh geometry={p.strip} material={refs.stripMat} scale={[0.172, 0.172, 0.252]} rotation-x={Math.PI / 2} />
-        {p.ducts.map(([x, z], k) => (
-          <group key={k} position={[x, 0.01, z]}>
-            <mesh geometry={p.arm} material={p.frame} position={[-x / 2, -0.005, -z / 2]} scale={[1, 1, Math.hypot(x, z)]} rotation-y={Math.atan2(x, z)} />
-            <mesh geometry={p.duct} material={p.frame} rotation-x={Math.PI / 2} castShadow />
-            <group ref={(g) => void (refs.rotors.current[k] = g)}>
-              <mesh geometry={p.rotor} material={p.blade} />
-              <mesh geometry={p.rotor} material={p.blade} rotation-y={Math.PI / 2} />
-            </group>
-            <mesh geometry={p.disc} material={refs.blurMat} rotation-x={-Math.PI / 2} position-y={0.003} />
-            <mesh geometry={p.glow} material={refs.thrustMat} rotation-x={Math.PI / 2} position-y={-0.02} />
-            <mesh geometry={p.led} material={x < 0 ? refs.portMat : refs.starMat} position={[x * 1.45, 0, z * 1.2]} />
-          </group>
-        ))}
-        {/* Landing skids and the cargo claw. */}
-        {[-0.09, 0.09].map((x) => (
-          <group key={x}>
-            <mesh geometry={p.skid} material={p.frame} position={[x, -0.105, 0]} />
-            <mesh geometry={p.strut} material={p.frame} position={[x, -0.07, -0.1]} />
-            <mesh geometry={p.strut} material={p.frame} position={[x, -0.07, 0.1]} />
-            <mesh geometry={p.claw} material={p.frame} position={[x * 1.0, -0.1, 0]} />
-          </group>
-        ))}
-        <group ref={refs.crate} position-y={-0.2} visible={false}>
-          <mesh geometry={p.crate} material={refs.crateMat} />
-          <lineSegments geometry={p.crateEdges} material={refs.crateLine} />
-        </group>
-        <mesh ref={refs.beam} geometry={p.beam} material={refs.beamMat} position-y={-0.08} visible={false} />
-      </group>
-    </group>
-  )
+/**
+ * Sat at the desk, the view over the desk and its monitors stays clear:
+ * anything flying through it is lifted to the ceiling, above the picture,
+ * easing in and out at the edges.
+ */
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+function keepClear(p: V3) {
+  const w = (1 - smooth(2.6, 3.8, Math.abs(p.x))) * smooth(-4.4, -3.2, p.z) * (1 - smooth(5.6, 6.8, p.z))
+  if (w > 0) p.y += (Math.max(p.y, 4.05) - p.y) * w
 }
 
-type DroneRefs = ReturnType<typeof useDroneRefs>
-function useDroneRefs() {
-  const root = useRef<THREE.Group>(null)
-  const tilt = useRef<THREE.Group>(null)
-  const eye = useRef<THREE.Mesh>(null)
-  const crate = useRef<THREE.Group>(null)
-  const beam = useRef<THREE.Mesh>(null)
-  const rotors = useRef<(THREE.Group | null)[]>([])
-  const mats = useMemo(() => {
-    const glow = (c: string, o = 1) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false, transparent: o < 1, opacity: o, depthWrite: o >= 1 })
-    return {
-      eyeMat: glow('#7c8bff'),
-      stripMat: glow('#7c8bff'),
-      portMat: glow('#ff3b30'),
-      starMat: glow('#2bd96b'),
-      blurMat: new THREE.MeshBasicMaterial({ color: '#cfd6e2', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
-      thrustMat: new THREE.MeshBasicMaterial({ color: '#9fe8ff', transparent: true, opacity: 0, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
-      crateMat: new THREE.MeshBasicMaterial({ color: '#7c8bff', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
-      crateLine: new THREE.LineBasicMaterial({ color: '#7c8bff', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, toneMapped: false }),
-      beamMat: new THREE.MeshBasicMaterial({ color: '#7c8bff', transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
-    }
-  }, [])
-  return { root, tilt, eye, crate, beam, rotors, ...mats }
-}
+// ---------------------------------------------------------------- the models
 
-function DroneSlot({ parts, refsOut }: { parts: Parts; refsOut: (r: DroneRefs) => void }) {
-  const refs = useDroneRefs()
-  refsOut(refs)
-  return <DroneModel parts={parts} refs={refs} />
+const TRAIL = 40
+const PROP_COLORS = ['#3aa0ff', '#ff5a3c', '#36e0a0', '#ffc23a', '#c46bff', '#e8edf5', '#ff3fa4', '#3af0ff', '#ffe95a']
+
+/**
+ * One drone's scene objects: its own copy of the model (shared geometry,
+ * its own LEDs and props), a blur disc over each prop, the packet it
+ * carries, its scan beam, and its light trail (in world space).
+ */
+function build(nodes: Record<string, THREE.Object3D>, kind: Kind, propColor: string) {
+  const quad = kind === 'quad'
+  const scale = quad ? 1.6 : 2.1
+  const led = new THREE.MeshStandardMaterial({ color: '#05060a', emissive: new THREE.Color('#7c8bff'), emissiveIntensity: 3, roughness: 0.4 })
+  const prop = new THREE.MeshStandardMaterial({ color: propColor, roughness: 0.25, transparent: true, opacity: 0.9 })
+  const blur = new THREE.MeshBasicMaterial({ color: '#d8deea', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })
+  const copy = (o: THREE.Object3D) => {
+    const c = o.clone(true)
+    c.traverse((m) => {
+      const mesh = m as THREE.Mesh
+      if (!mesh.isMesh) return
+      const name = (mesh.material as THREE.Material).name
+      if (name === 'prop') mesh.material = prop
+      else if (name === 'led') mesh.material = led
+      mesh.castShadow = true
+    })
+    return c
+  }
+  const pre = quad ? 'quad' : 'whoop'
+  const model = new THREE.Group()
+  model.scale.setScalar(scale)
+  model.add(copy(nodes[`${pre}_body`]), copy(nodes[`${pre}_led`]))
+  // Prop discs at the props' height (fpv.py), the size of the props.
+  const disc = new THREE.CircleGeometry(quad ? 0.067 : 0.0162, 32).rotateX(-Math.PI / 2)
+  const rotors = ['fl', 'fr', 'rl', 'rr'].map((k) => {
+    const r = copy(nodes[`${pre}_rotor_${k}`])
+    const d = new THREE.Mesh(disc, blur)
+    d.position.set(r.position.x, quad ? 0.029 : 0.0098, r.position.z)
+    model.add(r, d)
+    return r
+  })
+  const packetMat = new THREE.MeshBasicMaterial({ color: '#7c8bff', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+  const packet = new THREE.Mesh(new THREE.OctahedronGeometry(quad ? 0.06 : 0.03, 0), packetMat)
+  packet.position.y = quad ? -0.07 : -0.05
+  packet.visible = false
+  const tilt = new THREE.Group()
+  tilt.add(model, packet)
+  const beamMat = new THREE.MeshBasicMaterial({ color: '#7c8bff', transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(0.75, 2.0, 32, 1, true), beamMat)
+  beam.visible = false
+  const root = new THREE.Group()
+  root.add(tilt, beam)
+  const trailGeo = new THREE.BufferGeometry()
+  trailGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(TRAIL * 3), 3))
+  trailGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(TRAIL * 3), 3))
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }))
+  trail.frustumCulled = false
+  const hist = Array.from({ length: TRAIL }, () => V(0, 0, 0))
+  return { root, tilt, rotors, led, prop, blur, packet, packetMat, beam, beamMat, trail, hist }
 }
 
 // ---------------------------------------------------------------- the docks
@@ -324,7 +315,7 @@ function Dock({ i, parts, state }: { i: number; parts: DockParts; state: { curre
       v.position.set(Math.cos(a) * r, 0.006 + L * 0.004, Math.sin(a) * r)
     })
     // Green while charging, amber while launching or out, breathing.
-    const out = d.job !== 'docked' || d.legs.length > 0
+    const out = !atHome(d)
     c.set(out ? STATUS.warn : STATUS.ok).multiplyScalar(out ? 1.2 + 0.8 * Math.sin(t * 6) : 0.9 + 0.4 * Math.sin(t * 1.5 + i))
     mats.status.color.copy(c)
     mats.shaft.color.copy(reactorState().color).multiplyScalar(L * 1.4)
@@ -349,6 +340,26 @@ function Dock({ i, parts, state }: { i: number; parts: DockParts; state: { curre
   )
 }
 
+/** The whoops' little charging pads on the build bay's rim. */
+function Perches() {
+  const mat = useMemo(() => plated({ color: '#7d8596', repeat: 0.3, roughness: 1, metalness: 1 }), [])
+  const ring = useMemo(() => new THREE.MeshBasicMaterial({ color: STATUS.ok, toneMapped: false }), [])
+  return (
+    <>
+      {PERCHES.map((p, k) => (
+        <group key={k} position={[p.x, TABLE_TOP, p.z]}>
+          <mesh material={mat} position-y={0.006} castShadow receiveShadow>
+            <cylinderGeometry args={[0.13, 0.14, 0.012, 32]} />
+          </mesh>
+          <mesh material={ring} rotation-x={-Math.PI / 2} position-y={0.0125}>
+            <ringGeometry args={[0.1, 0.11, 32]} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  )
+}
+
 // ---------------------------------------------------------------- the squad
 
 const KIND_FROM: Record<StationEvent['kind'], (z: ZoneId) => { A: V3; B: V3; outside?: boolean } | null> = {
@@ -361,41 +372,63 @@ const KIND_FROM: Record<StationEvent['kind'], (z: ZoneId) => { A: V3; B: V3; out
   fail: () => null,
 }
 
+/** What a zone's live data says now, to notice when it changes. */
+const signature = (m: NonNullable<ReturnType<typeof useStation.getState>['model']>, z: ZoneId) => {
+  const zm = m.zones[z]
+  return zm ? `${zm.state}|${zm.headline}|${zm.lines.join('|')}` : ''
+}
+
 export function Drones() {
-  const parts = useDroneParts()
+  const { nodes } = useGLTF('/station/fpv.glb', false) as unknown as { nodes: Record<string, THREE.Object3D> }
   const dockParts = useDockParts()
-  const refs = useRef<DroneRefs[]>([])
+  const kit = useMemo(() => Array.from({ length: 9 }, (_, i) => build(nodes, i < 6 ? 'quad' : 'whoop', PROP_COLORS[i])), [nodes])
   const drones = useRef<Drone[]>(
-    Array.from({ length: N }, (_, i) => ({
-      i,
-      legs: [],
-      t: 0,
-      pos: seat(i, 0),
-      vel: V(0, 0, 0),
-      yaw: Math.PI - ((DOCK_DEG[i] * Math.PI) / 180),
-      pitch: 0,
-      roll: 0,
-      cargo: null,
-      lift: 0,
-      spin: 0,
-      beam: null,
-      cruise: 3.45 + (i % 3) * 0.14,
-      job: 'docked',
-      tend: null,
-    })),
+    kit.map((_, i) => {
+      const kind: Kind = i < 6 ? 'quad' : 'whoop'
+      const d: Drone = {
+        i,
+        kind,
+        legs: [],
+        t: 0,
+        pos: V(0, 0, 0),
+        prev: V(0, 0, 0),
+        vel: V(0, 0, 0),
+        acc: V(0, 0, 0),
+        heading: kind === 'quad' ? Math.PI - (DOCK_DEG[i] * Math.PI) / 180 : Math.PI / 2,
+        quat: new THREE.Quaternion(),
+        cargo: null,
+        lift: 0,
+        spin: 0,
+        beam: null,
+        cruise: kind === 'quad' ? 3.45 + (i % 3) * 0.14 : 3.1 + (i % 3) * 0.12,
+        speed: kind === 'quad' ? 5.2 : 3.4,
+        job: 'home',
+        tend: null,
+      }
+      d.pos.copy(homeSpot(d, 0))
+      d.prev.copy(d.pos)
+      return d
+    }),
   )
   const queue = useRef<Mission[]>([])
   const seen = useRef(0)
-  const tmp = useMemo(() => ({ p: V(0, 0, 0), prev: V(0, 0, 0), acc: V(0, 0, 0), q: new THREE.Quaternion(), e: new THREE.Euler() }), [])
+  const sigs = useRef<Partial<Record<ZoneId, string>>>({})
+  const lastData = useRef<Partial<Record<ZoneId, number>>>({})
+  const tmp = useMemo(() => ({ v: V(0, 0, 0), a: V(0, 0, 0), up: V(0, 1, 0), x: V(1, 0, 0), z: V(0, 0, 1), m: new THREE.Matrix4(), q: new THREE.Quaternion(), roll: new THREE.Quaternion(), axis: V(0, 0, -1), c: new THREE.Color() }), [])
 
   useFrame((st, rawDt) => {
     const dt = Math.min(rawDt, 0.05)
+    if (dt <= 0) return
     const reduced = useHub.getState().prefs.reducedMotion
-    const { events, model } = useStation.getState()
+    const { events, model, mode, intro } = useStation.getState()
+    const talking = mode === 'talk' && intro === 'done'
     const now = performance.now()
     const t = st.clock.elapsedTime
+    const all = drones.current
+    const quads = all.filter((d) => d.kind === 'quad')
+    const whoops = all.filter((d) => d.kind === 'whoop')
 
-    // New events become missions.
+    // New events become deliveries.
     for (const e of events) {
       if (e.id <= seen.current) continue
       seen.current = e.id
@@ -403,128 +436,194 @@ export function Drones() {
       const color = new THREE.Color(e.kind === 'complete' ? STATUS.ok : e.kind === 'need' ? STATUS.warn : e.kind === 'fail' ? STATUS.error : ZONE[e.zone].color)
       queue.current.push({ kind: e.kind, zone: e.zone, at: now, color })
     }
+    // A zone's live data changed: a data run from it to the console.
+    if (model) {
+      for (const z of ZONES) {
+        const sig = signature(model, z.id)
+        const before = sigs.current[z.id]
+        sigs.current[z.id] = sig
+        if (before === undefined || before === sig || now - (lastData.current[z.id] ?? 0) < 8000) continue
+        lastData.current[z.id] = now
+        queue.current.push({ kind: 'data', zone: z.id, at: now, color: new THREE.Color(z.color) })
+      }
+    }
     queue.current = queue.current.filter((m) => now - m.at < 25000)
 
-    const all = drones.current
-    const free = () => all.filter((d) => atDock(d) || (d.job === 'tend' && d.legs[0]?.kind === 'hold'))
-    // Hand out missions: the nearest free drone takes each.
-    while (queue.current.length) {
-      const m = queue.current[0]
-      const plan = KIND_FROM[m.kind](m.zone)
-      const target = plan ? plan.A : zoneHover(m.zone)
-      const pick = free().sort((a, b) => a.pos.distanceTo(target) - b.pos.distanceTo(target))[0]
-      if (!pick) break
-      queue.current.shift()
-      if (pick.job === 'tend') pick.job = 'delivery'
+    const nearest = (pool: Drone[], target: V3) => pool.sort((a, b) => a.pos.distanceTo(target) - b.pos.distanceTo(target))[0]
+    // Free to take a mission: at home, or only hanging about (tending, circling).
+    const idle = (l?: Leg) => (l?.kind === 'hold' && !l.act) || l?.kind === 'orbit'
+    const free = (pool: Drone[]) => pool.filter((d) => atHome(d) || ((d.job === 'tend' || d.job === 'swarm') && idle(d.legs[0])))
+    // Hand out missions: data runs to the whoops, everything else to the quads.
+    for (let k = 0; k < queue.current.length; ) {
+      const m = queue.current[k]
+      const data = m.kind === 'data'
+      const plan = m.kind === 'data' ? { A: zonePoint(m.zone, 2.0, 4.3), B: CONSOLE_DROP, outside: false } : KIND_FROM[m.kind](m.zone)
+      const pick = nearest(free(data ? whoops : quads), plan ? plan.A : zoneHover(m.zone))
+      if (!pick) {
+        k++
+        continue
+      }
+      queue.current.splice(k, 1)
+      pick.job = data ? 'data' : 'delivery'
       pick.legs = plan ? deliver(pick, plan.A, plan.B, Boolean(plan.outside)) : scan(pick, m.zone, m.color, () => false, 5)
       pick.t = 0
       pick.cargo = m.color
-      pick.job = 'delivery'
       pick.tend = null
     }
-    // Zones that are busy, need Markus or are in error get a drone over them.
-    if (model && !queue.current.length) {
+    // Zones that are busy, need Markus or are in error get a quad over them.
+    if (model && !queue.current.some((m) => m.kind !== 'data')) {
+      const rank = (s?: string) => (s === 'error' ? 0 : s === 'attention' ? 1 : 2)
       const want = ZONES.map((z) => ({ z: z.id, s: model.zones[z.id]?.state }))
         .filter((w) => w.s === 'active' || w.s === 'attention' || w.s === 'error')
-        .sort((a, b) => (a.s === 'error' ? 0 : a.s === 'attention' ? 1 : 2) - (b.s === 'error' ? 0 : b.s === 'attention' ? 1 : 2))
+        .sort((a, b) => rank(a.s) - rank(b.s))
         .slice(0, 3)
       for (const w of want) {
-        if (all.some((d) => d.tend === w.z)) continue
-        const d = all.filter(atDock).sort((a, b) => a.pos.distanceTo(zoneHover(w.z)) - b.pos.distanceTo(zoneHover(w.z)))[0]
+        if (quads.some((d) => d.tend === w.z)) continue
+        const d = nearest(quads.filter(atHome), zoneHover(w.z))
         if (!d) break
         const color = new THREE.Color(w.s === 'error' ? STATUS.error : w.s === 'attention' ? STATUS.warn : ZONE[w.z].color)
         const zone = w.z
-        d.legs = scan(d, zone, color, () => useStation.getState().model?.zones[zone]?.state !== w.s || queue.current.length > 0, 600)
+        d.legs = scan(d, zone, color, () => useStation.getState().model?.zones[zone]?.state !== w.s, 600)
         d.t = 0
         d.job = 'tend'
         d.tend = zone
         d.cargo = null
       }
     }
+    // While JARVIS thinks or works, the whoops circle high over the console.
+    if (reactorState().busy && !queue.current.some((m) => m.kind === 'data')) {
+      for (const d of whoops.filter(atHome)) {
+        d.legs = swarm(d, () => !reactorState().busy)
+        d.t = 0
+        d.job = 'swarm'
+        d.cargo = null
+      }
+    }
 
     // Fly.
-    all.forEach((d) => {
-      const r = refs.current[d.i]
-      tmp.prev.copy(d.pos)
-      const leg = d.legs[0]
+    all.forEach((d, idx) => {
+      d.prev.copy(d.pos)
+      let leg = d.legs[0]
+      if (leg?.kind === 'home') {
+        d.legs.splice(0, 1, ...homeward(d, d.pos))
+        leg = d.legs[0]
+      }
       d.beam = null
+      let roll = 0
       if (!leg) {
-        d.job = 'docked'
+        d.job = 'home'
         d.tend = null
         d.lift = Math.max(0, d.lift - dt * 1.2)
-        d.pos.copy(seat(d.i, d.lift))
-      } else {
+        d.pos.copy(homeSpot(d))
+      } else if (leg.kind !== 'home') {
         d.t += reduced ? leg.dur : dt
         const k = Math.min(1, d.t / leg.dur)
         const e = k * k * (3 - 2 * k)
-        if (leg.kind === 'move') bez(leg, e, d.pos)
-        else {
+        if (leg.kind === 'move') {
+          bez(leg, e, d.pos)
+          // A roll on a long straight, like a pilot showing off (not with a load).
+          if (leg.flip && !d.cargo) roll = smooth(0.38, 0.62, k) * Math.PI * 2
+        } else if (leg.kind === 'orbit') {
+          const a = t * 1.1 + d.i * 2.1
+          d.pos.set(leg.center.x + Math.cos(a) * leg.r, leg.center.y + Math.sin(t * 1.7 + d.i) * 0.15, leg.center.z + Math.sin(a) * leg.r)
+        } else {
           if (leg.act === 'launch') d.lift = k
           if (leg.act === 'land') d.lift = 1 - k
-          d.pos.copy(leg.act === 'launch' || leg.act === 'land' ? seat(d.i, d.lift) : leg.at)
+          d.pos.copy(leg.act === 'launch' || leg.act === 'land' ? homeSpot(d) : leg.at)
           if (!leg.act) d.pos.y += Math.sin(t * 1.7 + d.i) * 0.04
           d.beam = leg.beam ?? null
         }
-        const done = d.t >= leg.dur || (leg.kind === 'hold' && leg.until?.())
+        const done = d.t >= leg.dur || ((leg.kind === 'hold' || leg.kind === 'orbit') && leg.until?.())
         if (done) {
           if (leg.kind === 'hold' && leg.act === 'drop') d.cargo = null
           d.legs.shift()
           d.t = 0
         }
       }
-      // Carrying from the pick-up to the drop.
+      if (talking) keepClear(d.pos)
+
+      // FPV attitude: a quad tilts its whole body along its thrust, which
+      // holds it up against gravity, fights drag and pushes it where it's
+      // accelerating: nose down into speed, banked hard into turns, nose
+      // pointing the way it's flying.
+      const v = tmp.v.copy(d.pos).sub(d.prev).divideScalar(dt)
+      d.acc.lerp(tmp.a.copy(v).sub(d.vel).divideScalar(dt), Math.min(1, dt * 6))
+      d.vel.copy(v)
+      const speed = Math.hypot(v.x, v.z)
+      if (speed > 0.4) {
+        let dh = Math.atan2(-v.x, -v.z) - d.heading
+        dh = Math.atan2(Math.sin(dh), Math.cos(dh))
+        d.heading += dh * Math.min(1, dt * 5)
+      }
+      const next = d.legs[0]
+      const onPad = !next || (next.kind === 'hold' && (next.act === 'launch' || next.act === 'land'))
+      if (onPad || reduced) tmp.up.set(0, 1, 0)
+      else tmp.up.set(d.acc.x + v.x * 0.35, Math.max(2, d.acc.y + G), d.acc.z + v.z * 0.35).normalize()
+      tmp.z.set(Math.sin(d.heading), 0, Math.cos(d.heading)) // towards the drone's tail
+      tmp.z.addScaledVector(tmp.up, -tmp.z.dot(tmp.up)).normalize()
+      tmp.x.crossVectors(tmp.up, tmp.z).normalize()
+      tmp.q.setFromRotationMatrix(tmp.m.makeBasis(tmp.x, tmp.up, tmp.z))
+      if (roll) tmp.q.multiply(tmp.roll.setFromAxisAngle(tmp.axis, roll))
+      d.quat.slerp(tmp.q, roll ? 1 : Math.min(1, dt * 10))
+      // Props spool up when it launches and down once it's landed.
+      d.spin += ((next ? 1 : 0) - d.spin) * Math.min(1, dt * 3)
+
+      const o = kit[idx]
+      o.root.position.copy(d.pos)
+      o.tilt.quaternion.copy(d.quat)
+      const rate = d.spin * (60 + 20 * Math.min(1, d.acc.length() / 4))
+      o.rotors.forEach((r, k) => (r.rotation.y += (k === 1 || k === 2 ? -1 : 1) * rate * dt))
+      // Spinning props are a blur: the blades fade and a disc shows instead.
+      o.blur.opacity = d.spin * 0.13
+      o.prop.opacity = 0.9 - d.spin * 0.7
+      const lit = d.cargo ?? d.beam ?? reactorState().color
+      o.led.emissive.copy(lit)
+      o.led.emissiveIntensity = d.spin > 0.1 ? 3.5 : 1.2
       const carrying = Boolean(d.cargo) && !d.legs.some((l) => l.kind === 'hold' && l.act === 'pick') && d.legs.some((l) => l.kind === 'hold' && l.act === 'drop')
-      // Motion: face the way it's going, bank into turns, pitch into speed.
-      d.vel.copy(d.pos).sub(tmp.prev).divideScalar(Math.max(dt, 1e-3))
-      const speed = Math.hypot(d.vel.x, d.vel.z)
-      if (speed > 0.3) {
-        let dy = Math.atan2(-d.vel.x, -d.vel.z) - d.yaw
-        dy = Math.atan2(Math.sin(dy), Math.cos(dy))
-        d.yaw += dy * Math.min(1, dt * 4)
+      o.packet.visible = carrying
+      if (carrying && d.cargo) {
+        o.packetMat.color.copy(d.cargo).multiplyScalar(1.6)
+        o.packet.rotation.y += dt * 2
       }
-      const fwd = -(d.vel.x * Math.sin(d.yaw) + d.vel.z * Math.cos(d.yaw))
-      const side = d.vel.x * Math.cos(d.yaw) - d.vel.z * Math.sin(d.yaw)
-      d.pitch += (-Math.max(-0.35, Math.min(0.35, fwd * 0.09)) - d.pitch) * Math.min(1, dt * 5)
-      d.roll += (Math.max(-0.4, Math.min(0.4, side * 0.12)) - d.roll) * Math.min(1, dt * 5)
-      const flying = d.legs.length > 0 && !(d.legs[0].kind === 'hold' && (d.legs[0] as { act?: string }).act === 'launch' && d.t < 0.5)
-      d.spin += ((flying ? 1 : 0) - d.spin) * Math.min(1, dt * 2)
-      if (!r?.root.current || !r.tilt.current) return
-      r.root.current.position.copy(d.pos)
-      r.root.current.rotation.set(0, d.yaw, 0)
-      r.tilt.current.rotation.set(d.pitch, 0, d.roll)
-      r.rotors.current.forEach((g, k) => g && (g.rotation.y += (k % 2 ? -1 : 1) * d.spin * dt * 70))
-      r.blurMat.opacity = d.spin * 0.16
-      r.thrustMat.opacity = d.spin * (0.45 + 0.25 * Math.sin(t * 30 + d.i))
-      const eye = d.cargo ?? reactorState().color
-      r.eyeMat.color.copy(eye).multiplyScalar(1.8)
-      r.stripMat.color.copy(eye).multiplyScalar(d.spin > 0.1 ? 1.5 : 0.6)
-      if (r.crate.current) {
-        r.crate.current.visible = carrying
-        if (carrying && d.cargo) {
-          r.crateMat.color.copy(d.cargo)
-          r.crateLine.color.copy(d.cargo).multiplyScalar(1.6)
-          r.crate.current.rotation.y += dt * 0.8
-        }
+      o.beam.visible = Boolean(d.beam)
+      if (d.beam) {
+        o.beamMat.color.copy(d.beam)
+        o.beamMat.opacity = 0.08 + 0.05 * Math.sin(t * 5)
+        const h = Math.max(0.3, d.pos.y - 0.4)
+        o.beam.scale.set(1, h / 2, 1)
+        o.beam.position.y = -h / 2 - 0.05
       }
-      if (r.beam.current) {
-        r.beam.current.visible = Boolean(d.beam)
-        if (d.beam) {
-          r.beamMat.color.copy(d.beam)
-          r.beamMat.opacity = 0.08 + 0.05 * Math.sin(t * 5)
-          r.beam.current.scale.set(1, (d.pos.y - 0.4) / 2, 1)
-        }
-      }
+      // A light trail behind it while it carries something (data most of all).
+      const last = o.hist.pop()!
+      o.hist.unshift(last.copy(d.pos))
+      const pos = o.trail.geometry.attributes.position as THREE.BufferAttribute
+      const col = o.trail.geometry.attributes.color as THREE.BufferAttribute
+      const c = tmp.c.copy(d.cargo ?? lit)
+      const on = carrying && speed > 0.5 ? (d.kind === 'whoop' ? 1.6 : 0.9) : 0
+      o.hist.forEach((p, k) => {
+        pos.setXYZ(k, p.x, p.y, p.z)
+        const f = on * (1 - k / TRAIL) ** 1.5
+        col.setXYZ(k, c.r * f, c.g * f, c.b * f)
+      })
+      pos.needsUpdate = true
+      col.needsUpdate = true
     })
   })
 
   return (
     <group>
-      {Array.from({ length: N }, (_, i) => (
+      {DOCKS.map((_, i) => (
+        <Dock key={i} i={i} parts={dockParts} state={drones} />
+      ))}
+      <Perches />
+      {kit.map((o, i) => (
         <group key={i}>
-          <Dock i={i} parts={dockParts} state={drones} />
-          <DroneSlot parts={parts} refsOut={(r) => void (refs.current[i] = r)} />
+          <primitive object={o.root} />
+          <primitive object={o.trail} />
         </group>
       ))}
     </group>
   )
 }
+
+useGLTF.preload('/station/fpv.glb', false)

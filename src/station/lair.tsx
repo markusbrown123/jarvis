@@ -11,6 +11,7 @@ import { ROOM, roomify } from './houselight'
 // The terrace's downlights, softer on its pale stone than indoors.
 const TERRACE_WARM = { value: new THREE.Color() }
 import { OUTDOOR } from './environment'
+import { landMaterial } from './coastland'
 import { SKY, SKY_COMMON } from './sky'
 
 /**
@@ -37,8 +38,9 @@ const MODEL = '/station/lair.glb'
 // Matches LM_SCALE in lair.py; π because three divides baked light by π.
 const LIGHT_SCALE = 6 * Math.PI
 const BAKED = ['floor', 'stage', 'deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars'] as const
-const DETAIL = ['terrain', 'cliff', 'plants'] as const
-const NORMALS = ['floor', 'stage', 'deck', 'wall_left', 'wall_front', 'wall_right', 'terrain', 'cliff'] as const
+// (The ground and the cliffs are shaded like the rest of the coast, coast.tsx.)
+const DETAIL = ['plants'] as const
+const NORMALS = ['floor', 'stage', 'deck', 'wall_left', 'wall_front', 'wall_right'] as const
 type Name = (typeof BAKED)[number] | (typeof DETAIL)[number]
 
 function useMaps(graphics: Graphics) {
@@ -86,6 +88,70 @@ function mirrorFloor(node: THREE.Mesh) {
   g.translate(0, -top, 0)
   g.rotateX(Math.PI / 2)
   return { geometry: g, top }
+}
+
+/**
+ * The cliff's rock folds over itself in places (lair.py's noise is sharper
+ * than its mesh), which shows as thin dark shards. A few rounds of
+ * smoothing that doesn't shrink (Taubin's) take the folds out and keep the
+ * shape; the lip, where the ground meets it, stays put.
+ */
+function unfold(src: THREE.BufferGeometry) {
+  const g = src.clone()
+  const p = g.attributes.position as THREE.BufferAttribute
+  // One point per position, so the seams in its UVs smooth as one surface.
+  const ids = new Map<string, number>()
+  const id = new Int32Array(p.count)
+  for (let i = 0; i < p.count; i++) {
+    const k = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`
+    if (!ids.has(k)) ids.set(k, ids.size)
+    id[i] = ids.get(k)!
+  }
+  const n = ids.size
+  const pos = new Float32Array(n * 3)
+  for (let i = 0; i < p.count; i++) pos.set([p.getX(i), p.getY(i), p.getZ(i)], id[i] * 3)
+  const near = Array.from({ length: n }, () => new Set<number>())
+  const tri = g.index!.array
+  for (let t = 0; t < tri.length; t += 3)
+    for (let a = 0; a < 3; a++)
+      for (let b = 0; b < 3; b++) if (a !== b) near[id[tri[t + a]]].add(id[tri[t + b]])
+  const lists = near.map((s) => [...s])
+  const lipY = Math.max(...pos.filter((_, i) => i % 3 === 1)) - 0.4
+  for (let it = 0; it < 8; it++) {
+    const f = it % 2 ? -0.53 : 0.5
+    const next = pos.slice()
+    for (let v = 0; v < n; v++) {
+      if (pos[v * 3 + 1] > lipY) continue
+      const l = lists[v]
+      for (let c = 0; c < 3; c++) {
+        let sum = 0
+        for (const u of l) sum += pos[u * 3 + c]
+        next[v * 3 + c] += f * (sum / l.length - pos[v * 3 + c])
+      }
+    }
+    pos.set(next)
+  }
+  for (let i = 0; i < p.count; i++) p.setXYZ(i, pos[id[i] * 3], pos[id[i] * 3 + 1], pos[id[i] * 3 + 2])
+  // Normals shared across the seams too.
+  const acc = new Float32Array(n * 3)
+  const va = new THREE.Vector3()
+  const vb = new THREE.Vector3()
+  const vc = new THREE.Vector3()
+  for (let t = 0; t < tri.length; t += 3) {
+    va.fromBufferAttribute(p, tri[t])
+    vb.fromBufferAttribute(p, tri[t + 1])
+    vc.fromBufferAttribute(p, tri[t + 2])
+    vc.sub(vb)
+    vb.sub(va)
+    vb.cross(vc)
+    for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) acc[id[tri[t + k]] * 3 + c] += vb.getComponent(c)
+  }
+  const nrm = g.attributes.normal as THREE.BufferAttribute
+  for (let i = 0; i < p.count; i++) {
+    va.fromArray(acc, id[i] * 3).normalize()
+    nrm.setXYZ(i, va.x, va.y, va.z)
+  }
+  return g
 }
 
 /** The light strips, split into the ones up in the ceiling and the rest. */
@@ -226,8 +292,8 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
       wall_right: baked('wall_right', { roughness: 0.86, envMapIntensity: 0.25 }),
       roof: baked('roof', { roughness: 0.9, envMapIntensity: 0.2 }),
       pillars: baked('pillars', { roughness: 0.32, metalness: 0.7, envMapIntensity: 1.2 }),
-      terrain: outdoor(new THREE.MeshStandardMaterial({ map: maps.terrain.detail, normalMap: maps.terrain.normal, roughness: 0.95 })),
-      cliff: outdoor(new THREE.MeshStandardMaterial({ map: maps.cliff.detail, normalMap: maps.cliff.normal, roughness: 0.92 })),
+      terrain: landMaterial(),
+      cliff: landMaterial(),
       plants: outdoor(new THREE.MeshStandardMaterial({ map: maps.plants.detail, roughness: 0.8 })),
       frames: new THREE.MeshStandardMaterial({ color: '#0a0a0c', metalness: 0.85, roughness: 0.3 }),
       rail: outdoor(new THREE.MeshStandardMaterial({ color: '#c4c8cf', metalness: 1, roughness: 0.18 })),
@@ -250,6 +316,7 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
   }, [maps])
   const led = useMemo(() => (nodes.led_warm ? splitByHeight(nodes.led_warm.geometry, 2.5) : null), [nodes])
   const floors = useMemo(() => (['floor', 'stage'] as const).filter((n) => nodes[n]).map((n) => ({ n, ...mirrorFloor(nodes[n]) })), [nodes])
+  const cliff = useMemo(() => (nodes.cliff ? unfold(nodes.cliff.geometry) : null), [nodes])
   const pool = HOUSE.pool
 
   useFrame(() => {
@@ -267,10 +334,8 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
     const wet = SKY.uWet.value
     mats.deck.roughness = 0.45 - 0.33 * wet
     mats.deck.color.setScalar(1 - 0.3 * wet)
-    for (const m of [mats.terrain, mats.cliff, mats.plants]) {
-      m.color.setScalar(1 - 0.35 * wet)
-      m.roughness = 0.92 - 0.4 * wet
-    }
+    mats.plants.color.setScalar(1 - 0.35 * wet)
+    mats.plants.roughness = 0.92 - 0.4 * wet
   })
 
   const stone = (n: 'floor' | 'stage') => {
@@ -304,7 +369,7 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
         </mesh>
       ))}
       {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'cliff', 'plants', 'frames', 'rail'] as const).map((n) =>
-        nodes[n] && show(n) ? <mesh key={n} geometry={nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
+        nodes[n] && show(n) ? <mesh key={n} geometry={n === 'cliff' && cliff ? cliff : nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
       )}
       {nodes.glass && <mesh geometry={nodes.glass.geometry} {...at(nodes.glass)} material={mats.glass} renderOrder={5} />}
       {led && nodes.led_warm && <mesh geometry={led.low} {...at(nodes.led_warm)} material={mats.led} />}

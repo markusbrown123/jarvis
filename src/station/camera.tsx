@@ -87,24 +87,35 @@ export function CameraRig() {
 export function TalkFraming() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
   const size = useThree((s) => s.size)
-  const talk = useStation((s) => s.mode === 'talk')
-  useEffect(() => {
+  const talk = useStation((s) => s.mode === 'talk' && s.intro === 'done')
+  const shown = useRef(0)
+  const applied = useRef<string>('')
+  // Eased, so the picture glides over as the panel comes in.
+  useFrame((_, dt) => {
     if (!size.width || !size.height) return
     // Matches .st-talk: left 24px, width clamp(340px, 28vw, 440px).
     const panel = 24 + Math.min(440, Math.max(340, size.width * 0.28))
-    if (talk && size.width > 900) camera.setViewOffset(size.width, size.height, -panel / 2, 0, size.width, size.height)
+    const want = talk && size.width > 900 ? -panel / 2 : 0
+    shown.current += (want - shown.current) * Math.min(1, dt * 5)
+    if (Math.abs(want - shown.current) < 0.5) shown.current = want
+    const key = `${shown.current}|${size.width}|${size.height}`
+    if (key === applied.current) return
+    applied.current = key
+    if (shown.current) camera.setViewOffset(size.width, size.height, shown.current, 0, size.width, size.height)
     else camera.clearViewOffset()
     camera.updateProjectionMatrix()
-  }, [camera, size.width, size.height, talk])
+  })
   return null
 }
 
 export function Controls() {
   const mode = useStation((s) => s.mode)
+  // The opening flight drives the camera itself (intro.tsx).
+  const intro = useStation((s) => s.intro !== 'done')
   const reduced = useHub((s) => s.prefs.reducedMotion)
   const cinematic = mode === 'cinematic'
   const limits = useMemo(() => (cinematic ? { min: -Infinity, max: Infinity } : mode === 'talk' ? { min: -0.6, max: 0.6 } : { min: -1.15, max: 1.15 }), [cinematic, mode])
-  if (mode === 'walk') return null
+  if (mode === 'walk' || intro) return null
   return (
     <OrbitControls
       makeDefault

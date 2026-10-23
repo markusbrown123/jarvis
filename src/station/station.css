@@ -1108,3 +1108,181 @@
     grid-template-columns: auto 1fr;
   }
 }
+
+/* ------------------------------------------------------------ the opening flight (intro.tsx) */
+
+/* The HUD waits until the camera has landed at the desk (the fade-in
+   gives way to any transition the HUD's own pieces already have). */
+:where(.station) > :where(:not(.station-canvas):not(.cine)) {
+  transition: opacity 0.9s ease;
+}
+.station.cine-on > :not(.station-canvas):not(.cine) {
+  opacity: 0;
+  pointer-events: none;
+}
+.cine {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* Fade up from black. */
+.cine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #000;
+  animation: cine-fade 1.6s ease forwards;
+}
+.cine-loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 60%, transparent 30%, rgba(0, 0, 0, 0.55) 100%);
+}
+@keyframes cine-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.cine-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 11vh;
+  background: #000;
+  z-index: 2;
+  transition: transform 1s cubic-bezier(0.6, 0, 0.3, 1);
+}
+.cine-bar-top {
+  top: 0;
+}
+.cine-bar-bottom {
+  bottom: 0;
+}
+.cine-leave .cine-bar-top {
+  transform: translateY(-100%);
+}
+.cine-leave .cine-bar-bottom {
+  transform: translateY(100%);
+}
+.cine-title {
+  position: absolute;
+  left: 5vw;
+  bottom: calc(11vh + 4vh);
+  z-index: 3;
+  animation: cine-title 7s ease 0.6s both;
+}
+.cine-loading .cine-title {
+  animation: cine-in 1.2s ease 0.6s both;
+}
+.cine-title h1 {
+  margin: 0;
+  font: italic 700 clamp(46px, 7.5vw, 120px) / 0.9 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.035em;
+  color: #fff;
+  text-shadow:
+    0 6px 40px rgba(0, 0, 0, 0.65),
+    0 0 2px rgba(0, 0, 0, 0.6);
+}
+.cine-title p {
+  margin: 0.6em 0 0 0.3em;
+  font: 600 clamp(13px, 1.25vw, 19px) 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #d9e1ff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8);
+}
+@keyframes cine-in {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes cine-title {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  75% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+.cine-load {
+  position: absolute;
+  right: 5vw;
+  bottom: calc(11vh + 4vh);
+  width: min(440px, 42vw);
+  text-align: right;
+  z-index: 3;
+  color: #e8ecff;
+  animation: cine-in 1s ease 1s both;
+}
+.cine-tip {
+  margin: 0 0 14px;
+  font: italic 500 15px/1.45 'Barlow', sans-serif;
+  color: #c9d2f2;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+}
+.cine-progress {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.cine-progress span {
+  display: block;
+  height: 100%;
+  background: #fff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.7);
+  transition: width 0.4s ease;
+}
+.cine-status {
+  margin: 10px 0 0;
+  font: 600 13px 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+.cine-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  vertical-align: -1px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: cine-spin 0.9s linear infinite;
+}
+@keyframes cine-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cine-skip {
+  position: absolute;
+  right: 5vw;
+  bottom: 4vh;
+  z-index: 3;
+  margin: 0;
+  font: 600 12px 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  animation: cine-in 0.8s ease 1.5s both;
+}
+.cine-leave .cine-title,
+.cine-leave .cine-skip {
+  display: none;
+}

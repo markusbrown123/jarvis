@@ -46,6 +46,9 @@ type StationStore = {
   toggleConnections: () => void
   fly: (v: View) => void
   push: (e: Omit<StationEvent, 'id' | 'at'>) => void
+  /** The opening flight (intro.tsx): waiting for the house to load, flying in, or over. */
+  intro: 'loading' | 'flying' | 'done'
+  setIntro: (p: 'loading' | 'flying' | 'done') => void
 }
 
 let seq = 0
@@ -101,6 +104,13 @@ export const useStation = create<StationStore>((set, get) => ({
   },
   toggleConnections: () => set({ connections: !get().connections }),
   fly: (view) => set({ view, viewNonce: get().viewNonce + 1 }),
+  intro: 'loading',
+  setIntro: (intro) => {
+    if (get().intro === intro) return
+    // It always lands at the desk.
+    if (intro !== 'done' && get().mode !== 'talk') set({ mode: 'talk', view: 'overview' })
+    set({ intro })
+  },
   push: (e) => {
     const now = performance.now()
     const keep = get().events.filter((x) => now - x.at < 8000).slice(-40)

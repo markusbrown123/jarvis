@@ -23,6 +23,7 @@ import { WalkControls } from './walk'
 import { Links } from './links'
 import { CameraRig, Controls, TalkFraming } from './camera'
 import { LabelProjector } from './labels'
+import { IntroFlight } from './intro'
 import { useStation } from './stationStore'
 
 /**
@@ -233,6 +234,7 @@ function Post({ q, dof }: { q: (typeof QUALITY)[Graphics]; dof: boolean }) {
 export function StationScene({ graphics }: { graphics: Graphics }) {
   const q = QUALITY[graphics]
   const mode = useStation((s) => s.mode)
+  const intro = useStation((s) => s.intro !== 'done')
   const [dpr, setDpr] = useState(Math.min(q.maxDpr, window.devicePixelRatio || 1))
   // Nothing to draw behind the power-up screen. (Rendering on demand there
   // instead breaks the first-frame environment and shadow setup.)
@@ -247,7 +249,7 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       shadows={q.shadows}
       dpr={dpr}
       gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
-      camera={{ position: [0, 9.6, 15.2], fov: 38, near: 0.12, far: 2400 }}
+      camera={{ position: [0, 9.6, 15.2], fov: 38, near: 0.12, far: 4000 }}
       onPointerMissed={() => useStation.getState().select(null, false)}
       onCreated={({ gl }) => {
         // If the graphics card drops the context (too much for it, or a
@@ -275,7 +277,7 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       {import.meta.env.DEV && <FrameProbe />}
       <BlankGuard graphics={graphics} />
       <KeyLight q={q} />
-      <Outside />
+      <Outside graphics={graphics} />
       {/* The room and the console stream in their models and textures; what's ready draws meanwhile. */}
       <ConsoleGuard what="room">
         <Suspense fallback={null}>
@@ -300,8 +302,9 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <Controls />
       <CameraRig />
       <TalkFraming />
+      <IntroFlight />
       <LabelProjector />
-      <Post q={q} dof={mode === 'talk' && graphics !== 'low'} />
+      <Post q={q} dof={mode === 'talk' && graphics !== 'low' && !intro} />
     </Canvas>
   )
 }

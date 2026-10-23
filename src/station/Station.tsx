@@ -14,6 +14,7 @@ import { ZONE, ZONES, type View as Focus } from './layout'
 import { describe, termMatch } from './describe'
 import { Detail } from './Detail'
 import { LabelLayer } from './labels'
+import { IntroOverlay } from './intro'
 import './station.css'
 
 /**
@@ -464,6 +465,7 @@ export function Station() {
   const graphics = useHub((s) => s.prefs.graphics)
   const go = useHub((s) => s.go)
   const mode = useStation((s) => s.mode)
+  const intro = useStation((s) => s.intro !== 'done')
   // With a selection open the right column makes room for its detail.
   const selected = useStation((s) => Boolean(s.selected))
   // J: Talk. F: Walk. C: Cinematic / Command. R: reset the view. L: Connections View.
@@ -487,7 +489,7 @@ export function Station() {
   // The panels are a HUD over the room. (Placed inside the 3D scene they
   // blank the frame once the reflective floor is on.)
   return (
-    <div className={`station is-${mode}`}>
+    <div className={`station is-${mode}${intro ? ' cine-on' : ''}`}>
       <ModelSync />
       <StationScene graphics={graphics} />
       <LabelLayer />
@@ -515,6 +517,7 @@ export function Station() {
       <TopHud />
       <ViewBar />
       <Dock captionOnly={mode === 'talk' || mode === 'walk'} />
+      <IntroOverlay />
       {mode === 'command' && <p className="st-hint">Drag to orbit · click a system · R reset · L links · C cinematic · J talk · F walk</p>}
     </div>
   )

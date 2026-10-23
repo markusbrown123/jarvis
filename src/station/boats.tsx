@@ -23,9 +23,9 @@ type Kind = 'yacht' | 'sail' | 'speed' | 'jetski' | 'ship'
 type Route = { kind: Kind; cx: number; cz: number; rx: number; rz: number; speed: number; phase: number; weave?: number; color?: string }
 
 const ROUTES: Route[] = [
-  { kind: 'yacht', cx: -80, cz: -720, rx: 520, rz: 170, speed: 7, phase: 0.6 },
+  { kind: 'yacht', cx: -40, cz: -720, rx: 470, rz: 170, speed: 7, phase: 0.6 },
   { kind: 'sail', cx: 260, cz: -460, rx: 270, rz: 120, speed: 3.4, phase: 2.2 },
-  { kind: 'sail', cx: -420, cz: -980, rx: 360, rz: 210, speed: 4, phase: 4.1 },
+  { kind: 'sail', cx: -300, cz: -1050, rx: 300, rz: 150, speed: 4, phase: 4.1 },
   { kind: 'speed', cx: 60, cz: -330, rx: 330, rz: 95, speed: 14, phase: 1.3, color: '#1d3b6e' },
   { kind: 'jetski', cx: -50, cz: -175, rx: 140, rz: 55, speed: 13, phase: 0.2, weave: 12, color: '#f2c230' },
   { kind: 'jetski', cx: 95, cz: -240, rx: 115, rz: 70, speed: 15.5, phase: 3.0, weave: 9, color: '#2e7fd8' },
