@@ -224,8 +224,31 @@ function subjectOf(d: Drone, out: V3): V3 {
 // ---------------------------------------------------------------- the models
 
 const TRAIL = 40
-// Teal props on the quads (a touch different on each), clear ones on the whoops.
-const PROP_COLORS = ['#2fb8d0', '#3ac4da', '#2aaac4', '#41cde0', '#30b2cb', '#38bed4', '#e9eef2', '#e9eef2', '#e9eef2']
+/**
+ * Each drone's own livery, so no two look the same: its props' colour, and
+ * a turn of the hue (radians) for its accents — on a quad the orange of its
+ * battery's stripe and its TPU mounts (orange, green, magenta, blue, purple,
+ * yellow); on a whoop its whole shell and its little pack (blue, mint, pink).
+ */
+const LIVERY: { prop: string; hue: number }[] = [
+  { prop: '#2fb8d0', hue: 0 },
+  { prop: '#2a2e35', hue: 1.75 },
+  { prop: '#f4f6f8', hue: -0.45 },
+  { prop: '#ff8a1e', hue: 3.5 },
+  { prop: '#9be22d', hue: 4.6 },
+  { prop: '#3a7bff', hue: 0.5 },
+  { prop: '#e9eef2', hue: 0 },
+  { prop: '#e8fff0', hue: -1.2 },
+  { prop: '#ffe8f2', hue: 2.2 },
+]
+// The materials (fpv.py) whose orange takes a quad's accent hue, and the whoop's shell.
+const ACCENTS = new Set(['pack', 'pack1s', 'tpu'])
+const HUE_GLSL = /* glsl */ `
+vec3 hueShift(vec3 c, float a) {
+  const vec3 k = vec3(0.57735027);
+  float ca = cos(a);
+  return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca);
+}`
 
 /**
  * One drone's scene objects: its own copy of the model's hierarchy (to fly,
@@ -287,15 +310,18 @@ function build(nodes: Record<string, THREE.Object3D>, kind: Kind) {
 
 type Kit = ReturnType<typeof build>
 
-/** A per-instance attribute read in the fragment shader (vertex → varying). */
-function perInstance(m: THREE.Material, name: string, type: 'float' | 'vec3', apply: [string, string]) {
+/**
+ * A per-instance attribute read in the fragment shader (vertex → varying);
+ * `key` names the shader variant, `fns` adds helpers it calls.
+ */
+function perInstance(m: THREE.Material, name: string, type: 'float' | 'vec3', apply: [string, string], key = name, fns = '') {
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nattribute ${type} a${name};\nvarying ${type} v${name};`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nv${name} = a${name};`)
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nvarying ${type} v${name};`).replace(apply[0], `${apply[0]}\n${apply[1]}`)
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nvarying ${type} v${name};${fns}`).replace(apply[0], `${apply[0]}\n${apply[1]}`)
   }
-  m.customProgramCacheKey = () => `drone-${name}`
+  m.customProgramCacheKey = () => `drone-${key}`
   return m
 }
 
@@ -314,10 +340,29 @@ class Fleet {
   private blurFade: THREE.InstancedBufferAttribute
   private ledGlow: THREE.InstancedBufferAttribute
   private kit: Kit[]
-  constructor(kit: Kit[], colors: string[]) {
+  constructor(kit: Kit[], livery: { prop: string; hue: number }[]) {
     this.kit = kit
     const n = kit.length
     const quad = kit[0].kind === 'quad'
+    const hue = new THREE.InstancedBufferAttribute(new Float32Array(livery.map((l) => l.hue)), 1)
+    // Accents: only the orange turns on a quad (its black, text and charge
+    // lights stay); a whoop's shell turns whole.
+    const accented = new Map<THREE.Material, THREE.Material>()
+    const accent = (src: THREE.Material, shell: boolean) => {
+      let m = accented.get(src)
+      if (!m) {
+        m = perInstance(
+          src.clone(),
+          'Hue',
+          'float',
+          ['#include <color_fragment>', shell ? 'diffuseColor.rgb = max(hueShift(diffuseColor.rgb, vHue), 0.0);' : 'diffuseColor.rgb = mix(diffuseColor.rgb, max(hueShift(diffuseColor.rgb, vHue), 0.0), clamp((diffuseColor.r - max(diffuseColor.g, diffuseColor.b)) * 4.0, 0.0, 1.0));'],
+          shell ? 'shell' : 'accent',
+          HUE_GLSL,
+        )
+        accented.set(src, m)
+      }
+      return m
+    }
     this.propFade = new THREE.InstancedBufferAttribute(new Float32Array(n).fill(0.9), 1)
     this.blurFade = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 1)
     this.ledGlow = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3)
@@ -329,12 +374,15 @@ class Fleet {
       const name = (template.material as THREE.Material).name
       const isProp = name === 'prop' || name === 'prop_clear'
       const isLed = name === 'led'
+      const isAccent = ACCENTS.has(name) || name === 'whoop'
       const geometry = template.geometry
       if (isProp) geometry.setAttribute('aFade', this.propFade)
       if (isLed) geometry.setAttribute('aGlow', this.ledGlow)
-      const mesh = new THREE.InstancedMesh(geometry, isProp ? prop : isLed ? led : template.material, n)
+      if (isAccent) geometry.setAttribute('aHue', hue)
+      const material = isProp ? prop : isLed ? led : isAccent ? accent(template.material as THREE.Material, name === 'whoop') : template.material
+      const mesh = new THREE.InstancedMesh(geometry, material, n)
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-      if (isProp) kit.forEach((_, k) => mesh.setColorAt(k, tint.set(colors[k])))
+      if (isProp) kit.forEach((_, k) => mesh.setColorAt(k, tint.set(livery[k].prop)))
       mesh.castShadow = true
       mesh.frustumCulled = false
       this.drawn.push({ mesh, of: kit.map((o) => o.parts[j]) })
@@ -498,7 +546,7 @@ export function Drones() {
   const dockParts = useDockParts()
   const kit = useMemo(() => Array.from({ length: 9 }, (_, i) => build(nodes, i < 6 ? 'quad' : 'whoop')), [nodes])
   const fleets = useMemo(
-    () => ({ quad: new Fleet(kit.slice(0, 6), PROP_COLORS.slice(0, 6)), whoop: new Fleet(kit.slice(6), PROP_COLORS.slice(6)) }),
+    () => ({ quad: new Fleet(kit.slice(0, 6), LIVERY.slice(0, 6)), whoop: new Fleet(kit.slice(6), LIVERY.slice(6)) }),
     [kit],
   )
   const drones = useRef<Drone[]>(
