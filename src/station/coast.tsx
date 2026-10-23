@@ -29,9 +29,10 @@ const SEA = HOUSE.sea
 // ---------------------------------------------------------------- building it
 
 const RES: Record<Graphics, { na: number; nr: number; shrubs: number; houses: number; rocks: number }> = {
-  low: { na: 420, nr: 130, shrubs: 1400, houses: 45, rocks: 300 },
-  high: { na: 720, nr: 200, shrubs: 3600, houses: 70, rocks: 700 },
-  ultra: { na: 960, nr: 240, shrubs: 6000, houses: 90, rocks: 1000 },
+  // Scrub as thick as the hills really are (cards are cheap: 14 triangles a bush).
+  low: { na: 420, nr: 130, shrubs: 4000, houses: 45, rocks: 300 },
+  high: { na: 720, nr: 200, shrubs: 7000, houses: 70, rocks: 700 },
+  ultra: { na: 960, nr: 240, shrubs: 10000, houses: 90, rocks: 1000 },
 }
 const R0 = 16
 const R1 = 2300
@@ -100,7 +101,7 @@ function shrubs(count: number) {
   const out: (Plant & { tree: boolean })[] = []
   for (let tries = 0; out.length < count && tries < count * 12; tries++) {
     // Denser near the house, thinning out with distance.
-    const d = 30 + Math.pow(r(), 1.8) * 720
+    const d = 30 + Math.pow(r(), 1.35) * 720
     const a = r() * Math.PI * 2
     const x = Math.sin(a) * d
     const z = -Math.cos(a) * d
@@ -108,12 +109,12 @@ function shrubs(count: number) {
     if (g.s < 14 || Math.hypot(x, z) < cliffEdge(x, z) + 3 || lawnNorm(x, z) < 1.1) continue
     if (slopeAt(x, z) > 0.42) continue
     // In clumps, as chaparral grows.
-    if (fbm(x * 0.03 + 4, z * 0.03, 3) < 0.42 + r() * 0.15) continue
-    const tree = r() < 0.07
-    const w = tree ? 2.2 + r() * 2 : 0.8 + r() * 1.5
-    // Dusty grey-green, a few dried out to tan.
-    const k = 0.6 + r() * 0.35
-    const tint = r() < 0.18 ? new THREE.Color(1.5, 1.05, 1.1) : new THREE.Color(k * (0.85 + r() * 0.2), k, k * (0.85 + r() * 0.2))
+    if (fbm(x * 0.03 + 4, z * 0.03, 3) < 0.3 + r() * 0.15) continue
+    const tree = r() < 0.04
+    const w = tree ? 2.2 + r() * 2 : 1.2 + r() * 1.8
+    // Dark olive, a few dried out to tan.
+    const k = 0.45 + r() * 0.3
+    const tint = r() < 0.1 ? new THREE.Color(1.4, 1.05, 1.0) : new THREE.Color(k * (0.7 + r() * 0.15), k * 0.95, k * (0.55 + r() * 0.15))
     out.push({ x, y: g.h - 0.15, z, s: tree ? w / 3.2 : w, yaw: r() * Math.PI * 2, tint, tree })
   }
   return out

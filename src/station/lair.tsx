@@ -292,7 +292,9 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
       roof: baked('roof', { roughness: 0.9, envMapIntensity: 0.2 }),
       pillars: baked('pillars', { roughness: 0.32, metalness: 0.7, envMapIntensity: 1.2 }),
       terrain: landMaterial(),
-      cliff: landMaterial(),
+      // lair.glb's cliff faces point into the island: drawn both sides, so
+      // the rock the house stands on shows from the sea.
+      cliff: Object.assign(landMaterial(), { side: THREE.DoubleSide }),
       frames: new THREE.MeshStandardMaterial({ color: '#0a0a0c', metalness: 0.85, roughness: 0.3 }),
       rail: outdoor(new THREE.MeshStandardMaterial({ color: '#c4c8cf', metalness: 1, roughness: 0.18 })),
       led: new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffc890').multiplyScalar(2.4), toneMapped: false }),
