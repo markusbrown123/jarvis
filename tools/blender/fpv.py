@@ -203,6 +203,16 @@ def bake_transform(ob):
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
 
+def pivot(ob, at):
+    """Put an object's origin at a point (where it turns), keeping the mesh where it is."""
+    bpy.ops.object.select_all(action='DESELECT')
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.context.scene.cursor.location = at
+    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+    ob.select_set(False)
+
+
 # ---------------------------------------------------------------- textures
 
 def save_png(arr, name):
@@ -435,7 +445,9 @@ def quad(mats):
         for k in range(7):
             parts.append(assign(box('chip', 0.004 + (k % 3) * 0.002, 0.004 + (k % 2) * 0.003, 0.0012, loc=(-0.012 + (k % 4) * 0.008, -0.014 + (k // 4) * 0.02, z + 0.0014)), mats['chip']))
     parts.append(assign(cyl('cap', 0.005, 0.016, z=0.0, x=0.0, y=-0.055, n=20), mats['capacitor']))
-    # FPV camera, tilted up 30°, between TPU side plates.
+    # FPV camera between the TPU side plates, on a gimbal: its own object,
+    # level here, pivoting where it's mounted; the browser aims it at
+    # whatever the drone is looking at.
     cam = []
     body = box('cam', 0.019, 0.019, 0.019, loc=(0, 0.048, 0.022), bevel=0.0015)
     lens = cyl('lens', 0.0072, 0.012, z=-0.006, n=32, bevel=0.0006)
@@ -447,12 +459,10 @@ def quad(mats):
     for o, m in ((body, mats['tpu']), (lens, mats['plastic']), (glass, mats['glass'])):
         assign(o, m)
         cam.append(o)
-    piv = Vector((0, 0.048, 0.022))
-    rot = Matrix.Translation(piv) @ Matrix.Rotation(math.radians(-30), 4, 'X') @ Matrix.Translation(-piv)
     for o in cam:
         bake_transform(o)
-        o.data.transform(rot)
-    parts += cam
+    fpv_cam = join('quad_cam', cam)
+    pivot(fpv_cam, (0, 0.048, 0.022))
     for x in (-0.0105, 0.0105):
         side = outline_slab('tpu', rounded_rect(0.03, 0.026, 0.006, cy=0.047), 0.0025, 0.0, bevel=0.0005)
         side.rotation_euler = (0, math.radians(90), 0)
@@ -503,7 +513,7 @@ def quad(mats):
     gp.append(assign(glens, mats['plastic']))
     gp.append(assign(cyl('gpbtn', 0.0035, 0.0012, z=0.033 + 0.032, x=0.0, y=0.026, n=20), mats['red']))
     gpiv = Vector((0, 0.03, 0.035))
-    grot = Matrix.Translation(gpiv) @ Matrix.Rotation(math.radians(-18), 4, 'X') @ Matrix.Translation(-gpiv)
+    grot = Matrix.Translation(gpiv) @ Matrix.Rotation(math.radians(18), 4, 'X') @ Matrix.Translation(-gpiv)  # uptilted, as they fly
     for o in gp:
         bake_transform(o)
         o.data.transform(grot)
@@ -552,7 +562,7 @@ def quad(mats):
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
         rotors.append(rotor_full)
     body = join('quad_body', parts)
-    return body, led, rotors
+    return body, led, rotors, fpv_cam
 
 
 # ---------------------------------------------------------------- tiny whoop
@@ -658,12 +668,10 @@ def whoop(mats):
     lens.rotation_euler = (math.radians(-90), 0, 0)
     lens.location = (0, 0.0247, 0.0135)
     cam = [assign(camb, mats['plastic']), assign(barrel, mats['plastic']), assign(ring, mats['silver']), assign(lens, mats['glass'])]
-    piv = Vector((0, 0.011, 0.0135))
-    rot = Matrix.Translation(piv) @ Matrix.Rotation(math.radians(-22), 4, 'X') @ Matrix.Translation(-piv)
     for o in cam:
         bake_transform(o)
-        o.data.transform(rot)
-    parts += cam
+    fpv_cam = join('whoop_cam', cam)  # on a gimbal too, like the quad's
+    pivot(fpv_cam, (0, 0.011, 0.0135))
     # The antenna: a black whip up and back from the cage, white at the tip.
     parts.append(assign(tube('whip', [(0.004, -0.008, 0.024), (0.006, -0.014, 0.04), (0.008, -0.02, 0.058)], 0.0011, 3), mats['black']))
     parts.append(assign(tube('whiptip', [(0.008, -0.02, 0.058), (0.0088, -0.0224, 0.066)], 0.0006, 2), mats['white']))
@@ -692,7 +700,7 @@ def whoop(mats):
     led = join('whoop_led', [outline_slab('wled', circle(sx * S, sy * S, 0.0207, 32), 0.0008, -0.0008, holes=[circle(sx * S, sy * S, 0.019, 32)[::-1]]) for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1))])
     assign(led, mats['led'])
     body = join('whoop_body', parts)
-    return body, led, rotors
+    return body, led, rotors, fpv_cam
 
 
 # ---------------------------------------------------------------- scene
@@ -766,20 +774,35 @@ def preview(objs):
     print('preview written', flush=True)
 
 
+def aim(cam, at):
+    """Turn a gimballed camera (looking along +Y at rest) towards a point, within its travel."""
+    bpy.context.view_layer.update()
+    d = Vector(at) - cam.matrix_world.translation
+    yaw = max(-1.05, min(1.05, math.atan2(-d.x, d.y)))
+    pitch = max(-1.3, min(0.7, math.atan2(d.z, math.hypot(d.x, d.y))))
+    cam.rotation_euler = (pitch, 0, yaw)
+
+
 def main():
     reset()
     mats = materials()
-    q_body, q_led, q_rotors = quad(mats)
-    w_body, w_led, w_rotors = whoop(mats)
+    q_body, q_led, q_rotors, q_cam = quad(mats)
+    w_body, w_led, w_rotors, w_cam = whoop(mats)
+    whoop_all = [w_body, w_led, *w_rotors, w_cam]
     # Side by side for the preview; the browser places each at its own origin.
-    for o in [w_body, w_led, *w_rotors]:
+    for o in whoop_all:
         o.location.x += 0.17
     if PREVIEW:
+        # Both cameras look at the lens taking the picture.
+        for c in (q_cam, w_cam):
+            aim(c, (0.36, 0.34, 0.19))
         preview([q_body, w_body])
-    for o in [w_body, w_led, *w_rotors]:
+    for o in whoop_all:
         o.location.x -= 0.17
+    for c in (q_cam, w_cam):
+        c.rotation_euler = (0, 0, 0)  # exported level; the browser aims them
     bpy.ops.object.select_all(action='DESELECT')
-    for o in [q_body, q_led, *q_rotors, w_body, w_led, *w_rotors]:
+    for o in [q_body, q_led, *q_rotors, q_cam, *whoop_all]:
         o.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'fpv.glb'), export_format='GLB', use_selection=True, export_yup=True, export_apply=True, export_image_format='JPEG')
     print('exported', flush=True)

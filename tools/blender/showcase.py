@@ -312,11 +312,12 @@ def land_material():
     nt.links.new(grain.outputs['Color'], wob.inputs[1])
     nt.links.new(wob.outputs[0], stretch.inputs[0])
     crack = node(nt, 'ShaderNodeTexVoronoi', (-1300, 1050), feature='DISTANCE_TO_EDGE')
-    crack.inputs['Scale'].default_value = 1.0
+    crack.inputs['Scale'].default_value = 2.2
+    crack.inputs['Randomness'].default_value = 1.0
     nt.links.new(stretch.outputs[0], crack.inputs['Vector'])
     rock = mix_rgb(nt, map_range(nt, wea.outputs['Fac'], 0.3, 0.72, 0, 1, (-1050, 650)), (0.2, 0.11, 0.065), (0.42, 0.27, 0.17), (-850, 650))
     rock = mix_rgb(nt, map_range(nt, wave.outputs['Fac'], 0.3, 1.0, 0, 0.35, (-1050, 850)), rock, (0.5, 0.4, 0.31), (-650, 700))
-    rock = mix_rgb(nt, map_range(nt, crack.outputs['Distance'], 0.0, 0.03, 0.45, 0, (-1050, 1050)), rock, (0.07, 0.045, 0.03), (-450, 750))
+    rock = mix_rgb(nt, map_range(nt, crack.outputs['Distance'], 0.0, 0.015, 0.18, 0, (-1050, 1050)), rock, (0.09, 0.06, 0.04), (-450, 750))
     rock = mix_rgb(nt, map_range(nt, grain.outputs['Fac'], 0.3, 0.7, 0, 0.25, (-1050, 450)), rock, (0.12, 0.08, 0.05), (-450, 550))
     # Chaparral: dark clumps on dry gold, thicker down the gullies and where it's flatter.
     clump = node(nt, 'ShaderNodeTexNoise', (-1300, 50))
@@ -677,7 +678,8 @@ def estate(glow_strength):
         elif base == 'paint':
             assign(ob, simple('paint', (0.85, 0.85, 0.83), rough=0.6))
         elif base == 'glass':
-            assign(ob, simple('eglass', (0.02, 0.03, 0.04), rough=0.03, metal=0.0, ior=1.6))
+            # Tinted: mirrors the sky by day, lets the rooms' light out at night.
+            assign(ob, simple('eglass', (0.05, 0.07, 0.08), rough=0.02, transmission=0.55, ior=1.5, thin=True))
         elif base == 'frames':
             assign(ob, simple('eframes', (0.02, 0.02, 0.022), rough=0.35, metal=0.8))
         elif base == 'glow':
@@ -907,7 +909,7 @@ def homes_and_road():
     r = rng(29)
     walls = [simple(f'hwall{k}', c, rough=0.8) for k, c in enumerate(((0.83, 0.81, 0.77), (0.72, 0.66, 0.56), (0.5, 0.5, 0.48), (0.28, 0.21, 0.16)))]
     roofs = [simple('hroof0', (0.86, 0.85, 0.83), rough=0.7), simple('hroof1', (0.06, 0.06, 0.065), rough=0.6)]
-    hglass = simple('hglass', (0.02, 0.025, 0.03), rough=0.04, ior=1.6)
+    hglass = simple('hglass', (0.02, 0.025, 0.03), rough=0.04, ior=1.6, emission=(1.0, 0.66, 0.36), strength=0.0)
     homes = []
     tries = 0
     while len(homes) < 90 and tries < 9000:
@@ -967,6 +969,12 @@ def homes_and_road():
     road = simple('asphalt', (0.06, 0.06, 0.065), rough=0.85)
     for k in range(0, len(pts) - 1, 200):  # in pieces, so gaps don't bridge
         ribbon(f'road{k}', pts[k:k + 201], 9, 0.25, road)
+    # Streetlamps every ~45 m (lit only at night).
+    lamp = simple('lamp', (0.9, 0.9, 0.9), emission=(1.0, 0.58, 0.22), strength=0.0)
+    for k in range(0, len(pts), 28):
+        p = pts[k]
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=8, ring_count=6, radius=0.35, location=B(p.x, p.y, stand_y(p.x, p.y) + 7))
+        assign(bpy.context.object, lamp)
     print('homes', len(homes), 'road points', len(pts), flush=True)
 
 
@@ -976,7 +984,7 @@ SHOT = {
     # from out over the bay, high, like an establishing shot of the estate on its headland
     'aerial': dict(time='golden', heading=-40, cam=(-128, 58, -96), look=(20, -4, 30), lens=30, glow=0.0),
     # low on the water under the cantilevered north wing, the cliff and the house above
-    'cliff': dict(time='sunset', heading=-25, cam=(55, -22, -60), look=(18, -2, 6), lens=26, glow=2.0),
+    'cliff': dict(time='sunset', heading=-25, cam=(88, -12, -98), look=(8, 1, 2), lens=28, glow=2.0),
     # the estate lit up after dark
     'night': dict(time='night', heading=-40, cam=(-95, 38, -60), look=(14, -2, 20), lens=32, glow=8.0),
 }
@@ -1032,6 +1040,21 @@ def main():
     for name in SHOTS:
         s = SHOT[name]
         est = estate(s['glow'])
+        night = s['time'] == 'night'
+        pbsdf(bpy.data.materials['hglass']).inputs['Emission Strength'].default_value = 3.0 if night else 0.0
+        pbsdf(bpy.data.materials['lamp']).inputs['Emission Strength'].default_value = 40.0 if night else 0.0
+        rooms = []
+        if s['glow'] > 0:
+            # The rooms lit inside: the house under its coffer, each pavilion.
+            for x, z, y, w in [(0, 0, 3.8, 2500)] + [(wx, wz, 2.2 if k != 1 else -1.5, 500) for k, (wx, wz, _) in enumerate(ESTATE_WINGS)]:
+                ld = bpy.data.lights.new('room', 'POINT')
+                ld.energy = w * (1.0 if night else 0.3)
+                ld.shadow_soft_size = 1.5
+                ld.use_temperature = True
+                ld.temperature = 2900
+                o = link(bpy.data.objects.new('room', ld))
+                o.location = B(x, z, y)
+                rooms.append(o)
         cam.location = B(s['cam'][0], s['cam'][2], s['cam'][1])
         cam.rotation_euler = (B(s['look'][0], s['look'][2], s['look'][1]) - cam.location).to_track_quat('-Z', 'Y').to_euler()
         cam.data.lens = s['lens']
@@ -1049,7 +1072,7 @@ def main():
             from PIL import Image
             Image.open(f).convert('RGB').save(os.path.join(OUT, f'{name}.jpg'), quality=86, optimize=True, progressive=True)
             os.remove(f)
-        for o in est.values():
+        for o in list(est.values()) + rooms:
             bpy.data.objects.remove(o)
 
 

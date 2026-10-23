@@ -142,8 +142,12 @@ void main() {
   }
   // Surf round the foot of the cliffs, and up the beaches along the bay.
   float shore = min(length(vWorld.xz) - cliffFoot(vWorld.xz), -coastShore(vWorld.xz) - 1.0);
-  float surge = 0.55 + 0.45 * sin(shore * 1.1 - uTime * 1.4 + vnoise(vWorld.xz * 0.15) * 5.0);
-  foam += exp(-max(shore + 3.0, 0.0) / 4.0) * surge * (0.5 + 0.6 * vnoise(vWorld.xz * 0.6 + uTime * 0.25)) * step(-6.0, shore);
+  // Ragged, not drawn round with a compass: the line wanders, the sets come
+  // in broken, and the foam fades in under the rocks rather than starting at
+  // an edge.
+  float rag = shore + (vnoise(vWorld.xz * 0.045) - 0.5) * 9.0 + (vnoise(vWorld.xz * 0.2) - 0.5) * 3.0;
+  float surge = 0.55 + 0.45 * sin(rag * 1.1 - uTime * 1.4 + vnoise(vWorld.xz * 0.15) * 5.0);
+  foam += exp(-max(rag + 3.0, 0.0) / 3.0) * surge * (0.35 + 0.8 * vnoise(vWorld.xz * 0.6 + uTime * 0.25)) * smoothstep(-10.0, -4.0, rag);
 
   // Whitecaps where the wind breaks the steepest crests.
   float steep = length(s);

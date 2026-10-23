@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
-import { DECK_TOP, FOUNDRY, STATUS, ZONE, ZONES, type ZoneId } from './layout'
+import { CHAIR, DECK_TOP, FOUNDRY, STATUS, ZONE, ZONES, type ZoneId } from './layout'
 import { plated } from './metal'
 import { reactorState } from './shared'
 import { useStation, type StationEvent } from './stationStore'
@@ -36,6 +36,13 @@ import { useStation, type StationEvent } from './stationStore'
  * console. They fly like FPV drones — nose down into speed, banked hard
  * into turns, the odd roll on a long straight.
  *
+ * Each drone's FPV camera is on a gimbal and is never left staring at the
+ * floor: it's on whoever's at the desk — while docked, perched, circling or
+ * bringing data to the console — or on where it's working: the place it's
+ * flying to, the spot it's picking up from or dropping at, the zone it's
+ * scanning. Hovering, a drone turns to face what it's looking at; in flight
+ * its body tilts no more than a real one would indoors.
+ *
  * Sat at the desk in Talk mode, nothing flies through the view: anything
  * passing over the desk and its monitors goes up near the ceiling, above
  * the picture.
@@ -62,6 +69,8 @@ const PERCHES = [200, 225, 248].map((deg) => {
 })
 
 const CONSOLE_DROP = V(0, 2.45, 0.35)
+/** Whoever's sat at the desk: where the cameras look when there's nothing else. */
+const SUBJECT = V(CHAIR[0], 1.2, CHAIR[2])
 const BAY_DROP = V(FOUNDRY[0], 3.0, FOUNDRY[2] + 1.0)
 const DOOR_IN = V(0, 3.0, -12.5)
 const DOOR_OUT = V(0, 3.0, -18.5)
@@ -126,6 +135,8 @@ type Drone = {
   cruise: number
   speed: number
   job: 'home' | 'delivery' | 'tend' | 'data' | 'swarm'
+  /** The camera gimbal: tilt (x) and pan (y), radians. */
+  gimbal: THREE.Vector2
   tend: ZoneId | null
 }
 
@@ -193,6 +204,23 @@ function keepClear(p: V3) {
   if (w > 0) p.y += (Math.max(p.y, 4.05) - p.y) * w
 }
 
+/**
+ * What a drone's camera is on: whoever's at the desk, unless it's working —
+ * then the spot below it (picking up, dropping off, scanning) or, in
+ * flight, the next place it has work to do.
+ */
+function subjectOf(d: Drone, out: V3): V3 {
+  const l = d.legs[0]
+  if (!l || l.kind === 'home' || l.kind === 'orbit') return out.copy(SUBJECT)
+  if (l.kind === 'hold') {
+    if (l.act === 'launch' || l.act === 'land') return out.copy(SUBJECT)
+    return out.set(l.at.x, Math.max(DECK_TOP + 0.6, l.at.y - 1.6), l.at.z)
+  }
+  const job = d.legs.find((x) => x.kind === 'hold' && x.act !== 'launch' && x.act !== 'land')
+  if (job && job.kind === 'hold') return out.set(job.at.x, Math.max(DECK_TOP + 0.6, job.at.y - 1.6), job.at.z)
+  return out.copy(SUBJECT)
+}
+
 // ---------------------------------------------------------------- the models
 
 const TRAIL = 40
@@ -226,6 +254,9 @@ function build(nodes: Record<string, THREE.Object3D>, kind: Kind, propColor: str
   const model = new THREE.Group()
   model.scale.setScalar(scale)
   model.add(copy(nodes[`${pre}_body`]), copy(nodes[`${pre}_led`]))
+  // The FPV camera on its gimbal (fpv.py exports it level, at its pivot).
+  const cam = copy(nodes[`${pre}_cam`])
+  model.add(cam)
   // Prop discs at the props' height (fpv.py), the size of the props.
   const disc = new THREE.CircleGeometry(quad ? 0.067 : 0.0162, 32).rotateX(-Math.PI / 2)
   const rotors = ['fl', 'fr', 'rl', 'rr'].map((k) => {
@@ -252,7 +283,7 @@ function build(nodes: Record<string, THREE.Object3D>, kind: Kind, propColor: str
   const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }))
   trail.frustumCulled = false
   const hist = Array.from({ length: TRAIL }, () => V(0, 0, 0))
-  return { root, tilt, rotors, led, prop, blur, packet, packetMat, beam, beamMat, trail, hist }
+  return { root, tilt, model, cam, rotors, led, prop, blur, packet, packetMat, beam, beamMat, trail, hist }
 }
 
 // ---------------------------------------------------------------- the docks
@@ -395,7 +426,8 @@ export function Drones() {
         prev: V(0, 0, 0),
         vel: V(0, 0, 0),
         acc: V(0, 0, 0),
-        heading: kind === 'quad' ? Math.PI - (DOCK_DEG[i] * Math.PI) / 180 : Math.PI / 2,
+        heading: 0,
+        gimbal: new THREE.Vector2(0, 0),
         quat: new THREE.Quaternion(),
         cargo: null,
         lift: 0,
@@ -415,7 +447,7 @@ export function Drones() {
   const seen = useRef(0)
   const sigs = useRef<Partial<Record<ZoneId, string>>>({})
   const lastData = useRef<Partial<Record<ZoneId, number>>>({})
-  const tmp = useMemo(() => ({ v: V(0, 0, 0), a: V(0, 0, 0), up: V(0, 1, 0), x: V(1, 0, 0), z: V(0, 0, 1), m: new THREE.Matrix4(), q: new THREE.Quaternion(), roll: new THREE.Quaternion(), axis: V(0, 0, -1), c: new THREE.Color() }), [])
+  const tmp = useMemo(() => ({ v: V(0, 0, 0), a: V(0, 0, 0), up: V(0, 1, 0), x: V(1, 0, 0), z: V(0, 0, 1), t: V(0, 0, 0), m: new THREE.Matrix4(), q: new THREE.Quaternion(), roll: new THREE.Quaternion(), axis: V(0, 0, -1), c: new THREE.Color() }), [])
 
   useFrame((st, rawDt) => {
     const dt = Math.min(rawDt, 0.05)
@@ -551,15 +583,27 @@ export function Drones() {
       d.acc.lerp(tmp.a.copy(v).sub(d.vel).divideScalar(dt), Math.min(1, dt * 6))
       d.vel.copy(v)
       const speed = Math.hypot(v.x, v.z)
-      if (speed > 0.4) {
-        let dh = Math.atan2(-v.x, -v.z) - d.heading
-        dh = Math.atan2(Math.sin(dh), Math.cos(dh))
-        d.heading += dh * Math.min(1, dt * 5)
-      }
+      // In flight it noses the way it's going; hovering, it turns to face
+      // what its camera is on.
+      const subject = subjectOf(d, tmp.t)
+      const sx = subject.x - d.pos.x
+      const sz = subject.z - d.pos.z
+      const face = speed > 0.6 ? Math.atan2(-v.x, -v.z) : Math.hypot(sx, sz) > 0.8 ? Math.atan2(-sx, -sz) : d.heading
+      let dh = face - d.heading
+      dh = Math.atan2(Math.sin(dh), Math.cos(dh))
+      d.heading += reduced ? dh : dh * Math.min(1, dt * (speed > 0.6 ? 5 : 2.5))
       const next = d.legs[0]
       const onPad = !next || (next.kind === 'hold' && (next.act === 'launch' || next.act === 'land'))
       if (onPad || reduced) tmp.up.set(0, 1, 0)
-      else tmp.up.set(d.acc.x + v.x * 0.35, Math.max(2, d.acc.y + G), d.acc.z + v.z * 0.35).normalize()
+      else {
+        tmp.up.set(d.acc.x + v.x * 0.35, Math.max(2, d.acc.y + G), d.acc.z + v.z * 0.35).normalize()
+        // No more tilt than a real one indoors (and so no staring at the floor).
+        const max = d.kind === 'quad' ? 0.61 : 0.52
+        if (tmp.up.y < Math.cos(max)) {
+          const k = Math.sin(max) / Math.hypot(tmp.up.x, tmp.up.z)
+          tmp.up.set(tmp.up.x * k, Math.cos(max), tmp.up.z * k)
+        }
+      }
       tmp.z.set(Math.sin(d.heading), 0, Math.cos(d.heading)) // towards the drone's tail
       tmp.z.addScaledVector(tmp.up, -tmp.z.dot(tmp.up)).normalize()
       tmp.x.crossVectors(tmp.up, tmp.z).normalize()
@@ -572,6 +616,15 @@ export function Drones() {
       const o = kit[idx]
       o.root.position.copy(d.pos)
       o.tilt.quaternion.copy(d.quat)
+      // The gimbal: pan and tilt the camera onto its subject, within its travel.
+      o.root.updateMatrixWorld(true)
+      const local = o.model.worldToLocal(tmp.t.copy(subject)).sub(o.cam.position)
+      const pan = Math.max(-1.05, Math.min(1.05, Math.atan2(-local.x, -local.z)))
+      const tiltTo = Math.max(-1.3, Math.min(0.7, Math.atan2(local.y, Math.hypot(local.x, local.z))))
+      const gk = reduced ? 1 : Math.min(1, dt * 6)
+      d.gimbal.x += (tiltTo - d.gimbal.x) * gk
+      d.gimbal.y += (pan - d.gimbal.y) * gk
+      o.cam.rotation.set(d.gimbal.x, d.gimbal.y, 0, 'YXZ')
       const rate = d.spin * (60 + 20 * Math.min(1, d.acc.length() / 4))
       o.rotors.forEach((r, k) => (r.rotation.y += (k === 1 || k === 2 ? -1 : 1) * rate * dt))
       // Spinning props are a blur: the blades fade and a disc shows instead.

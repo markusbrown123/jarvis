@@ -11,6 +11,7 @@ AgX). Run the asset QA skill on fpv.glb before rendering (qa_check.py).
 Writes public/station/loading/hero_quad.jpg and hero_whoop.jpg (or --out).
 """
 
+import math
 import os
 import sys
 
@@ -56,6 +57,14 @@ def shot(which):
     print('turntable', turntable.run(objects=[o.name for o in keep], rig='studio', backdrop=True, frames=72, lens=s['lens'], elevation=20), flush=True)
     cam = sc.camera
     cam.location = cam.location * s['closer']
+    sc.frame_set(s['frame'])
+    bpy.context.view_layer.update()
+    # The drone's own camera (on its gimbal) looks at the lens taking the picture.
+    eye = cam.matrix_world.translation
+    for g in [o for o in keep if o.name.startswith(f'{which}_cam')]:
+        d = eye - g.matrix_world.translation
+        g.rotation_mode = 'XYZ'
+        g.rotation_euler = (max(-1.3, min(0.7, math.atan2(d.z, math.hypot(d.x, d.y)))), 0, max(-1.05, min(1.05, math.atan2(-d.x, d.y))))
     bpy.context.view_layer.update()
     centre = sum((o.matrix_world.translation for o in keep), Vector()) / len(keep)
     cam.data.dof.use_dof = True
