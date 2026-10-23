@@ -1,61 +1,58 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Environment, Lightformer, MeshReflectorMaterial, OrbitControls, PerformanceMonitor, Sparkles } from '@react-three/drei'
+import { useRef, useState } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { Environment, Lightformer, PerformanceMonitor, Sparkles } from '@react-three/drei'
 import { Bloom, ChromaticAberration, EffectComposer, N8AO, Noise, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import * as THREE from 'three'
 import { useHub, type Graphics } from '../hub/client'
 import { useStore } from '../store'
-import { BackScreen, Drones, FloorMarks, HoloTable, LightShaft, Racks, RobotArm, Room, StationCore } from './parts'
-import { stateColor } from './shared'
+import { BackScreen, Racks, RobotArm, Room } from './parts'
+import { Floor, Island } from './floor'
+import { Reactor } from './reactor'
+import { Clusters } from './clusters'
+import { Links } from './links'
+import { CameraRig, Controls } from './camera'
+import { LabelProjector } from './labels'
+import { useStation } from './stationStore'
 
 /**
- * The station: a dark workshop round a holo-table, lit for real — PBR
- * metals, image-based reflections, shadow maps, a reflective floor and
- * volumetric light — then finished with ambient occlusion and bloom.
+ * The station: a control room round the reactor. An illuminated hex floor,
+ * a raised island carrying the reactor and the six systems on their pads,
+ * the pathways between them, two arms, racks and the curved back wall — lit
+ * for real (PBR metals, image-based reflections, shadow maps, a reflective
+ * floor) and finished with bloom, and ambient occlusion on Ultra.
  *
- * Quality is chosen in Settings (or on the station's top bar): Low is
- * flat-shaded and cheap, High adds shadows, reflections and light shafts,
- * Ultra adds wide-filtered soft shadows, ambient occlusion, 4096 shadow
- * maps, full-resolution reflections, film grain and lens fringing. A
- * performance monitor steps the resolution down if frames start dropping.
+ * Everything that moves or glows is driven by live state through the
+ * station model (model.ts); see docs/STATION.md for the full mapping.
+ *
+ * Quality is chosen in Settings (or on the station's top bar): Low is cheap,
+ * High adds shadows and floor reflections, Ultra adds soft shadows, ambient
+ * occlusion, 4096 shadow maps, full-resolution reflections, film grain and
+ * lens fringing. A performance monitor steps the resolution down if frames
+ * start dropping, and a guard steps quality down if a frame comes out blank.
  */
 
 const QUALITY: Record<
   Graphics,
-  { maxDpr: number; shadows: boolean; map: number; reflector: number; ao: boolean; soft: boolean; dust: number; volumetric: boolean; msaa: number; lens: boolean; env: number }
+  { maxDpr: number; shadows: boolean; map: number; reflector: number; ao: boolean; soft: boolean; dust: number; msaa: number; lens: boolean; env: number }
 > = {
-  low: { maxDpr: 1, shadows: false, map: 0, reflector: 0, ao: false, soft: false, dust: 120, volumetric: false, msaa: 0, lens: false, env: 64 },
-  high: { maxDpr: 1.5, shadows: true, map: 2048, reflector: 512, ao: false, soft: false, dust: 380, volumetric: true, msaa: 0, lens: false, env: 128 },
-  ultra: { maxDpr: 2, shadows: true, map: 4096, reflector: 1024, ao: true, soft: true, dust: 900, volumetric: true, msaa: 4, lens: true, env: 256 },
+  low: { maxDpr: 1, shadows: false, map: 0, reflector: 0, ao: false, soft: false, dust: 0, msaa: 0, lens: false, env: 64 },
+  high: { maxDpr: 1.5, shadows: true, map: 2048, reflector: 512, ao: false, soft: false, dust: 60, msaa: 0, lens: false, env: 128 },
+  ultra: { maxDpr: 2, shadows: true, map: 4096, reflector: 1024, ao: true, soft: true, dust: 120, msaa: 4, lens: true, env: 256 },
 }
 
-const TARGET: [number, number, number] = [0, 1.75, 0]
-
-/** Key, fill, rims, the core's own light, and a shaft from the ceiling. */
+/** Sky fill, a shadow-throwing key over the island, cool and teal rims. */
 function Lights({ q }: { q: (typeof QUALITY)[Graphics] }) {
-  const shaft = useRef<THREE.SpotLight>(null)
-  const col = useMemo(() => new THREE.Color('#a78bfa'), [])
-  const target = useMemo(() => {
-    const o = new THREE.Object3D()
-    o.position.set(0, 1, 0)
-    return o
-  }, [])
-  useFrame((_, dt) => {
-    stateColor(col, Math.min(1, dt * 2))
-    if (shaft.current) shaft.current.color.copy(col).lerp(new THREE.Color('#ffffff'), 0.55)
-  })
   return (
     <>
-      <primitive object={target} />
-      <hemisphereLight args={['#3a3160', '#060509', 0.45]} />
+      <hemisphereLight args={['#4a4878', '#0a0910', 0.9]} />
       {/* Key: high front-right, the light that throws the shadows. */}
       <spotLight
-        position={[6, 11, 7]}
-        angle={0.42}
-        penumbra={0.75}
-        intensity={1100}
-        distance={45}
+        position={[7, 14, 9]}
+        angle={0.62}
+        penumbra={0.7}
+        intensity={1500}
+        distance={50}
         decay={2}
         color="#f0ecff"
         castShadow={q.shadows}
@@ -63,78 +60,16 @@ function Lights({ q }: { q: (typeof QUALITY)[Graphics] }) {
         shadow-bias={-0.00012}
         shadow-normalBias={0.025}
         shadow-radius={q.soft ? 5 : 2}
-        shadow-camera-near={4}
-        shadow-camera-far={30}
-        target={target}
+        shadow-camera-near={6}
+        shadow-camera-far={36}
       />
-      {/* Cool rim from back-left, warm rim from back-right. */}
-      <spotLight position={[-8, 6, -5]} angle={0.5} penumbra={1} intensity={420} distance={30} decay={2} color="#7c6cff" target={target} />
-      <spotLight position={[8, 5, -4]} angle={0.5} penumbra={1} intensity={300} distance={30} decay={2} color="#4fd1c5" target={target} />
-      {/* A low warm bounce so the floor-side of things isn't black. */}
-      <pointLight position={[0, 0.6, 5]} intensity={6} distance={12} decay={2} color="#ff9a5a" />
-      {/* The shaft from the ceiling ring onto the table. */}
-      <spotLight
-        ref={shaft}
-        position={[0, 7.5, 0]}
-        angle={0.36}
-        penumbra={0.8}
-        intensity={160}
-        distance={10}
-        decay={2}
-        target={target}
-      />
-      {/* Only the key light casts shadows; the visible shaft is a mesh. */}
-      {q.volumetric && <LightShaft />}
+      {/* Cool rim from back-left, teal rim from back-right. */}
+      <spotLight position={[-10, 7, -7]} angle={0.6} penumbra={1} intensity={520} distance={34} decay={2} color="#7c6cff" />
+      <spotLight position={[10, 6, -6]} angle={0.6} penumbra={1} intensity={380} distance={34} decay={2} color="#4fd1c5" />
+      {/* A low warm bounce so the front faces aren't black. */}
+      <pointLight position={[0, 1.2, 9]} intensity={10} distance={16} decay={2} color="#ff9a5a" />
     </>
   )
-}
-
-function Floor({ q }: { q: (typeof QUALITY)[Graphics] }) {
-  return (
-    <mesh rotation-x={-Math.PI / 2} receiveShadow>
-      <circleGeometry args={[18, 96]} />
-      {q.reflector ? (
-        <MeshReflectorMaterial
-          resolution={q.reflector}
-          blur={q.reflector >= 1024 ? [520, 140] : [300, 90]}
-          mixBlur={1}
-          mixStrength={14}
-          mixContrast={1.1}
-          roughness={0.78}
-          depthScale={1.1}
-          minDepthThreshold={0.35}
-          maxDepthThreshold={1.4}
-          color="#0c0b12"
-          metalness={0.55}
-          mirror={0.65}
-        />
-      ) : (
-        <meshStandardMaterial color="#0e0d15" roughness={0.55} metalness={0.4} />
-      )}
-    </mesh>
-  )
-}
-
-/**
- * The room is framed for a 16:10 window. A narrower one pulls the camera
- * back so the table, arms and racks still fit.
- */
-function FitCamera() {
-  const camera = useThree((s) => s.camera)
-  const size = useThree((s) => s.size)
-  const controls = useThree((s) => s.controls) as unknown as { update?: () => void } | null
-  useEffect(() => {
-    // The first measurement can be 0×0; an aspect from that is NaN, and a
-    // NaN camera never recovers.
-    if (!size.width || !size.height) return
-    const target = new THREE.Vector3(...TARGET)
-    const dir = camera.position.clone().sub(target)
-    if (!Number.isFinite(dir.lengthSq()) || dir.lengthSq() < 1e-6) dir.set(0, 1.35, 11.8)
-    dir.normalize()
-    camera.position.copy(target).addScaledVector(dir, 11.9 * Math.max(1, 1.6 / (size.width / size.height)))
-    controls?.update?.()
-  }, [camera, size.width, size.height, controls])
-  return null
 }
 
 const LOWER = { ultra: 'high', high: 'low', low: null } as const
@@ -180,16 +115,6 @@ function FrameProbe() {
   return null
 }
 
-/** A slow sway of the whole world, so the room breathes even untouched. */
-function Drift({ children }: { children: ReactNode }) {
-  const g = useRef<THREE.Group>(null)
-  useFrame((state) => {
-    const reduced = useHub.getState().prefs.reducedMotion
-    if (g.current) g.current.rotation.y = reduced ? 0 : Math.sin(state.clock.elapsedTime * 0.045) * 0.05
-  })
-  return <group ref={g}>{children}</group>
-}
-
 function Post({ q }: { q: (typeof QUALITY)[Graphics] }) {
   return (
     <EffectComposer multisampling={q.msaa} enableNormalPass={false}>
@@ -220,7 +145,8 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       shadows={q.shadows}
       dpr={dpr}
       gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
-      camera={{ position: [0, 3.1, 11.8], fov: 38, near: 0.1, far: 80 }}
+      camera={{ position: [0, 9.6, 15.2], fov: 38, near: 0.1, far: 90 }}
+      onPointerMissed={() => useStation.getState().select(null, false)}
       onCreated={({ gl }) => {
         // If the graphics card drops the context (too much for it, or a
         // driver reset), step down a quality level instead of sitting black.
@@ -241,7 +167,7 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
         onFallback={() => setDpr(1)}
       />
       <color attach="background" args={['#050409']} />
-      <fog attach="fog" args={['#060510', 14, 36]} />
+      <fog attach="fog" args={['#060510', 26, 62]} />
       <Environment resolution={q.env} frames={1}>
         <color attach="background" args={['#06050b']} />
         <Lightformer form="rect" intensity={2.2} color="#8b7cff" position={[0, 7, -6]} scale={[14, 1.5, 1]} />
@@ -253,35 +179,21 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       {import.meta.env.DEV && <FrameProbe />}
       <BlankGuard graphics={graphics} />
       <Lights q={q} />
-      <Drift>
-        <Floor q={q} />
-        <FloorMarks />
-        <Room />
-        <Racks />
-        <BackScreen />
-        <HoloTable />
-        <StationCore />
-        <RobotArm position={[-2.5, 0, 1.25]} side={-1} seed={1} />
-        <RobotArm position={[2.5, 0, 1.25]} side={1} seed={2} />
-        <Drones />
-        <Sparkles count={q.dust} scale={[18, 7, 14]} position={[0, 3.5, -1]} size={1.6} speed={0.18} opacity={0.32} color="#c4b5fd" noise={1.2} />
-      </Drift>
-      <OrbitControls
-        makeDefault
-        target={TARGET}
-        enablePan={false}
-        enableDamping
-        dampingFactor={0.06}
-        minDistance={6.5}
-        maxDistance={22}
-        minPolarAngle={0.95}
-        maxPolarAngle={1.52}
-        minAzimuthAngle={-0.62}
-        maxAzimuthAngle={0.62}
-        rotateSpeed={0.5}
-        zoomSpeed={0.6}
-      />
-      <FitCamera />
+      <Floor reflector={q.reflector} />
+      <Island />
+      <Room />
+      <Racks />
+      <BackScreen />
+      <Reactor />
+      <Links />
+      <Clusters />
+      {/* Between the pads, front left and right: each serves the three zones on its side. */}
+      <RobotArm position={[2.6, 0.16, 1.5]} side={1} seed={2} zones={['automaton', 'finance', 'jobs']} />
+      <RobotArm position={[-2.6, 0.16, 1.5]} side={-1} seed={1} zones={['needs', 'core', 'roblox']} />
+      {q.dust > 0 && <Sparkles count={q.dust} scale={[20, 6, 18]} position={[0, 3.2, 0]} size={1.4} speed={0.12} opacity={0.22} color="#c4b5fd" noise={1} />}
+      <Controls />
+      <CameraRig />
+      <LabelProjector />
       <Post q={q} />
     </Canvas>
   )

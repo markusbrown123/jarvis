@@ -1,376 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html, RoundedBox, Sparkles } from '@react-three/drei'
+import { RoundedBox, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
 import { useStore } from '../store'
 import { useHub, fileUrl } from '../hub/client'
-import type { Job } from '../hub/types'
-import { C, crystalGeometry, nucleusGeometry, pointFrag, pointVert, rng, shellFrag, shellVert } from '../scene/crystal'
-import { CORE_Y, motion, stateColor, useMaterials } from './shared'
+import { rng } from '../scene/crystal'
+import { motion, useMaterials } from './shared'
+import { ZONE, type ZoneId } from './layout'
+import { useStation } from './stationStore'
+import { SPHERE_Y } from './reactor'
 
 /**
- * The station's models, all built from geometry here — nothing downloaded.
- * Each one reads live state: the core's colour is JARVIS's state, the arms
- * reach in while he works, each drone is a running job, rack lights blink
- * with how much is happening, the back screen shows the latest studio render.
+ * The room round the installation, all built from geometry here — nothing
+ * downloaded — and each piece reading live state: the arms track the zones
+ * they serve, rack lights blink with how much is happening, the back screen
+ * shows the latest studio render.
  */
-
-// ---------------------------------------------------------------- holo table
-
-function gridTexture() {
-  const size = 1024
-  const cv = document.createElement('canvas')
-  cv.width = cv.height = size
-  const g = cv.getContext('2d')!
-  const c = size / 2
-  g.strokeStyle = '#fff'
-  g.fillStyle = '#fff'
-  g.lineWidth = 2
-  for (const r of [0.18, 0.3, 0.42, 0.47]) {
-    g.globalAlpha = r === 0.47 ? 0.9 : 0.45
-    g.beginPath()
-    g.arc(c, c, r * size, 0, Math.PI * 2)
-    g.stroke()
-  }
-  // Ticks round the rim, longer every tenth.
-  for (let i = 0; i < 180; i++) {
-    const a = (i / 180) * Math.PI * 2
-    const long = i % 10 === 0
-    const r0 = (long ? 0.43 : 0.445) * size
-    g.globalAlpha = long ? 0.9 : 0.5
-    g.beginPath()
-    g.moveTo(c + Math.cos(a) * r0, c + Math.sin(a) * r0)
-    g.lineTo(c + Math.cos(a) * 0.465 * size, c + Math.sin(a) * 0.465 * size)
-    g.stroke()
-  }
-  // Radial spokes and arc segments: an instrument dial, not a dartboard.
-  g.globalAlpha = 0.28
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2
-    g.beginPath()
-    g.moveTo(c + Math.cos(a) * 0.19 * size, c + Math.sin(a) * 0.19 * size)
-    g.lineTo(c + Math.cos(a) * 0.41 * size, c + Math.sin(a) * 0.41 * size)
-    g.stroke()
-  }
-  g.lineWidth = 7
-  g.globalAlpha = 0.7
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2
-    g.beginPath()
-    g.arc(c, c, 0.36 * size, a, a + 0.55)
-    g.stroke()
-  }
-  g.lineWidth = 2
-  // Dot field in the centre.
-  const r = rng(3)
-  g.globalAlpha = 0.5
-  for (let i = 0; i < 260; i++) {
-    const a = r() * Math.PI * 2
-    const d = Math.sqrt(r()) * 0.16 * size
-    g.fillRect(c + Math.cos(a) * d, c + Math.sin(a) * d, 2, 2)
-  }
-  const t = new THREE.CanvasTexture(cv)
-  t.colorSpace = THREE.SRGBColorSpace
-  t.anisotropy = 8
-  return t
-}
-
-const beamVert = /* glsl */ `
-  varying vec2 vUv;
-  varying vec3 vN;
-  varying vec3 vV;
-  void main() {
-    vUv = uv;
-    vN = normalize(normalMatrix * normal);
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    vV = normalize(-mv.xyz);
-    gl_Position = projectionMatrix * mv;
-  }
-`
-const beamFrag = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uTime;
-  uniform float uLevel;
-  varying vec2 vUv;
-  varying vec3 vN;
-  varying vec3 vV;
-  void main() {
-    float edge = pow(1.0 - abs(dot(vN, vV)), 1.6);
-    float rise = pow(1.0 - vUv.y, 1.3);
-    float scan = 0.75 + 0.25 * sin(vUv.y * 90.0 - uTime * 6.0);
-    float streak = 0.6 + 0.4 * sin(vUv.x * 120.0 + uTime * 0.7);
-    float a = (0.05 + edge * 0.5) * rise * scan * streak * (0.55 + uLevel * 0.9);
-    gl_FragColor = vec4(uColor * (1.4 + uLevel), a);
-  }
-`
-
-export function HoloTable() {
-  const m = useMaterials()
-  const top = useRef<THREE.Mesh>(null)
-  const grid = useMemo(gridTexture, [])
-  const trims = useMemo(() => [m.glow('#a78bfa', 1.6), m.glow('#a78bfa', 1.2)], [m])
-  const topMat = useMemo(
-    () => new THREE.MeshBasicMaterial({ map: grid, color: '#a78bfa', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
-    [grid],
-  )
-  const beamMat = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: beamVert,
-        fragmentShader: beamFrag,
-        uniforms: { uColor: { value: new THREE.Color('#a78bfa') }, uTime: { value: 0 }, uLevel: { value: 0 } },
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-      }),
-    [],
-  )
-  // The pedestal's silhouette, turned on a lathe: a stepped foot, a waisted
-  // column with a collar, and a flared top with a lip.
-  const profile = useMemo(() => {
-    const p = [
-      [0, 0],
-      [1.78, 0],
-      [1.8, 0.04],
-      [1.74, 0.1],
-      [1.52, 0.13],
-      [1.46, 0.2],
-      [1.0, 0.26],
-      [0.82, 0.36],
-      [0.74, 0.55],
-      [0.8, 0.6],
-      [0.8, 0.66],
-      [0.72, 0.7],
-      [0.9, 0.82],
-      [1.48, 0.92],
-      [1.62, 0.95],
-      [1.66, 0.99],
-      [1.6, 1.01],
-      [0, 1.01],
-    ]
-    return p.map(([x, y]) => new THREE.Vector2(x, y))
-  }, [])
-  const col = useMemo(() => new THREE.Color('#a78bfa'), [])
-  const t = useRef(0)
-  useFrame((_, dt) => {
-    t.current += dt * motion()
-    stateColor(col, Math.min(1, dt * 3))
-    const { level, phase } = useStore.getState()
-    const live = phase === 'listening' || phase === 'speaking'
-    topMat.color.copy(col)
-    trims[0].color.copy(col).multiplyScalar(1.8)
-    trims[1].color.copy(col).multiplyScalar(1.1 + (live ? level : 0) * 2)
-    beamMat.uniforms.uColor.value.copy(col)
-    beamMat.uniforms.uTime.value = t.current
-    beamMat.uniforms.uLevel.value += ((live ? level : 0.05) - beamMat.uniforms.uLevel.value) * Math.min(1, dt * 8)
-    if (top.current) top.current.rotation.z += dt * 0.05 * motion()
-  })
-  return (
-    <group>
-      <mesh castShadow receiveShadow material={m.gunmetal}>
-        <latheGeometry args={[profile, 128]} />
-      </mesh>
-      {/* Glowing trim at the foot and the lip. */}
-      <mesh position-y={0.14} rotation-x={Math.PI / 2} material={trims[1]}>
-        <torusGeometry args={[1.5, 0.012, 8, 160]} />
-      </mesh>
-      <mesh position-y={0.975} rotation-x={Math.PI / 2} material={trims[0]}>
-        <torusGeometry args={[1.645, 0.014, 8, 192]} />
-      </mesh>
-      {/* Vertical service seams round the column. */}
-      {Array.from({ length: 16 }, (_, i) => {
-        const a = (i / 16) * Math.PI * 2
-        return (
-          <mesh key={i} position={[Math.cos(a) * 0.79, 0.47, Math.sin(a) * 0.79]} rotation-y={-a} material={m.graphite}>
-            <boxGeometry args={[0.02, 0.2, 0.05]} />
-          </mesh>
-        )
-      })}
-      {/* Projector lens. */}
-      <mesh position-y={1.03} material={m.chrome}>
-        <cylinderGeometry args={[0.22, 0.28, 0.06, 48]} />
-      </mesh>
-      <mesh position-y={1.065} material={trims[0]}>
-        <cylinderGeometry args={[0.14, 0.14, 0.012, 48]} />
-      </mesh>
-      {/* The dial projected on the top. */}
-      <mesh ref={top} position-y={1.02} rotation-x={-Math.PI / 2} material={topMat}>
-        <circleGeometry args={[1.56, 96]} />
-      </mesh>
-      {/* Light rising to the core. */}
-      <mesh position-y={1.02 + (CORE_Y - 1.02) / 2} material={beamMat}>
-        <cylinderGeometry args={[1.05, 0.2, CORE_Y - 1.02, 64, 1, true]} />
-      </mesh>
-    </group>
-  )
-}
-
-// ---------------------------------------------------------------- light shaft
-
-const shaftFrag = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uTime;
-  varying vec2 vUv;
-  varying vec3 vN;
-  varying vec3 vV;
-  void main() {
-    // Soft at the rim, brightest just under the ceiling, gone by the table.
-    float body = pow(abs(dot(vN, vV)), 1.4);
-    float fall = smoothstep(0.0, 0.85, vUv.y) * (0.35 + 0.65 * vUv.y);
-    float motes = 0.82 + 0.18 * sin(vUv.y * 40.0 - uTime * 0.8 + sin(vUv.x * 25.0) * 2.0);
-    gl_FragColor = vec4(uColor, body * fall * motes * 0.16);
-  }
-`
-
-/** The visible shaft from the ceiling ring down onto the table. */
-export function LightShaft() {
-  const col = useMemo(() => new THREE.Color('#d6ccff'), [])
-  const mat = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: beamVert,
-        fragmentShader: shaftFrag,
-        uniforms: { uColor: { value: new THREE.Color('#d6ccff') }, uTime: { value: 0 } },
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-      }),
-    [],
-  )
-  useFrame((state, dt) => {
-    stateColor(col, Math.min(1, dt * 2))
-    mat.uniforms.uColor.value.copy(col).lerp(C.white, 0.55)
-    mat.uniforms.uTime.value = state.clock.elapsedTime * motion()
-  })
-  return (
-    <mesh position-y={1.02 + (7.5 - 1.02) / 2} material={mat}>
-      <cylinderGeometry args={[0.55, 2.1, 7.5 - 1.02, 64, 1, true]} />
-    </mesh>
-  )
-}
-
-// ---------------------------------------------------------------- the core
-
-export function StationCore() {
-  const lowPower = useHub.getState().prefs.graphics === 'low'
-  const crystal = useMemo(crystalGeometry, [])
-  const nucleus = useMemo(() => nucleusGeometry(lowPower ? 800 : 2600), [lowPower])
-  const m = useMaterials()
-  const spin = useRef<THREE.Group>(null)
-  const gyro = useRef<(THREE.Group | null)[]>([])
-  const light = useRef<THREE.PointLight>(null)
-  const ringMat = useMemo(() => m.glow('#a78bfa', 2), [m])
-  const coilMat = useMemo(() => m.glow('#a78bfa', 1.3), [m])
-  const nucleusMat = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: pointVert,
-        fragmentShader: pointFrag,
-        uniforms: { uTime: { value: 0 }, uLevel: { value: 0 }, uSize: { value: 2.4 }, uMotion: { value: 1 }, uColor: { value: new THREE.Color('#c4b5fd') }, uAlpha: { value: 0.95 } },
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      }),
-    [],
-  )
-  const shellMat = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: shellVert,
-        fragmentShader: shellFrag,
-        uniforms: { uRim: { value: new THREE.Color('#a78bfa') }, uInner: { value: new THREE.Color('#1e1036') }, uOpacity: { value: 0.8 } },
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-      }),
-    [],
-  )
-  const edgeMat = useMemo(() => new THREE.LineBasicMaterial({ color: '#d8ccff', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), [])
-  const col = useMemo(() => new THREE.Color('#a78bfa'), [])
-  const d = useRef({ level: 0, spin: 0.2, t: 0 })
-
-  // Coils round the reactor ring: the arc-reactor look, in the state colour.
-  const coils = useMemo(() => Array.from({ length: 12 }, (_, i) => (i / 12) * Math.PI * 2), [])
-
-  useFrame((_, dt) => {
-    const { phase, level } = useStore.getState()
-    const mo = motion()
-    const k = Math.min(1, dt * 3)
-    stateColor(col, k)
-    const live = phase === 'listening' || phase === 'speaking' || phase === 'waking'
-    const busy = phase === 'thinking' || phase === 'tooling'
-    const s = d.current
-    s.level += ((live ? level : busy ? 0.2 : 0.03) - s.level) * Math.min(1, dt * 10)
-    s.spin += ((busy ? 1.1 : live ? 0.4 : 0.16) - s.spin) * k
-    s.t += dt * mo
-    if (spin.current) {
-      spin.current.rotation.y += dt * s.spin * mo
-      spin.current.rotation.x = Math.sin(s.t * 0.21) * 0.16
-      spin.current.scale.setScalar(0.62 * (1 + s.level * 0.12))
-    }
-    gyro.current.forEach((g, i) => {
-      if (!g) return
-      const dir = i % 2 ? -1 : 1
-      g.rotation.z += dt * (0.18 + i * 0.07) * dir * mo * (busy ? 3 : 1)
-      g.rotation.x += dt * 0.05 * (i + 1) * mo * (busy ? 2 : 1)
-    })
-    ringMat.color.copy(col).multiplyScalar(2.2 + s.level * 2)
-    coilMat.color.copy(col).multiplyScalar(1.1 + s.level * 1.5)
-    shellMat.uniforms.uRim.value.copy(C.violet).lerp(col, 0.25)
-    shellMat.uniforms.uOpacity.value = 0.6 + s.level * 0.4
-    edgeMat.color.copy(C.violet).lerp(C.white, 0.35).lerp(col, 0.2)
-    nucleusMat.uniforms.uTime.value = s.t
-    nucleusMat.uniforms.uLevel.value = s.level
-    nucleusMat.uniforms.uMotion.value = mo
-    nucleusMat.uniforms.uColor.value.copy(phase === 'speaking' ? C.cyan : C.white).lerp(col, 0.25)
-    if (light.current) {
-      light.current.color.copy(col)
-      light.current.intensity = 14 + s.level * 40 + (busy ? 6 : 0)
-    }
-  })
-
-  return (
-    <group position-y={CORE_Y}>
-      <pointLight ref={light} distance={10} decay={2} intensity={14} />
-      <group ref={spin}>
-        <points geometry={nucleus} material={nucleusMat} />
-        <mesh geometry={crystal.faceted} material={shellMat} />
-        <lineSegments geometry={crystal.edges} material={edgeMat} />
-      </group>
-      {/* The reactor ring: metal housing, glowing core line, twelve coils. */}
-      <group rotation-x={Math.PI / 2}>
-        <mesh material={m.gunmetal} castShadow>
-          <torusGeometry args={[1.12, 0.06, 20, 160]} />
-        </mesh>
-        <mesh material={ringMat}>
-          <torusGeometry args={[1.12, 0.018, 8, 200]} />
-        </mesh>
-        {coils.map((a, i) => (
-          <group key={i} position={[Math.cos(a) * 1.12, Math.sin(a) * 1.12, 0]} rotation-z={a}>
-            <RoundedBox args={[0.1, 0.2, 0.16]} radius={0.02} smoothness={3} material={m.graphite} castShadow />
-            <mesh material={coilMat} position-x={-0.051}>
-              <boxGeometry args={[0.004, 0.14, 0.1]} />
-            </mesh>
-          </group>
-        ))}
-      </group>
-      {/* A gyroscope of thin rings round it. */}
-      {[1.42, 1.62, 1.8].map((r, i) => (
-        <group key={r} ref={(el) => void (gyro.current[i] = el)} rotation={[i * 0.9, i * 0.4, 0]}>
-          <mesh material={i === 1 ? m.chrome : m.gunmetal}>
-            <torusGeometry args={[r, i === 1 ? 0.012 : 0.02, 10, 200, Math.PI * (1.2 + i * 0.25)]} />
-          </mesh>
-          <mesh material={ringMat} rotation-z={Math.PI * 1.35}>
-            <torusGeometry args={[r, 0.006, 6, 120, Math.PI * 0.35]} />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  )
-}
 
 // ---------------------------------------------------------------- robot arm
 
@@ -379,11 +24,14 @@ const L2 = 1.25
 const SHOULDER = 0.62
 
 /**
- * An articulated workshop arm. Two-link IK in its vertical plane reaches the
- * claw tip for a target; it idles folded and swaying, and reaches in to the
- * core to "work" while JARVIS is thinking or a job of his is running.
+ * An articulated arm on the deck between the pads. Two-link IK in its
+ * vertical plane reaches the claw tip for a target. It serves the three
+ * zones on its side: when work is handed to or comes back from one of them
+ * it swings over and its stripe lights in that zone's colour; while one is
+ * active it tends it; while JARVIS is thinking it works at the reactor; and
+ * with nothing going on it docks, folded.
  */
-export function RobotArm({ position, side, seed }: { position: [number, number, number]; side: 1 | -1; seed: number }) {
+export function RobotArm({ position, side, seed, zones }: { position: [number, number, number]; side: 1 | -1; seed: number; zones: ZoneId[] }) {
   const m = useMaterials()
   const yaw = useRef<THREE.Group>(null)
   const shoulder = useRef<THREE.Group>(null)
@@ -396,28 +44,47 @@ export function RobotArm({ position, side, seed }: { position: [number, number, 
   const want = useMemo(() => new THREE.Vector3(), [])
   const base = useMemo(() => new THREE.Vector3(...position), [position])
   const stripe = useMemo(() => m.glow('#5eead4', 1.4), [m])
+  const stripeTo = useMemo(() => new THREE.Color(), [])
   const t = useRef(seed * 10)
 
   useFrame((_, dt) => {
     const mo = motion()
     t.current += dt * mo
     const tt = t.current
+    const now = performance.now()
+    const { model, events } = useStation.getState()
+    // A transfer to or from one of its zones in the last few seconds wins;
+    // then the busiest active zone; then the reactor while JARVIS thinks.
+    const transfer = events.findLast((e) => zones.includes(e.zone) && e.kind !== 'voice' && e.kind !== 'fail' && now - e.at < 3000)
+    const active = model ? zones.filter((z) => model.zones[z].state === 'active').sort((a, b) => model.zones[b].level - model.zones[a].level)[0] : undefined
+    const focus: ZoneId | undefined = transfer?.zone ?? active
     const { phase } = useStore.getState()
-    const s = useHub.getState().state
-    const jobs = s ? Object.values(s.jobs).some((j) => j.source === 'jarvis' && j.state === 'running') : false
-    const busy = phase === 'thinking' || phase === 'tooling' || jobs
-    if (busy !== working) setWorking(busy)
+    const thinking = phase === 'thinking' || phase === 'tooling'
+    const busy = Boolean(focus) || thinking
+    if (Boolean(transfer) !== working) setWorking(Boolean(transfer))
 
-    // Where the claw should be, in world space.
-    if (busy) {
-      // At the core's flank, with small deliberate "tool" moves.
-      want.set(side * 0.95 + Math.sin(tt * 2.3 + seed) * 0.06, CORE_Y - 0.15 + Math.sin(tt * 1.7) * 0.08, 0.35 + Math.cos(tt * 1.9 + seed) * 0.06)
+    if (focus) {
+      // Out over the near edge of the zone's pad.
+      const [px, , pz] = ZONE[focus].pos
+      const dx = px - base.x
+      const dz = pz - base.z
+      const d = Math.hypot(dx, dz)
+      const reach = Math.min(L1 + L2 - 0.25, Math.max(0.8, d - 0.9))
+      want.set(base.x + (dx / d) * reach + Math.sin(tt * 2.1 + seed) * 0.05, 0.95 + Math.sin(tt * 1.6) * 0.06, base.z + (dz / d) * reach + Math.cos(tt * 1.8 + seed) * 0.05)
+    } else if (thinking) {
+      // At the reactor's flank, with small deliberate "tool" moves.
+      const d = Math.hypot(base.x, base.z)
+      want.set((base.x / d) * 1.25 + Math.sin(tt * 2.3 + seed) * 0.06, SPHERE_Y - 0.35 + Math.sin(tt * 1.7) * 0.08, (base.z / d) * 1.25 + Math.cos(tt * 1.9 + seed) * 0.06)
     } else {
-      // Folded beside its base, breathing.
-      want.set(position[0] - side * 0.2, 1.25 + Math.sin(tt * 0.6 + seed) * 0.08, position[2] - 0.65 + Math.sin(tt * 0.4) * 0.05)
+      // Docked: upper arm upright, claw tucked down towards the reactor, breathing.
+      const d = Math.hypot(base.x, base.z)
+      want.set(base.x - (base.x / d) * 0.6, base.y + 0.9 + Math.sin(tt * 0.6 + seed) * 0.04, base.z - (base.z / d) * 0.6)
     }
     if (target.lengthSq() === 0) target.copy(want)
-    target.lerp(want, Math.min(1, dt * (busy ? 1.6 : 0.9)))
+    target.lerp(want, Math.min(1, dt * (transfer ? 2.2 : busy ? 1.4 : 0.8)))
+
+    stripeTo.set(focus ? ZONE[focus].color : thinking ? '#b69cff' : '#5eead4').multiplyScalar(transfer ? 3.2 : busy ? 1.8 : 0.7)
+    stripe.color.lerp(stripeTo, Math.min(1, dt * 4))
 
     // Into the arm's frame.
     const dx = target.x - base.x
@@ -435,7 +102,7 @@ export function RobotArm({ position, side, seed }: { position: [number, number, 
     if (wrist.current) wrist.current.rotation.x = (busy ? 0.35 : 0.9) + Math.sin(tt * 1.3) * 0.08
     const grip = busy ? 0.18 + Math.abs(Math.sin(tt * 3.1)) * 0.25 : 0.05
     fingers.current.forEach((f, i) => f && (f.rotation.x = (i === 0 ? 1 : -1) * grip))
-    if (spark.current) spark.current.intensity = busy ? (Math.random() > 0.55 ? 2 + Math.random() * 7 : 0.3) : 0
+    if (spark.current) spark.current.intensity = transfer ? (Math.random() > 0.55 ? 2 + Math.random() * 7 : 0.3) : 0
   })
 
   const seg = (len: number, w: number) => (
@@ -535,198 +202,7 @@ export function RobotArm({ position, side, seed }: { position: [number, number, 
   )
 }
 
-// ---------------------------------------------------------------- drones
-
-const DRONE_COLOR: Record<string, string> = {
-  running: '#a78bfa',
-  needs_markus: '#f59e0b',
-  waiting: '#5eead4',
-  queued: '#6b6488',
-  retrying: '#f59e0b',
-  cancel_requested: '#f59e0b',
-  failed: '#ef4444',
-}
-
-function hash(s: string) {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return (h >>> 0) / 4294967295
-}
-
-function Drone({ job, index, onOpen }: { job: Job; index: number; onOpen: () => void }) {
-  const m = useMaterials()
-  const g = useRef<THREE.Group>(null)
-  const rotors = useRef<(THREE.Mesh | null)[]>([])
-  const [hover, setHover] = useState(false)
-  const color = job.stale ? '#ef4444' : (DRONE_COLOR[job.state] ?? '#a78bfa')
-  const glow = useMemo(() => m.glow(color, 2.2), [m, color])
-  const eye = useMemo(() => m.glow('#5eead4', 3), [m])
-  const h = hash(job.id)
-  const orbit = useMemo(() => ({ r: 2.3 + h * 1.1 + (index % 3) * 0.25, y: CORE_Y - 0.4 + ((index * 0.37) % 1) * 1.6, speed: (0.12 + h * 0.12) * (index % 2 ? 1 : -1), phase: h * Math.PI * 2, tilt: (h - 0.5) * 0.5 }), [h, index])
-  const prev = useMemo(() => new THREE.Vector3(), [])
-  useFrame((state, dt) => {
-    const mo = motion()
-    const t = state.clock.elapsedTime * mo
-    const a = orbit.phase + t * orbit.speed * (job.state === 'running' ? 1 : 0.35)
-    const x = Math.cos(a) * orbit.r
-    const z = Math.sin(a) * orbit.r
-    const y = orbit.y + Math.sin(t * 1.3 + orbit.phase) * 0.12 + Math.sin(a) * orbit.tilt
-    if (g.current) {
-      prev.copy(g.current.position)
-      g.current.position.set(x, y, z)
-      // Face the direction of travel, banking a little into the turn.
-      g.current.rotation.y = Math.atan2(x - prev.x, z - prev.z)
-      g.current.rotation.z = orbit.speed > 0 ? -0.18 : 0.18
-    }
-    rotors.current.forEach((r) => r && (r.rotation.y += dt * 40))
-  })
-  return (
-    <group
-      ref={g}
-      onPointerOver={(e) => {
-        e.stopPropagation()
-        setHover(true)
-      }}
-      onPointerOut={() => setHover(false)}
-      onClick={(e) => {
-        e.stopPropagation()
-        onOpen()
-      }}
-    >
-      <mesh material={m.gunmetal} scale={[1, 0.5, 1.25]} castShadow>
-        <sphereGeometry args={[0.15, 32, 16]} />
-      </mesh>
-      <mesh material={glow} rotation-x={Math.PI / 2}>
-        <torusGeometry args={[0.2, 0.014, 8, 48]} />
-      </mesh>
-      <mesh material={eye} position={[0, 0, 0.17]}>
-        <sphereGeometry args={[0.032, 16, 12]} />
-      </mesh>
-      {[0, 1, 2, 3].map((i) => {
-        const a = Math.PI / 4 + (i * Math.PI) / 2
-        return (
-          <group key={i} position={[Math.cos(a) * 0.27, 0.02, Math.sin(a) * 0.27]}>
-            <mesh material={m.graphite} rotation-y={-a} position={[-Math.cos(a) * 0.06, 0, -Math.sin(a) * 0.06]}>
-              <boxGeometry args={[0.12, 0.018, 0.022]} />
-            </mesh>
-            <mesh ref={(el) => void (rotors.current[i] = el)} material={m.chrome} position-y={0.03}>
-              <boxGeometry args={[0.16, 0.004, 0.02]} />
-            </mesh>
-          </group>
-        )
-      })}
-      {hover && (
-        <Html center distanceFactor={7} zIndexRange={[40, 30]} position-y={0.45}>
-          <div className="drone-tip">
-            <b>{job.taskId ?? job.worker ?? job.source}</b> {job.title}
-            <span>{job.stale ? 'no heartbeat' : job.state.replace('_', ' ')}{job.stage ? ` · ${job.stage}` : ''}</span>
-          </div>
-        </Html>
-      )}
-    </group>
-  )
-}
-
-export function Drones() {
-  const jobs = useHub((s) => s.state?.jobs)
-  const go = useHub((s) => s.go)
-  const list = useMemo(
-    () =>
-      Object.values(jobs ?? {})
-        .filter((j) => ['running', 'needs_markus', 'retrying', 'cancel_requested'].includes(j.state))
-        .sort((a, b) => a.id.localeCompare(b.id))
-        .slice(0, 12),
-    [jobs],
-  )
-  return (
-    <>
-      {list.map((j, i) => (
-        <Drone key={j.id} job={j} index={i} onOpen={() => go('jobs')} />
-      ))}
-    </>
-  )
-}
-
 // ---------------------------------------------------------------- room
-
-const hexFrag = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uTime;
-  varying vec3 vPos;
-  float hexd(vec2 p) { p = abs(p); return max(dot(p, normalize(vec2(1.0, 1.7320508))), p.x); }
-  void main() {
-    vec2 p = vPos.xz * 1.15;
-    vec2 r = vec2(1.0, 1.7320508);
-    vec2 h = r * 0.5;
-    vec2 a = mod(p, r) - h;
-    vec2 b = mod(p - h, r) - h;
-    vec2 gv = dot(a, a) < dot(b, b) ? a : b;
-    float d = hexd(gv);
-    float line = smoothstep(0.455, 0.5, d);
-    float dist = length(vPos.xz);
-    float fade = smoothstep(15.0, 3.0, dist) * smoothstep(1.7, 2.6, dist);
-    float wave = 0.55 + 0.45 * sin(dist * 1.3 - uTime * 1.2);
-    gl_FragColor = vec4(uColor * line * fade * (0.18 + 0.22 * wave), 1.0);
-  }
-`
-
-export function FloorMarks() {
-  const ringMat = useMemo(() => new THREE.MeshBasicMaterial({ color: new THREE.Color('#a78bfa').multiplyScalar(1.5), toneMapped: false, transparent: true, opacity: 0.85 }), [])
-  const hexMat = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: `varying vec3 vPos; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vPos = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-        fragmentShader: hexFrag,
-        uniforms: { uColor: { value: new THREE.Color('#7c5cf0') }, uTime: { value: 0 } },
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      }),
-    [],
-  )
-  const ticks = useRef<THREE.InstancedMesh>(null)
-  const ring = useRef<THREE.Group>(null)
-  const col = useMemo(() => new THREE.Color('#a78bfa'), [])
-  useEffect(() => {
-    const im = ticks.current
-    if (!im) return
-    const o = new THREE.Object3D()
-    for (let i = 0; i < 120; i++) {
-      const a = (i / 120) * Math.PI * 2
-      const long = i % 10 === 0
-      o.position.set(Math.cos(a) * 3.15, 0, Math.sin(a) * 3.15)
-      o.rotation.set(0, -a, 0)
-      o.scale.set(long ? 0.32 : 0.14, 1, 1)
-      o.updateMatrix()
-      im.setMatrixAt(i, o.matrix)
-    }
-    im.instanceMatrix.needsUpdate = true
-  }, [])
-  useFrame((state, dt) => {
-    stateColor(col, Math.min(1, dt * 3))
-    ringMat.color.copy(col).multiplyScalar(1.4)
-    hexMat.uniforms.uTime.value = state.clock.elapsedTime * motion()
-    if (ring.current) ring.current.rotation.y -= dt * 0.03 * motion()
-  })
-  return (
-    <group position-y={0.006}>
-      <mesh rotation-x={-Math.PI / 2} material={hexMat}>
-        <circleGeometry args={[16, 64]} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} material={ringMat} position-y={0.002}>
-        <ringGeometry args={[2.25, 2.28, 160]} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} material={ringMat} position-y={0.002}>
-        <ringGeometry args={[3.55, 3.565, 192]} />
-      </mesh>
-      <group ref={ring}>
-        <instancedMesh ref={ticks} args={[undefined, undefined, 120]} material={ringMat}>
-          <boxGeometry args={[1, 0.002, 0.018]} />
-        </instancedMesh>
-      </group>
-    </group>
-  )
-}
 
 /** Server racks along the back wall; their lights blink with real activity. */
 export function Racks() {

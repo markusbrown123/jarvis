@@ -1,0 +1,93 @@
+import { useEffect, useMemo, useRef } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
+import * as THREE from 'three'
+import { useHub } from '../hub/client'
+import { cameraFor } from './layout'
+import { useStation } from './stationStore'
+
+/**
+ * The camera. Orbit with damping; presets fly smoothly to a zone (or back
+ * to the overview) whenever the station's view changes — a click on a
+ * system, a toolbar button, Reset. Grabbing the view mid-flight hands
+ * control straight back. Cinematic mode pulls back and drifts round the
+ * whole station on its own.
+ */
+
+type Orbit = { target: THREE.Vector3; update: () => void; addEventListener: (t: 'start', f: () => void) => void; removeEventListener: (t: 'start', f: () => void) => void }
+
+export function CameraRig() {
+  const camera = useThree((s) => s.camera)
+  const size = useThree((s) => s.size)
+  const controls = useThree((s) => s.controls) as unknown as Orbit | null
+  const view = useStation((s) => s.view)
+  const nonce = useStation((s) => s.viewNonce)
+  const mode = useStation((s) => s.mode)
+  const goal = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null)
+  const first = useRef(true)
+
+  useEffect(() => {
+    // The first measurement can be 0×0, and a NaN camera never recovers.
+    if (!size.width || !size.height) return
+    const c = cameraFor(view, size.width / size.height)
+    const pos = new THREE.Vector3(...c.pos)
+    const target = new THREE.Vector3(...c.target)
+    if (mode === 'cinematic' && view === 'overview') {
+      // Lower and further: the whole installation against the room.
+      pos.set(0, pos.y * 0.62, pos.z * 1.12)
+      target.set(0, 1.5, 0)
+    }
+    goal.current = { pos, target }
+    // Start where the view is, rather than flying in from nowhere.
+    if (first.current && controls) {
+      first.current = false
+      camera.position.copy(pos)
+      controls.target.copy(target)
+      controls.update()
+    }
+  }, [view, nonce, mode, size.width, size.height, camera, controls])
+
+  // Taking hold of the view cancels the flight.
+  useEffect(() => {
+    if (!controls) return
+    const stop = () => (goal.current = null)
+    controls.addEventListener('start', stop)
+    return () => controls.removeEventListener('start', stop)
+  }, [controls])
+
+  useFrame((_, dt) => {
+    const g = goal.current
+    if (!g || !controls) return
+    const k = useHub.getState().prefs.reducedMotion ? 1 : 1 - Math.exp(-dt * 2.6)
+    camera.position.lerp(g.pos, k)
+    controls.target.lerp(g.target, k)
+    controls.update()
+    if (camera.position.distanceToSquared(g.pos) < 1e-4 && controls.target.distanceToSquared(g.target) < 1e-4) goal.current = null
+  })
+  return null
+}
+
+export function Controls() {
+  const mode = useStation((s) => s.mode)
+  const reduced = useHub((s) => s.prefs.reducedMotion)
+  const cinematic = mode === 'cinematic'
+  const limits = useMemo(() => (cinematic ? { min: -Infinity, max: Infinity } : { min: -1.15, max: 1.15 }), [cinematic])
+  return (
+    <OrbitControls
+      makeDefault
+      enablePan={false}
+      enableDamping
+      dampingFactor={0.07}
+      minDistance={3.5}
+      maxDistance={32}
+      minPolarAngle={0.45}
+      maxPolarAngle={1.42}
+      minAzimuthAngle={limits.min}
+      maxAzimuthAngle={limits.max}
+      autoRotate={cinematic && !reduced}
+      autoRotateSpeed={0.28}
+      rotateSpeed={0.5}
+      zoomSpeed={0.6}
+    />
+  )
+}

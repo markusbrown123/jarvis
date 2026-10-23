@@ -1,12 +1,9 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
-import { useStore } from '../store'
 import { useHub } from '../hub/client'
-import { ringFor } from '../scene/crystal'
+import { useStore } from '../store'
 
-/** What the station's parts share: the core's height, materials, state colour. */
-
-export const CORE_Y = 2.55
+/** What the station's parts share: materials, and how much to move. */
 
 // ---------------------------------------------------------------- materials
 
@@ -25,13 +22,25 @@ export function useMaterials() {
   )
 }
 
-/** The colour JARVIS's state calls for this frame (shared by several parts). */
-export function stateColor(out: THREE.Color, k: number) {
-  const { phase, error, ui } = useStore.getState()
-  const s = useHub.getState().state
-  const blocked = s ? Object.values(s.items).some((i) => i.state === 'open' && i.priority === 'P1') : false
-  out.lerp(ui.reactor.color ? new THREE.Color(ui.reactor.color) : ringFor(phase, blocked, Boolean(error)), k)
-  return out
+export const motion = () => (useHub.getState().prefs.reducedMotion ? 0.15 : 1)
+
+/** The reactor's colours, one per state. */
+export const COL = {
+  standby: new THREE.Color('#7c8bff'),
+  listening: new THREE.Color('#ff9a3c'),
+  thinking: new THREE.Color('#b69cff'),
+  speaking: new THREE.Color('#5eead4'),
+  offline: new THREE.Color('#3b3a52'),
+  amber: new THREE.Color('#f5a524'),
+  red: new THREE.Color('#ef4444'),
+  white: new THREE.Color('#ffffff'),
 }
 
-export const motion = () => (useHub.getState().prefs.reducedMotion ? 0.15 : 1)
+/** What JARVIS is doing this frame, as the reactor and the core pad show it. */
+export function reactorState() {
+  const { phase, level, error } = useStore.getState()
+  const live = phase === 'listening' || phase === 'waking'
+  const busy = phase === 'thinking' || phase === 'tooling'
+  const color = phase === 'offline' ? COL.offline : live ? COL.listening : phase === 'speaking' ? COL.speaking : busy ? COL.thinking : COL.standby
+  return { phase, level: live || phase === 'speaking' ? level : 0, busy, live, error: Boolean(error), color }
+}

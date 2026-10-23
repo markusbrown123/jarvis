@@ -10,7 +10,7 @@ import type { TermLine } from '../hub/types'
  * Typing at the prompt talks to JARVIS, same as the conversation bar.
  */
 
-type Filter = 'all' | 'voice' | 'jobs' | 'code' | 'phone' | 'studio'
+type Filter = 'all' | 'voice' | 'jobs' | 'code' | 'phone' | 'studio' | 'errors'
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -19,6 +19,7 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'code', label: 'Code' },
   { id: 'phone', label: 'Phone' },
   { id: 'studio', label: 'Studio' },
+  { id: 'errors', label: 'Errors' },
 ]
 
 function matches(l: TermLine, f: Filter) {
@@ -27,6 +28,7 @@ function matches(l: TermLine, f: Filter) {
   if (f === 'jobs') return l.src.startsWith('job:') || l.src === 'jarvis' || l.src === 'worker'
   if (f === 'code') return l.src.startsWith('claude')
   if (f === 'phone') return l.src === 'phone'
+  if (f === 'errors') return l.kind === 'error' || l.kind === 'warn'
   return l.src === 'roblox'
 }
 
@@ -40,7 +42,10 @@ function tag(src: string) {
 
 const hhmmss = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
-export function TerminalFeed({ compact = false, height }: { compact?: boolean; height?: number }) {
+/** Narrowing the feed to one thing (the station's selection), with a way out. */
+export type TermFocus = { label: string; test: (l: TermLine) => boolean; clear: () => void }
+
+export function TerminalFeed({ compact = false, height, focus }: { compact?: boolean; height?: number; focus?: TermFocus | null }) {
   const term = useHub((s) => s.term)
   const c = useStore((s) => s.controls)
   const phase = useStore((s) => s.phase)
@@ -49,7 +54,7 @@ export function TerminalFeed({ compact = false, height }: { compact?: boolean; h
   const [text, setText] = useState('')
   const [pinned, setPinned] = useState(true)
   const body = useRef<HTMLDivElement>(null)
-  const lines = useMemo(() => term.filter((l) => l.id > cleared && matches(l, filter)).slice(compact ? -80 : -400), [term, cleared, filter, compact])
+  const lines = useMemo(() => term.filter((l) => l.id > cleared && matches(l, filter) && (!focus || focus.test(l))).slice(compact ? -80 : -400), [term, cleared, filter, compact, focus])
 
   useEffect(() => {
     const el = body.current
@@ -75,6 +80,14 @@ export function TerminalFeed({ compact = false, height }: { compact?: boolean; h
           ))}
         </span>
       </div>
+      {focus && (
+        <div className="term-focus">
+          <span>
+            Lines about <b>{focus.label}</b>
+          </span>
+          <button onClick={focus.clear}>show all</button>
+        </div>
+      )}
       <div
         className="term-body"
         ref={body}
@@ -96,7 +109,7 @@ export function TerminalFeed({ compact = false, height }: { compact?: boolean; h
             </div>
           )
         })}
-        {!lines.length && <div className="tl tl-history">Nothing yet. Talk to JARVIS, start a job, or open Claude Code — it all shows up here.</div>}
+        {!lines.length && <div className="tl tl-history tl-empty">{focus ? `Nothing in the recent feed about ${focus.label}.` : 'Nothing yet. Talk to JARVIS, start a job, or open Claude Code — it all shows up here.'}</div>}
         <div className="tl tl-cursor">
           <span className="tl-ts">{hhmmss(Date.now())}</span>
           <span className="tl-text">

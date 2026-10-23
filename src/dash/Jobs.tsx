@@ -21,7 +21,7 @@ const GROUPS: { source: string; title: string; note: string }[] = [
 
 const DONE = new Set(['completed', 'canceled', 'failed'])
 
-function JobCard({ job }: { job: Job }) {
+export function JobCard({ job }: { job: Job }) {
   const [open, setOpen] = useState(job.source === 'jarvis' && !DONE.has(job.state))
   const [busy, setBusy] = useState(false)
   const t = tone(job.state, job.stale)

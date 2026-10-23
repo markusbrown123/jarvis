@@ -1950,6 +1950,28 @@ kbd {
 .term-lights i:last-child {
   background: #28c840;
 }
+.term-focus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(169, 216, 255, 0.06);
+  font: 400 11.5px var(--mono);
+  color: #b9c3d6;
+}
+.term-focus b {
+  font-weight: 500;
+  color: #e6ecf7;
+}
+.term-focus button {
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font: inherit;
+  cursor: pointer;
+}
 .term-filters {
   display: inline-flex;
   gap: 2px;
@@ -2052,6 +2074,9 @@ kbd {
 }
 .tl-history {
   opacity: 0.55;
+}
+.tl-empty {
+  display: block;
 }
 .tl-cursor {
   grid-template-columns: 66px minmax(0, 1fr);

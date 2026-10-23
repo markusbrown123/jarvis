@@ -157,7 +157,7 @@
 }
 .st-hint {
   position: absolute;
-  right: 18px;
+  left: 24px;
   bottom: 12px;
   z-index: 30;
   margin: 0;
@@ -176,7 +176,8 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: clamp(330px, 27vw, 430px);
+  width: clamp(300px, 23vw, 350px);
+  max-height: calc(100vh - 210px);
   perspective: 1400px;
 }
 .st-panels > * {
@@ -189,11 +190,11 @@
   right: 24px;
 }
 .st-left > * {
-  transform: rotateY(14deg);
+  transform: rotateY(8deg);
   transform-origin: left center;
 }
 .st-right > * {
-  transform: rotateY(-14deg);
+  transform: rotateY(-8deg);
   transform-origin: right center;
 }
 .reduced .st-panels > * {
@@ -356,6 +357,24 @@
   border-bottom-width: 2px;
   border-right-width: 2px;
 }
+.holo .term-title {
+  display: none;
+}
+/* Short windows: the terminal gives up height before the panels overrun. */
+.st-left .term {
+  height: clamp(150px, calc(100vh - 590px), 300px) !important;
+}
+/* Narrow panel: time and source on one row, the text under them. */
+.holo .tl {
+  grid-template-columns: 58px minmax(0, 1fr);
+  row-gap: 0;
+}
+.holo .tl-text {
+  grid-column: 2;
+}
+.holo .tl-cursor .tl-text {
+  grid-column: auto;
+}
 .holo .term {
   border-color: rgba(140, 220, 255, 0.16);
   background:
@@ -366,7 +385,7 @@
 /* business strip */
 .biz {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 .biz-cell {
@@ -403,33 +422,434 @@
   color: #fca5a5;
 }
 
-/* drone hover label */
-.drone-tip {
+.biz-src {
+  font: 400 10.5px var(--mono);
+  color: #6f7a90;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.biz-src::before {
+  content: '● ';
+  color: var(--green);
+}
+.biz-src.s-stale::before {
+  color: var(--amber);
+}
+.biz-src.s-stale {
+  color: #c9a46a;
+}
+.biz-src.s-off::before {
+  color: #5b5874;
+}
+.biz-note {
+  margin: 8px 0 0;
+  font: 400 11.5px var(--mono);
+  color: #6f7a90;
+}
+
+/* ------------------------------------------------------- view toolbar */
+
+.st-viewbar {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  z-index: 30;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(169, 216, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(8, 10, 18, 0.62);
+  backdrop-filter: blur(6px);
+}
+.st-viewbar button {
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: #8f9ab0;
+  font: 500 12px var(--head);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.st-viewbar button:hover {
+  color: var(--text);
+}
+.st-viewbar button.on {
+  background: rgba(169, 216, 255, 0.14);
+  color: #dff1ff;
+}
+.st-mode {
+  display: inline-flex;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(169, 216, 255, 0.16);
+}
+
+/* ------------------------------------------------- labels over the room */
+
+.st-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  overflow: hidden;
+}
+.st-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  max-width: 230px;
+  padding: 4px 9px 5px;
+  border: 1px solid color-mix(in srgb, var(--zc) 38%, transparent);
+  border-radius: 5px;
+  background: rgba(6, 8, 14, 0.66);
+  backdrop-filter: blur(4px);
+  color: #e6ecf7;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.25s, border-color 0.2s;
+  will-change: transform;
+}
+.st-label.on {
+  border-color: var(--zc);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--zc) 35%, transparent);
+}
+.st-label-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 13px var(--head);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--zc);
+}
+.st-label-name em {
+  font: 500 10.5px var(--mono);
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: #c9d3e3;
+}
+.st-label-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--zc);
+  box-shadow: 0 0 8px var(--zc);
+}
+.st-label-head {
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 400 12px var(--body);
+  color: #b9c3d6;
+}
+.st-label-fresh {
+  font: 400 10.5px var(--mono);
+  color: #6f7a90;
+}
+.st-label-fresh.f-stale {
+  color: #c9a46a;
+}
+.st-label-attention .st-label-dot,
+.st-label-attention .st-label-name em {
+  background: var(--amber);
+  color: var(--amber);
+}
+.st-label-attention .st-label-name em {
+  background: none;
+}
+.st-label-error {
+  border-color: rgba(239, 68, 68, 0.6);
+}
+.st-label-error .st-label-dot {
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+}
+.st-label-error .st-label-name em {
+  color: #fca5a5;
+}
+.st-label-unavailable .st-label-dot,
+.st-label-loading .st-label-dot {
+  background: #5b5874;
+  box-shadow: none;
+}
+.st-label.cine {
+  padding: 2px 8px;
+  border-color: transparent;
+  background: none;
+  backdrop-filter: none;
+}
+.st-label.cine .st-label-name {
+  font-size: 12px;
+  opacity: 0.85;
+  text-shadow: 0 0 10px #000;
+}
+.st-link-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 220px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(6, 8, 14, 0.72);
+  font: 400 11px var(--mono);
+  color: #b9c3d6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.25s;
+}
+.st-link-label b {
+  font-weight: 500;
+  text-transform: uppercase;
+  color: #8fb7ff;
+}
+.st-link-label.l-attention b {
+  color: var(--amber);
+}
+.st-link-label.l-failed b {
+  color: #fca5a5;
+}
+.st-link-label.l-disconnected b,
+.st-link-label.l-idle b {
+  color: #6f7a90;
+}
+.st-tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 40;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 180px;
+  min-width: 170px;
   max-width: 280px;
   padding: 7px 10px;
   border: 1px solid rgba(169, 216, 255, 0.35);
   border-radius: 6px;
-  background: rgba(8, 10, 18, 0.88);
+  background: rgba(8, 10, 18, 0.92);
   color: #e6ecf7;
   font: 500 13px var(--body);
   pointer-events: none;
 }
-.drone-tip b {
-  font: 500 12px var(--mono);
-  color: #a9d8ff;
-}
-.drone-tip span {
+.st-tip span {
   font-size: 12px;
   color: #8f9ab0;
+}
+.st-tip-state,
+.st-detail-state {
+  font: 500 11px var(--mono) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.st-tip-state.t-ok,
+.st-detail-state.t-ok {
+  color: var(--green) !important;
+}
+.st-tip-state.t-live,
+.st-detail-state.t-live {
+  color: #a9d8ff !important;
+}
+.st-tip-state.t-warn,
+.st-detail-state.t-warn {
+  color: var(--amber) !important;
+}
+.st-tip-state.t-bad,
+.st-detail-state.t-bad {
+  color: #fca5a5 !important;
+}
+.st-tip-state.t-off,
+.st-detail-state.t-off {
+  color: #7a7395 !important;
+}
+
+/* ------------------------------------------------------ detail panel */
+
+.st-detail {
+  position: relative;
+  box-sizing: border-box;
+  max-height: 46vh;
+  overflow: auto;
+  padding: 10px 14px 12px;
+  border: 1px solid color-mix(in srgb, var(--zc) 50%, transparent);
+  border-radius: 6px;
+  background: linear-gradient(160deg, rgba(20, 26, 44, 0.9), rgba(9, 10, 20, 0.86));
+  box-shadow: 0 0 40px color-mix(in srgb, var(--zc) 18%, transparent);
+  color: #dfe6f2;
+}
+.st-detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.st-detail-kicker {
+  font: 600 12px var(--head);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--zc);
+}
+.st-detail-x {
+  border: 0;
+  background: none;
+  color: #8f9ab0;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.st-detail h3 {
+  margin: 6px 0 2px;
+  font: 600 18px var(--head);
+  letter-spacing: 0.04em;
+}
+.st-detail ul {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  font-size: 13.5px;
+  color: #c4cddd;
+}
+.st-detail li + li {
+  margin-top: 3px;
+}
+.st-detail-src {
+  margin: 8px 0 0;
+  font: 400 11px var(--mono);
+  color: #6f7a90;
+}
+.st-detail-gone {
+  color: #8f9ab0;
+  font-size: 13.5px;
+}
+.st-detail footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.st-act {
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--zc) 45%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--zc) 10%, transparent);
+  color: #e6ecf7;
+  font: 500 12px var(--head);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.st-act:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.st-detail .jobcard,
+.st-detail .item {
+  margin-top: 8px;
+}
+
+/* --------------------------------------------------- cinematic caption */
+
+.st-cine {
+  position: absolute;
+  left: 26px;
+  bottom: 26px;
+  z-index: 20;
+  max-width: 360px;
+  pointer-events: none;
+}
+.st-cine ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-cine-z {
+  display: grid;
+  grid-template-columns: 10px 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font: 400 12.5px var(--body);
+  color: #aeb8cc;
+  text-shadow: 0 1px 8px #000;
+}
+.st-cine-z i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--zc);
+  box-shadow: 0 0 8px var(--zc);
+}
+.st-cine-z b {
+  font: 600 12px var(--head);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--zc);
+}
+.st-cine-z span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.st-cine-z.z-attention i {
+  background: var(--amber);
+}
+.st-cine-z.z-error i {
+  background: var(--red);
+}
+.st-cine-z.z-unavailable i,
+.st-cine-z.z-loading i {
+  background: #5b5874;
+  box-shadow: none;
+}
+.st-cine-ev {
+  margin: 0 0 6px;
+  padding: 5px 10px;
+  border-left: 2px solid var(--zc);
+  background: rgba(6, 8, 14, 0.6);
+  font: 400 13px var(--body);
+  color: #dfe6f2;
+  animation: st-ev-in 0.4s ease-out;
+}
+.st-cine-ev b {
+  font: 600 12px var(--head);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--zc);
+}
+.st-cine-ev.e-fail {
+  border-left-color: var(--red);
+}
+.st-cine-ev.e-need {
+  border-left-color: var(--amber);
+}
+@keyframes st-ev-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+}
+.reduced .st-cine-ev {
+  animation: none;
 }
 
 @media (max-width: 1100px) {
   .st-clock {
     display: none;
+  }
+  .st-viewbar button {
+    padding: 4px 6px;
+    font-size: 11px;
   }
   .st-top {
     grid-template-columns: auto 1fr;

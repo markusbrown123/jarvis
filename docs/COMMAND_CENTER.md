@@ -32,28 +32,39 @@ he greets you right after it. Write mode is unchanged: start the bridge yourself
 
 ## Station
 
-The landing view (`0`, or **Station** in the nav): a 3D workshop built in code —
-no downloaded models. Everything in it is live:
+The landing view (`0`, or **Station** in the nav): a 3D control room built in
+code — no downloaded models — where every light and moving part is live state:
 
-- **Core** over a lathe-turned holo-table, in an arc-reactor ring of twelve coils
-  and a gyroscope; its colour is JARVIS's state (orange listening, cyan speaking,
-  violet thinking, amber when a P1 needs you, red on an error). A light beam rises
-  from the table with his voice level.
-- **Two robot arms** (two-link IK) idle folded and reach in to the core, gripper
-  working and sparking, while JARVIS is thinking or one of his jobs runs.
-- **A drone per running job** orbits the core (amber = needs you, red = no
-  heartbeat). Hover for the job, click for Jobs.
-- **Server racks** whose lights blink faster the more has happened in the last minute.
-- **Back screen**: the latest studio render.
-- **Holo panels** angled over the room like a helmet display: Business & money,
-  Terminal (type to JARVIS), Needs Markus, Running. Each opens its full view.
+- **Reactor** in the middle: its colour and motion are JARVIS's state (blue-violet
+  standby, orange listening with the mic, violet thinking with rings speeding up,
+  cyan speaking with his voice level), an amber halo when something needs you,
+  a wave when a job completes, a red segment on an error.
+- **Six zones on pads** round it — Roblox (one cube per game), Automaton (site
+  globe, pipeline stage pillars, lead dots), Finance (service terminal, monitoring
+  only), Jobs (queued → running → done rail), Needs Markus (a beacon per item),
+  Jarvis Core (a pylon per capability). The pad and the deck light round it show
+  the zone's state; anything that can't be read is drawn as unavailable, never
+  filled in.
+- **Connections** from the reactor to each zone flow, pulse, break or flash
+  with what is really happening; packets travel them as events land.
+- **Two arms** swing to the zone that just sent or received work and dock when idle.
+- **Racks** blink with activity; the **back screen** shows the latest studio render.
+- **Panels** over the room: Business & money (each figure with its source and
+  age), Terminal (filters incl. Errors; narrows to the selection), Needs
+  Markus, Running, and a detail panel for whatever is selected.
 
-Drag to look around, scroll to move closer. Graphics: **Low** (flat, for battery),
-**High** (shadows, reflective floor, light shaft), **Ultra** (wider soft shadows,
-4096 shadow maps, ambient occlusion, full-res reflections, grain, lens fringing) —
-switch on the station's top bar or in Settings. A performance monitor lowers the
-resolution if frames drop, and if a setting ever draws a blank frame (or the GPU
-resets) the station steps down a level by itself and says so; the 3D scene starts once he's powered up.
+Click anything (or a panel row) to focus it; hover for a tooltip. Camera
+presets, Reset (`R`), Connections View (`L`), and **Command / Cinematic** (`C`)
+sit under the clock. Cinematic pulls the camera back and drifts round the
+whole station with a live caption strip — the same data, not a screensaver.
+The full element-by-element mapping is in [STATION.md](STATION.md).
+
+Graphics: **Low** (for battery), **High** (shadows, reflective floor), **Ultra**
+(wider soft shadows, 4096 shadow maps, ambient occlusion, full-res reflections,
+grain, lens fringing) — switch on the station's top bar or in Settings. A
+performance monitor lowers the resolution if frames drop, and if a setting ever
+draws a blank frame (or the GPU resets) the station steps down a level by itself
+and says so; the 3D scene starts once he's powered up.
 
 ## Terminal
 
@@ -79,7 +90,8 @@ Colours mean one thing everywhere: violet working, amber needs you, red
 failed, cyan healthy, grey dashed not connected.
 
 Keys (never while typing): `0` station · `1`–`9` sections · `[` `]` collapse panels · `I`
-voice view · `⌘K` command palette · `Space` talk · `Enter` finish speaking ·
+voice view · in the station `C` cinematic, `R` reset view, `L` connections ·
+`⌘K` command palette · `Space` talk · `Enter` finish speaking ·
 `M` mic on/off · `Esc` stand down · `D` diagnostics · `T` audio test.
 
 ## Where the data comes from

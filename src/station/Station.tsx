@@ -1,18 +1,47 @@
-import { type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useHub, type Graphics, type View } from '../hub/client'
 import { useStore } from '../store'
 import { ago, clock, elapsed, JOB_LABEL, tone, until } from '../hub/format'
-import { TerminalFeed } from '../dash/Terminal'
+import { TerminalFeed, type TermFocus } from '../dash/Terminal'
 import { VoiceWave } from '../dash/VoiceWave'
 import { openItems, useTick } from '../dash/state'
 import { StationScene } from './StationScene'
+import { useStation } from './stationStore'
+import { useStationModel } from './model'
+import { useLiveEvents } from './events'
+import { ZONE, ZONES, type View as Focus } from './layout'
+import { describe, termMatch } from './describe'
+import { Detail } from './Detail'
+import { LabelLayer } from './labels'
 import './station.css'
 
 /**
- * JARVIS Station: the 3D workshop, with live holographic panels over it —
- * the terminal, what needs Markus, what's running, business and money — and
- * the voice visualizer under the core.
+ * JARVIS Station: the 3D control room, with live panels over it — business
+ * and money, the terminal, what needs Markus, what's running — the voice
+ * visualizer under the reactor, and a detail panel for whatever is selected.
+ *
+ * Two modes on the same live data: Command (panels, labels, details — for
+ * working) and Cinematic (C: panels away, camera pulled back and drifting,
+ * a strip of every system's live state and the events as they happen).
  */
+
+/** Builds the live state → scene model once and shares it; turns changes into events. */
+function ModelSync() {
+  const model = useStationModel()
+  const setModel = useStation((s) => s.setModel)
+  useEffect(() => setModel(model), [model, setModel])
+  useLiveEvents()
+  return null
+}
+
+/** A metric's origin and age, so a number is never read without its freshness. */
+function Src({ text, state = 'live' }: { text: string; state?: 'live' | 'stale' | 'off' }) {
+  return <span className={`biz-src s-${state}`}>{text}</span>
+}
+
+const STALE = 20 * 60000
+const age = (at: number | undefined, label: string): { text: string; state: 'live' | 'stale' | 'off' } =>
+  !at ? { text: `${label} · never read`, state: 'off' } : { text: `${label} · ${ago(at)}`, state: Date.now() - at > STALE ? 'stale' : 'live' }
 
 function Holo({ title, badge, onOpen, children }: { title: string; badge?: ReactNode; onOpen?: () => void; children: ReactNode }) {
   return (
@@ -36,14 +65,15 @@ function Holo({ title, badge, onOpen, children }: { title: string; badge?: React
 }
 
 
-function NeedsHolo({ go }: { go: (v: View) => void }) {
+function NeedsHolo({ go, rows }: { go: (v: View) => void; rows: number }) {
   const s = useHub((x) => x.state)
-  const items = openItems(s?.items).slice(0, 4)
+  const select = useStation((x) => x.select)
+  const items = openItems(s?.items).slice(0, rows)
   return (
     <Holo title="Needs Markus" badge={<span className={`holo-count ${items.length ? 'need' : ''}`}>{openItems(s?.items).length}</span>} onOpen={() => go('needs')}>
       {items.length ? (
         items.map((i) => (
-          <button key={i.id} className={`holo-row pri-${i.priority}`} onClick={() => go('needs')}>
+          <button key={i.id} className={`holo-row pri-${i.priority}`} onClick={() => select({ kind: 'item', id: i.id, zone: 'needs' })} title="Show in the room, with its actions">
             <span className="holo-dot" />
             <span className="holo-row-main">
               <span className="holo-row-title">{i.title}</span>
@@ -60,17 +90,18 @@ function NeedsHolo({ go }: { go: (v: View) => void }) {
   )
 }
 
-function JobsHolo({ go }: { go: (v: View) => void }) {
+function JobsHolo({ go, rows }: { go: (v: View) => void; rows: number }) {
   useTick(5000)
   const s = useHub((x) => x.state)
+  const select = useStation((x) => x.select)
   const jobs = Object.values(s?.jobs ?? {})
     .filter((j) => ['running', 'needs_markus', 'retrying', 'cancel_requested', 'queued'].includes(j.state))
     .sort((a, b) => (b.heartbeatAt ?? b.updatedAt) - (a.heartbeatAt ?? a.updatedAt))
   const running = jobs.filter((j) => j.state === 'running').length
   return (
     <Holo title="Running" badge={<span className="holo-count">{running}</span>} onOpen={() => go('jobs')}>
-      {jobs.slice(0, 5).map((j) => (
-        <button key={j.id} className={`holo-row tone-${tone(j.state, j.stale)}`} onClick={() => go('jobs')}>
+      {jobs.slice(0, rows).map((j) => (
+        <button key={j.id} className={`holo-row tone-${tone(j.state, j.stale)}`} onClick={() => select({ kind: 'job', id: j.id, zone: 'jobs' })} title="Show on the Jobs pad">
           <span className="holo-dot" />
           <span className="holo-row-main">
             <span className="holo-row-title">
@@ -84,12 +115,13 @@ function JobsHolo({ go }: { go: (v: View) => void }) {
           </span>
         </button>
       ))}
-      {!jobs.length && <p className="holo-empty">Nothing running. Each running job flies round the core as a drone.</p>}
+      {!jobs.length && <p className="holo-empty">Nothing running. Running jobs light up on the Jobs pad.</p>}
     </Holo>
   )
 }
 
 function BusinessHolo({ go }: { go: (v: View) => void }) {
+  useTick(30000)
   const s = useHub((x) => x.state)
   const am = s?.projects.automaton
   const ex = s?.expenses
@@ -97,34 +129,135 @@ function BusinessHolo({ go }: { go: (v: View) => void }) {
   const five = s?.usage.windows.five_hour
   const fiveFresh = five && (!five.resetsAt || five.resetsAt > Date.now())
   const stage = (k: string) => am?.sites?.filter((x) => x.stage === k).length ?? 0
+  const site = age(am?.site?.checkedAt, 'site probe')
+  const pipe = am?.sites ? age(am.updatedAt, 'pipeline') : { text: `pipeline · ${am?.sitesError ?? 'unavailable'}`, state: 'off' as const }
+  const leads = am?.leads ? age(am.updatedAt, 'leads table') : { text: `leads · ${am?.leadsError ?? 'unavailable'}`, state: 'off' as const }
+  const usage = fiveFresh ? age(five!.observedAt, 'status line') : { text: 'no fresh status-line reading', state: 'off' as const }
   return (
     <Holo title="Business & money" onOpen={() => go('finance')}>
       <div className="biz">
         <button className="biz-cell" onClick={() => go('automaton')}>
           <span className="biz-k">automaton.llc</span>
           <span className={`biz-v ${am?.site?.ok ? 'ok' : 'bad'}`}>{am?.site ? (am.site.ok ? `up · ${am.site.ms} ms` : 'not answering') : 'unchecked'}</span>
+          <Src {...site} />
         </button>
         <button className="biz-cell" onClick={() => go('automaton')}>
           <span className="biz-k">Sites to review</span>
           <span className="biz-v">{am?.sites ? stage('needs_review') + stage('needs_edits') : '—'}</span>
+          <Src {...pipe} />
         </button>
         <button className="biz-cell" onClick={() => go('automaton')}>
           <span className="biz-k">Leads</span>
           <span className="biz-v">{am?.leads ? am.leads.total : '—'}</span>
+          <Src {...leads} />
         </button>
         <button className="biz-cell" onClick={() => go('finance')}>
           <span className="biz-k">Spent this month</span>
           <span className="biz-v">{ex ? `$${ex.month.total.toFixed(2)}` : '—'}</span>
+          <Src text={ex ? 'your expense ledger' : 'ledger · not loaded'} state={ex ? 'live' : 'off'} />
         </button>
         <button className="biz-cell" onClick={() => go('settings')}>
           <span className="biz-k">Claude 5h left</span>
           <span className="biz-v">{fiveFresh ? `${Math.round(100 - five!.usedPct)}% · ${until(five!.resetsAt)}` : 'unavailable'}</span>
+          <Src {...usage} />
         </button>
         <button className="biz-cell" onClick={() => go('settings')}>
           <span className="biz-k">JARVIS spend</span>
           <span className="biz-v">{req ? `$${req.costUsd.toFixed(2)}` : '—'}</span>
+          <Src text={req ? "this bridge's requests" : 'not reported yet'} state={req ? 'live' : 'off'} />
         </button>
       </div>
+      <p className="biz-note">Trading: monitoring only — no broker connected, so no positions or P&amp;L are shown.</p>
+    </Holo>
+  )
+}
+
+/** Camera presets, Reset, Connections View, and Command / Cinematic. */
+function ViewBar() {
+  const view = useStation((s) => s.view)
+  const mode = useStation((s) => s.mode)
+  const connections = useStation((s) => s.connections)
+  const { fly, select, setMode, toggleConnections } = useStation.getState()
+  const presets: Focus[] = ['overview', 'roblox', 'automaton', 'finance', 'jobs', 'needs', 'core']
+  return (
+    <div className="st-viewbar" role="toolbar" aria-label="Station camera">
+      {mode === 'command' &&
+        presets.map((v) => (
+          <button key={v} className={view === v ? 'on' : ''} onClick={() => fly(v)} title={v === 'overview' ? 'See the whole station' : `Focus ${ZONE[v].label}`}>
+            {v === 'overview' ? 'Overview' : ZONE[v].label}
+          </button>
+        ))}
+      <button
+        onClick={() => {
+          select(null, false)
+          fly('overview')
+        }}
+        title="Reset the view (R)"
+      >
+        Reset
+      </button>
+      {mode === 'command' && (
+        <button className={connections ? 'on' : ''} onClick={toggleConnections} title="Show every connection and what it carries (L)">
+          Connections
+        </button>
+      )}
+      <span className="st-mode" role="group" aria-label="Mode">
+        <button className={mode === 'command' ? 'on' : ''} onClick={() => setMode('command')} title="Panels and details, for working (C)">
+          Command
+        </button>
+        <button className={mode === 'cinematic' ? 'on' : ''} onClick={() => setMode('cinematic')} title="The whole station, live, camera drifting (C)">
+          Cinematic
+        </button>
+      </span>
+    </div>
+  )
+}
+
+const EVENT_WORD: Record<string, string> = { assign: 'started', complete: 'finished', fail: 'failed', lead: 'leads', studio: 'studio', need: 'needs you', voice: 'voice' }
+
+/** Cinematic mode's caption: every system's live state, and events as they land. */
+function CineStrip() {
+  const model = useStation((s) => s.model)
+  const events = useStation((s) => s.events)
+  useTick(1000)
+  const now = performance.now()
+  const live = events.filter((e) => now - e.at < 8000).slice(-3).reverse()
+  if (!model) return null
+  return (
+    <div className="st-cine">
+      {live.map((e) => (
+        <p key={e.id} className={`st-cine-ev e-${e.kind}`} style={{ '--zc': ZONE[e.zone].color } as CSSProperties}>
+          <b>{ZONE[e.zone].label}</b> {EVENT_WORD[e.kind]} {e.label ? `· ${e.label}` : ''}
+        </p>
+      ))}
+      <ul>
+        {ZONES.map((z) => (
+          <li key={z.id} className={`st-cine-z z-${model.zones[z.id].state}`} style={{ '--zc': z.color } as CSSProperties}>
+            <i />
+            <b>{z.label}</b>
+            <span>{model.zones[z.id].headline}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** The terminal, narrowed to the selection while one is open. */
+function StationTerminal({ go }: { go: (v: View) => void }) {
+  const sel = useStation((s) => s.selected)
+  const model = useStation((s) => s.model)
+  const [follow, setFollow] = useState(true)
+  useEffect(() => setFollow(true), [sel])
+  const focus = useMemo<TermFocus | null>(() => {
+    if (!sel || !model || !follow) return null
+    return { label: describe(sel, model)?.title ?? ZONE[sel.zone].label, test: termMatch(sel, model), clear: () => setFollow(false) }
+    // Rebuilt for a new selection, not on every model tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, follow, Boolean(model)])
+  return (
+    <Holo title="Terminal" onOpen={() => go('terminal')}>
+      <TerminalFeed compact height={280} focus={focus} />
     </Holo>
   )
 }
@@ -200,25 +333,51 @@ function Dock() {
 export function Station() {
   const graphics = useHub((s) => s.prefs.graphics)
   const go = useHub((s) => s.go)
-  // The panels are a HUD over the room, angled in like a helmet display.
-  // (Placed inside the 3D scene they blank the frame once the reflective
-  // floor is on.)
+  const mode = useStation((s) => s.mode)
+  // With a selection open the right column makes room for its detail.
+  const selected = useStation((s) => Boolean(s.selected))
+  // C: Command / Cinematic. R: reset the view. L: Connections View.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT' || el?.isContentEditable) return
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
+      const st = useStation.getState()
+      if (e.key === 'c') st.setMode(st.mode === 'command' ? 'cinematic' : 'command')
+      else if (e.key === 'r') {
+        st.select(null, false)
+        st.fly('overview')
+      } else if (e.key === 'l') st.toggleConnections()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  // The panels are a HUD over the room. (Placed inside the 3D scene they
+  // blank the frame once the reflective floor is on.)
   return (
-    <div className="station">
+    <div className={`station st-${mode}`}>
+      <ModelSync />
       <StationScene graphics={graphics} />
-      <div className="st-panels st-left">
-        <BusinessHolo go={go} />
-        <Holo title="Terminal" onOpen={() => go('terminal')}>
-          <TerminalFeed compact height={300} />
-        </Holo>
-      </div>
-      <div className="st-panels st-right">
-        <NeedsHolo go={go} />
-        <JobsHolo go={go} />
-      </div>
+      <LabelLayer />
+      {mode === 'command' ? (
+        <>
+          <div className="st-panels st-left">
+            <BusinessHolo go={go} />
+            <StationTerminal go={go} />
+          </div>
+          <div className="st-panels st-right">
+            <Detail />
+            <NeedsHolo go={go} rows={selected ? 2 : 4} />
+            <JobsHolo go={go} rows={selected ? 2 : 5} />
+          </div>
+        </>
+      ) : (
+        <CineStrip />
+      )}
       <TopHud />
+      <ViewBar />
       <Dock />
-      <p className="st-hint">Drag to look around · scroll to move closer · 1–9 dashboard views</p>
+      {mode === 'command' && <p className="st-hint">Drag to orbit · click a system · R reset · L links · C cinematic</p>}
     </div>
   )
 }
