@@ -44,7 +44,7 @@ def arg(name, default, n=1):
 
 SKILLS = os.path.expanduser(arg('--skills', os.environ.get('BLENDER_SKILLS', '~/blender-skills')))
 OUT = os.path.abspath(arg('--out', os.path.join(STATION, 'loading')))
-SHOTS = arg('--shots', 'aerial,cliff,night').split(',')
+SHOTS = arg('--shots', 'aerial,night').split(',')
 RES = arg('--res', [1920, 1080], 2)
 SAMPLES = arg('--samples', 256)
 TEX = arg('--textures', 'ultra')

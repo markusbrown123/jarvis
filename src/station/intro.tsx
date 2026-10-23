@@ -133,7 +133,7 @@ export function IntroFlight() {
  * and crossfading — the way a game's loading screen shows its artwork —
  * until the flight cuts in. Any that haven't been rendered are just left out.
  */
-const SLIDES = ['aerial', 'cliff', 'night', 'hero_quad', 'hero_whoop'].map((n) => `/station/loading/${n}.jpg`)
+const SLIDES = ['aerial', 'night', 'hero_quad', 'hero_whoop'].map((n) => `/station/loading/${n}.jpg`)
 
 function Slides({ on }: { on: boolean }) {
   const [ready, setReady] = useState<string[]>([])

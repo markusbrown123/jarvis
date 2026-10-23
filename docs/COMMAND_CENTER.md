@@ -97,7 +97,7 @@ The stills and the drone renders are made with the Blender Agent Skills
 scatter, look-dev turntables, asset QA). With a checkout of them:
 
 ```
-.bpy/bin/python tools/blender/showcase.py --skills ~/blender-skills      # aerial, cliff, night → public/station/loading/
+.bpy/bin/python tools/blender/showcase.py --skills ~/blender-skills      # aerial, night → public/station/loading/ (--shots cliff for the spare)
 ```
 - **Panels** over the room: Business & money (each figure with its source and
   age), Terminal (filters incl. Errors; narrows to the selection), Needs
