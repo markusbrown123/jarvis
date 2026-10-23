@@ -1,19 +1,18 @@
-import { useRef, useState } from 'react'
+import { Component, Suspense, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Environment, Lightformer, PerformanceMonitor, Sparkles } from '@react-three/drei'
-import { Bloom, ChromaticAberration, EffectComposer, N8AO, Noise, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing'
+import { Bloom, ChromaticAberration, DepthOfField, EffectComposer, N8AO, Noise, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import * as THREE from 'three'
 import { useHub, type Graphics } from '../hub/client'
 import { useStore } from '../store'
 import { BackScreen, Racks, RobotArm, Room, RoomShell } from './parts'
 import { Floor, Island } from './floor'
-import { Reactor } from './reactor'
 import { Clusters } from './clusters'
-import { Desk } from './desk'
+import { Console } from './console'
 import { WalkControls } from './walk'
 import { Links } from './links'
-import { CameraRig, Controls } from './camera'
+import { CameraRig, Controls, TalkFraming } from './camera'
 import { LabelProjector } from './labels'
 import { useStation } from './stationStore'
 
@@ -117,10 +116,33 @@ function FrameProbe() {
   return null
 }
 
-function Post({ q }: { q: (typeof QUALITY)[Graphics] }) {
+/**
+ * If the console's model or textures can't be loaded (a file missing after
+ * an update), the rest of the room still draws, and JARVIS says why.
+ */
+class ConsoleGuard extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  componentDidCatch(err: Error) {
+    useHub.getState().say(`The centre console couldn't load (${err.message}) — run git pull in ~/jarvis`)
+  }
+  render() {
+    return this.state.failed ? null : this.props.children
+  }
+}
+
+/**
+ * Finishing: ambient occlusion (Ultra), bloom on the lights, and in Talk
+ * mode on High and Ultra a shallow depth of field — the desk and its
+ * monitors sharp, the room beyond them softening away.
+ */
+function Post({ q, dof }: { q: (typeof QUALITY)[Graphics]; dof: boolean }) {
   return (
     <EffectComposer multisampling={q.msaa} enableNormalPass={false}>
       <>{q.ao && <N8AO aoRadius={1.2} distanceFalloff={1} intensity={2.4} quality="medium" halfRes />}</>
+      <>{dof && <DepthOfField worldFocusDistance={5.6} worldFocusRange={4.5} bokehScale={2.5} resolutionScale={0.5} />}</>
       <Bloom intensity={q.ao ? 1.15 : 0.95} luminanceThreshold={0.62} luminanceSmoothing={0.25} mipmapBlur radius={0.78} />
       <>{q.lens && <ChromaticAberration offset={new THREE.Vector2(0.00045, 0.0006)} radialModulation modulationOffset={0.35} />}</>
       <Vignette eskil={false} offset={0.22} darkness={0.72} />
@@ -186,12 +208,15 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <Island />
       <Room />
       <Racks />
-      {/* Talk mode keeps the view over the desk clear. */}
-      {mode !== 'talk' && <BackScreen />}
-      <Reactor />
+      <BackScreen />
+      {/* The console streams in its model and textures; the room draws meanwhile. */}
+      <ConsoleGuard>
+        <Suspense fallback={null}>
+          <Console graphics={graphics} />
+        </Suspense>
+      </ConsoleGuard>
       <Links />
       <Clusters />
-      <Desk />
       {/* Between the pads, front left and right: each serves the three zones on its side. */}
       <RobotArm position={[2.6, 0.16, 1.5]} side={1} seed={2} zones={['automaton', 'finance', 'jobs']} />
       <RobotArm position={[-2.6, 0.16, 1.5]} side={-1} seed={1} zones={['needs', 'core', 'roblox']} />
@@ -201,8 +226,9 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       {mode === 'walk' && <WalkControls />}
       <Controls />
       <CameraRig />
+      <TalkFraming />
       <LabelProjector />
-      <Post q={q} />
+      <Post q={q} dof={mode === 'talk' && graphics !== 'low'} />
     </Canvas>
   )
 }

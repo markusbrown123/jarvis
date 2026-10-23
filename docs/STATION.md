@@ -14,8 +14,8 @@ comparing one hub snapshot with the next — never from a timer.
 
 | Control | What it does |
 |---|---|
-| **Walk** mode (`F`) | On foot, first person. `W A S D` / arrows to move, `Shift` to run, the mouse to look (click the room to capture it, `Esc` lets go — or just drag). You can't walk through the reactor, pads, desk, arms or pillars; the room closes round you with its front wall, windows and ceiling. `E` sits you at the terminal when you're by the desk, or opens the zone you're facing. Talking works as usual. While walking, W A S D and E are taken for walking before the app's own shortcuts (D diagnostics, E panels). |
-| **Talk** mode (`J`, the default) | Sat at the desk in front of the reactor, camera just behind the chair: JARVIS straight ahead, the full conversation on the left with a line to type to him, his current state (and the tool he's using), and what's waiting on you, if anything. The room stays quiet: names only, no panels. |
+| **Walk** mode (`F`) | On foot, first person. `W A S D` / arrows to move, `Shift` to run, the mouse to look (click the room to capture it, `Esc` lets go — or just drag). You can't walk through the console, pads, arms or pillars; the room closes round you with its front wall, windows and ceiling. `E` sits you at the console when you're facing it, or opens the zone you're facing. Talking works as usual. While walking, W A S D and E are taken for walking before the app's own shortcuts (D diagnostics, E panels). |
+| **Talk** mode (`J`, the default) | Sat at the centre console, camera just behind the chair, looking out over the desk and its monitors to the room — with a shallow depth of field on High and Ultra: the full conversation on the left with a line to type to him, his current state (and the tool he's using), and what's waiting on you, if anything. The room stays quiet: names only, no panels. |
 | **Command** mode | Panels, zone labels, tooltips, detail panel. For working. |
 | **Cinematic** mode (`C`) | Panels away; camera pulls back and drifts round the station; names only on the zones; a caption strip with every system's live state and each event as it lands. Same data, so it never becomes a screensaver. |
 | Camera presets | Overview, Roblox, Automaton, Finance, Jobs, Needs Markus, Jarvis Core. Smooth flights; grabbing the view mid-flight hands control back. |
@@ -31,15 +31,17 @@ comparing one hub snapshot with the next — never from a timer.
 | Element | Source | Changes when | Means | Click / hover | When unavailable |
 |---|---|---|---|---|---|
 | **Floor and deck light** (hex seams, circuit traces, scan) | Static pattern, plus each zone's state | A zone's state or events change | Pools of light round each zone: brighter when active, steady when it needs you, a red-orange pulse when it's in error; a ripple from the zone when an event lands there; a red flash when something fails there | — | The zone's pool goes dark |
-| **Reactor** colour and motion | JARVIS's voice phase (`useStore.phase`, `level`) | Every frame | Standby: slow blue-violet. Listening: orange, breathing with the mic. Thinking / working: violet, rings speed up, conduits flow inward. Speaking: cyan, pulsing with his actual output level | — | Offline: dim grey |
-| Reactor amber halo | Open Needs Markus items, jobs waiting on Markus | Hub update | Something needs your input | — | — |
-| Reactor completion wave | `complete` events | A job finishes | A ring of light leaves the core | — | — |
-| Reactor red segment | Voice error or bridge down | Error appears/clears | Localised on the base ring only, so the rest stays readable | — | — |
-| **Talk station** (desk and chair in front of the reactor) | JARVIS's state, Markus's typing | Every frame | The desk's edge lights and the chair's back strips are JARVIS's colour (standby blue, listening orange, thinking violet, speaking cyan) and brighten with his voice; the holo keyboard lights while you type to him | — | Dims with the reactor when offline |
+| **Centre console** (platform, command desk, chair) | Modelled in Blender, surfaces baked with Cycles (`tools/blender/console.py`) | — | Brushed steel, seamed panels, vented plinth and plated platform with ray-traced ambient occlusion; 4096 px textures on Ultra, 2048 on High, 1024 on Low | Walk up and press `E` to sit | — |
+| Console light strips (platform ring, back step, desk edges, monitor shelf, end panels, chair back) | JARVIS's voice phase (`useStore.phase`, `level`) | Every frame | His colour: standby blue, listening orange, thinking / working violet, speaking cyan — brightening with his voice; a light over the desk takes the same colour | — | Offline: dim |
+| Desk holo pads | Open Needs Markus items, jobs waiting on Markus | Hub update | Amber and pulsing while something needs your input; his colour otherwise | — | — |
+| Platform completion wave | `complete` events | A job finishes | A ring of light leaves the platform | — | — |
+| Platform red segment | Voice error or bridge down | Error appears/clears | Localised on the platform ring only, so the rest stays readable | — | — |
+| Holo keyboard | Typing in the Talk box | Each keystroke | Lights up while you type to JARVIS, fades after a second | — | — |
 | Desk monitor: **Systems** | Voice phase, `caps` (bridge, brain, voice, mic, phone, allowance) | State change | What JARVIS is doing, and each of his systems with its real detail | — | Each row says unavailable / not set up |
+| Desk monitor: **Zones** | Each zone's state and headline | Hub update | All six systems at a glance | — | "reading…" |
 | Desk monitor: **Work** | Jobs and open items | Hub update | Running / queued counts, the first four jobs (stale ones flagged), how many wait on you and the first | — | "Connecting…" |
 | Desk monitor: **Business** | Site probe, pipeline, leads, finance services, expense ledger, allowance | Hub update | One row each, only with real figures — "unavailable — reason" otherwise; "No broker connected — no positions or P&L" | — | As stated per row |
-| **Robot arms** (front left serves Needs, Core, Roblox; front right serves Automaton, Finance, Jobs) | Events and zone states | A transfer event, a zone going active, JARVIS thinking | Swing over to the zone that just sent or received work and light their stripe in its colour; tend the busiest active zone; work at the reactor while he thinks; dock folded when nothing is happening | — | Docked |
+| **Robot arms** (front left serves Needs, Core, Roblox; front right serves Automaton, Finance, Jobs) | Events and zone states | A transfer event, a zone going active, JARVIS thinking | Swing over to the zone that just sent or received work and light their stripe in its colour; tend the busiest active zone; work over the console's monitor shelf while he thinks; dock folded when nothing is happening | — | Docked |
 | Rack lights (back wall) | Terminal lines in the last minute | Every 0.1 s | Blink faster the more is happening | — | — |
 | Back screen | Latest studio ASSET render | New render | The newest picture from the Roblox studio | — | Hidden when there is none |
 
@@ -57,16 +59,16 @@ and the data's freshness when it isn't live.
 | **Finance** | Local service checks; Quant View config | Curved terminal listing each service and its state, the Quant View name, and "No broker connected — no positions, balances or P&L"; one pylon per service (green light = running) | Service: status and latency. Zone: Refresh now, open Finance page | Monitoring only — never shows invented prices, positions or P&L |
 | **Jobs** | Job feed (`state.jobs`) | A rail: queued capsules stacked on the left, running (and waiting-on-you) along the middle, done and failed (last hour) on the right. Stale ones (no heartbeat) turn orange | Job: the dashboard's own job card with real Cancel when the worker supports it | Feed offline shown on the label; no invented progress |
 | **Needs Markus** | Open items (`state.items`) | One amber beacon per item, height and pulse by priority (P1 tallest, fastest) | Item: the dashboard's own item card — its real checks, "I'm on it", Snooze 4h | "Nothing needs you" — a dim ring |
-| **Jarvis Core** | Bridge link, `/health` (model, write mode, voice), mic, phone pairing, status-line allowance reading | An orb in the reactor's current colour; one pylon per capability, ring colour = ok / warn / off / error | Capability: its detail, e.g. "3% of 5h left", "not paired" | Allowance shows "unavailable — no fresh status-line reading" rather than a number |
+| **Jarvis Core** | Bridge link, `/health` (model, write mode, voice), mic, phone pairing, status-line allowance reading | An orb in JARVIS's current colour; one pylon per capability, ring colour = ok / warn / off / error | Capability: its detail, e.g. "3% of 5h left", "not paired" | Allowance shows "unavailable — no fresh status-line reading" rather than a number |
 
 ## Connections
 
 | Link | Style → meaning |
 |---|---|
-| Reactor → each zone (pathway across the deck) | **active**: bright dashes flowing out to the zone · **queued**: slow dim pulses · **idle**: faint line · **attention**: amber, flowing back towards the reactor · **disconnected**: grey, broken in the middle, no flow · **failed**: red, broken, flickering · turns **green** for a moment when a job there completes |
+| Console → each zone (pathway across the deck) | **active**: bright dashes flowing out to the zone · **queued**: slow dim pulses · **idle**: faint line · **attention**: amber, flowing back towards the console · **disconnected**: grey, broken in the middle, no flow · **failed**: red, broken, flickering · turns **green** for a moment when a job there completes |
 | Jobs → project (arc) | Jobs running for that project |
 | Needs → project (arc) | Items waiting on you for that project |
-| Packets | One per live event: work assigned goes out from the reactor; results, leads, studio moves and voice come in; a new item comes in from its project and goes back out to Needs Markus |
+| Packets | One per live event: work assigned goes out from the console; results, leads, studio moves and voice come in; a new item comes in from its project and goes back out to Needs Markus |
 
 Arcs stay faint unless Connections View is on or one of their ends is
 selected or hovered.
@@ -89,13 +91,12 @@ selected or hovered.
 | `stationStore.ts` | Selection, hover, mode, camera view, Connections View, events |
 | `layout.ts` | Where everything is; camera presets; pathway geometry |
 | `floor.tsx` | Procedural hex floor and island deck, zone light |
-| `reactor.tsx` | The reactor |
+| `console.tsx` | The centre console: Blender model and baked textures, live lights, the four monitors |
 | `clusters.tsx` | The six zone structures |
 | `links.tsx` | Pathways, arcs, packets |
 | `parts.tsx` | Arms, racks, room, back screen |
 | `camera.tsx` | Orbit controls, flights, cinematic drift |
-| `desk.tsx` | The talk station: desk, chair, holo monitors |
 | `walk.tsx` | Walk mode: first-person movement, collisions, E to use |
-| `labels.tsx` | Zone/link labels with collision avoidance (never over the reactor or desk), tooltip |
+| `labels.tsx` | Zone/link labels with collision avoidance (never over the console), tooltip |
 | `describe.ts` | Words for any selected thing, and which terminal lines are about it |
 | `Detail.tsx`, `Station.tsx` | Detail panel; HUD, toolbar, modes, Talk panel |

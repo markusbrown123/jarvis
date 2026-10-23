@@ -69,6 +69,27 @@ export function CameraRig() {
   return null
 }
 
+/**
+ * In Talk mode the conversation panel covers the left of the screen, so the
+ * picture's centre shifts right into the open space — the console stays
+ * whole and centred where you can see it. (Labels follow automatically:
+ * they project through the same camera.)
+ */
+export function TalkFraming() {
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
+  const size = useThree((s) => s.size)
+  const talk = useStation((s) => s.mode === 'talk')
+  useEffect(() => {
+    if (!size.width || !size.height) return
+    // Matches .st-talk: left 24px, width clamp(340px, 28vw, 440px).
+    const panel = 24 + Math.min(440, Math.max(340, size.width * 0.28))
+    if (talk && size.width > 900) camera.setViewOffset(size.width, size.height, -panel / 2, 0, size.width, size.height)
+    else camera.clearViewOffset()
+    camera.updateProjectionMatrix()
+  }, [camera, size.width, size.height, talk])
+  return null
+}
+
 export function Controls() {
   const mode = useStation((s) => s.mode)
   const reduced = useHub((s) => s.prefs.reducedMotion)

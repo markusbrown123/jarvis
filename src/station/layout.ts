@@ -63,15 +63,18 @@ export function zoneOfProject(project: string | undefined): ZoneId {
 }
 
 /**
- * The talk station: a desk and chair at the front of the reactor, facing it.
- * In Talk mode the camera sits behind the chair, looking over it at JARVIS.
+ * The console at the centre: a raised platform with the command desk and
+ * chair (console.tsx, modelled in tools/blender/console.py). The chair
+ * faces the back of the room; in Talk mode the camera sits behind it.
  */
-export const CHAIR: [number, number, number] = [0, 0.16, 4.0]
+export const CHAIR: [number, number, number] = [0, 0.38, -0.2]
+/** The platform's reach, back step included. */
+export const CONSOLE_R = 2.45
 export function seatCamera(aspect: number): { pos: [number, number, number]; target: [number, number, number] } {
   const k = Math.max(1, 1.6 / aspect)
-  // Over the chair's shoulder, like the workshop shots: chair and desk with
-  // its monitors across the lower half, the reactor straight ahead above.
-  return { pos: [0, 2.45 * k, CHAIR[2] + 4.3 * k], target: [0, 1.3, 0.4] }
+  // Over the chair's shoulder, like the workshop shots: the chair, the desk
+  // and its monitors across the lower half, the room beyond.
+  return { pos: [0, 2.45 + 0.35 * k, CHAIR[2] + 4.5 * k], target: [0, 1.0, -2.2] }
 }
 
 /** Camera presets: where the camera sits and what it looks at. */
@@ -132,14 +135,13 @@ export function linkAnchor(l: LinkModel): [number, number, number] {
 
 /**
  * What a person walking the station can't walk through, as circles on the
- * floor (x, z, radius): the reactor, each pad, the desk and chair, the two
- * arms and the four pillars. The room's wall bounds the rest.
+ * floor (x, z, radius): the console, each pad, the two arms and the four
+ * pillars. The room's wall bounds the rest.
  */
 export const WALL_R = 9.6
 export const OBSTACLES: [number, number, number][] = [
-  [0, 0, 2.35],
+  [0, 0, CONSOLE_R],
   ...ZONES.map((z): [number, number, number] => [z.pos[0], z.pos[2], 1.35]),
-  [CHAIR[0], CHAIR[2], 1.3],
   [2.6, 1.5, 0.7],
   [-2.6, 1.5, 0.7],
   ...[-1, 1].flatMap((side) => [0.62, 0.8].map((f): [number, number, number] => [Math.sin(side * Math.PI * f) * 8.6, Math.cos(side * Math.PI * f) * 8.6, 0.55])),

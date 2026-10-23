@@ -26,3 +26,6 @@ dist-ssr
 # Copied out of node_modules by scripts/start.mjs — 34MB of build output.
 public/mediapipe/
 .jarvis.pid
+
+# Blender's Python module for tools/blender (see console.py)
+.bpy/

@@ -35,17 +35,20 @@ he greets you right after it. Write mode is unchanged: start the bridge yourself
 The landing view (`0`, or **Station** in the nav): a 3D control room built in
 code — no downloaded models — where every light and moving part is live state:
 
-- **Reactor** in the middle: its colour and motion are JARVIS's state (blue-violet
-  standby, orange listening with the mic, violet thinking with rings speeding up,
-  cyan speaking with his voice level), an amber halo when something needs you,
-  a wave when a job completes, a red segment on an error.
+- **The console** in the middle: a raised platform with a wide command desk,
+  a command chair and four holo monitors (Systems, Zones, Work, Business) —
+  modelled in Blender and textured with Cycles-baked 4K maps. Its light strips
+  are JARVIS's state (blue standby, orange listening, violet thinking, cyan
+  speaking, brighter with his voice), the desk's holo pads go amber when
+  something needs you, a ring leaves the platform when a job completes, and a
+  red segment lights on an error.
 - **Six zones on pads** round it — Roblox (one cube per game), Automaton (site
   globe, pipeline stage pillars, lead dots), Finance (service terminal, monitoring
   only), Jobs (queued → running → done rail), Needs Markus (a beacon per item),
   Jarvis Core (a pylon per capability). The pad and the deck light round it show
   the zone's state; anything that can't be read is drawn as unavailable, never
   filled in.
-- **Connections** from the reactor to each zone flow, pulse, break or flash
+- **Connections** from the console to each zone flow, pulse, break or flash
   with what is really happening; packets travel them as events land.
 - **Two arms** swing to the zone that just sent or received work and dock when idle.
 - **Racks** blink with activity; the **back screen** shows the latest studio render.
@@ -53,13 +56,14 @@ code — no downloaded models — where every light and moving part is live stat
   age), Terminal (filters incl. Errors; narrows to the selection), Needs
   Markus, Running, and a detail panel for whatever is selected.
 
-It opens in **Talk** mode (`J`): Tony's workshop desk in front of the
-reactor, seen over the chair, with three live holo monitors on it (Systems,
-Work, Business), JARVIS straight ahead, and the whole conversation on the
-left with a line to type to him — the desk and chair light up in his colour
-as he listens, thinks and speaks. **Walk** (`F`) gets you up: first person,
-`W A S D` and the mouse, `E` to sit back down at the terminal or open the
+It opens in **Talk** mode (`J`): sat at the console, seen over the chair,
+looking out across the desk and its monitors to the room (with a shallow
+depth of field on High and Ultra), and the whole conversation on the left
+with a line to type to him. **Walk** (`F`) gets you up: first person,
+`W A S D` and the mouse, `E` to sit back down at the console or open the
 zone you're facing.
+
+To rebuild the console's model and textures, see `tools/blender/console.py`.
 
 Click anything (or a panel row) to focus it; hover for a tooltip. Camera
 presets, Reset (`R`), Connections View (`L`), and **Talk / Command /

@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
-import { CHAIR, OBSTACLES, onIsland, WALL_R, ZONES } from './layout'
+import { CONSOLE_R, OBSTACLES, onIsland, WALL_R, ZONES } from './layout'
 import { useStation } from './stationStore'
 
 /**
  * Walk mode: the station on foot, first person. W A S D (or the arrows) to
  * move, Shift to run, the mouse to look — click to capture it, or drag.
- * You stand up behind the desk; E sits you back down at it, or opens the
- * zone you're facing; the reactor is JARVIS, so just talk.
+ * You stand up behind the console; E sits you back down at it, or opens
+ * the zone you're facing. Talking to JARVIS works as everywhere else.
  *
  * While walking these keys belong to walking: they're taken before the
  * app's own shortcuts (D is diagnostics, E expands panels) see them.
@@ -33,7 +33,8 @@ export function WalkControls() {
   const setEvents = useThree((s) => s.setEvents)
   const keys = useRef(new Set<string>())
   const look = useRef({ yaw: 0, pitch: -0.06 })
-  const pos = useMemo(() => new THREE.Vector3(CHAIR[0], 0, CHAIR[2] + 1.7), [])
+  // You stand up and step off the back of the platform, facing the desk.
+  const pos = useMemo(() => new THREE.Vector3(0, 0, CONSOLE_R + 0.6), [])
   const ground = useRef(0.16)
   const bob = useRef(0)
   const act = useRef<(() => void) | null>(null)
@@ -138,7 +139,7 @@ export function WalkControls() {
     const st = useStation.getState()
     let hint: string | null = null
     act.current = null
-    if (Math.hypot(pos.x - CHAIR[0], pos.z - CHAIR[2]) < 2.4) {
+    if (fromCentre < CONSOLE_R + 1.1 && (-pos.x * fx - pos.z * fz) / fromCentre > 0.5) {
       hint = 'E  ·  sit at the terminal'
       act.current = () => st.setMode('talk')
     } else {
@@ -153,7 +154,6 @@ export function WalkControls() {
           act.current = () => st.select({ kind: 'zone', id: z.id, zone: z.id })
         }
       }
-      if (!hint && fromCentre < 3.8 && (-pos.x * fx - pos.z * fz) / fromCentre > 0.6) hint = 'JARVIS  ·  say “Hey Jarvis” or hold Space'
     }
     st.setWalk({ hint })
   })

@@ -8,7 +8,6 @@ import { rng } from '../scene/crystal'
 import { motion, useMaterials } from './shared'
 import { ZONE, type ZoneId } from './layout'
 import { useStation } from './stationStore'
-import { SPHERE_Y } from './reactor'
 
 /**
  * The room round the installation, all built from geometry here — nothing
@@ -72,9 +71,9 @@ export function RobotArm({ position, side, seed, zones }: { position: [number, n
       const reach = Math.min(L1 + L2 - 0.25, Math.max(0.8, d - 0.9))
       want.set(base.x + (dx / d) * reach + Math.sin(tt * 2.1 + seed) * 0.05, 0.95 + Math.sin(tt * 1.6) * 0.06, base.z + (dz / d) * reach + Math.cos(tt * 1.8 + seed) * 0.05)
     } else if (thinking) {
-      // At the reactor's flank, with small deliberate "tool" moves.
+      // Over the console's monitor shelf, with small deliberate "tool" moves.
       const d = Math.hypot(base.x, base.z)
-      want.set((base.x / d) * 1.25 + Math.sin(tt * 2.3 + seed) * 0.06, SPHERE_Y - 0.35 + Math.sin(tt * 1.7) * 0.08, (base.z / d) * 1.25 + Math.cos(tt * 1.9 + seed) * 0.06)
+      want.set((base.x / d) * 1.95 + Math.sin(tt * 2.3 + seed) * 0.06, 1.55 + Math.sin(tt * 1.7) * 0.08, (base.z / d) * 1.95 + Math.cos(tt * 1.9 + seed) * 0.06)
     } else {
       // Docked: upper arm upright, claw tucked down towards the reactor, breathing.
       const d = Math.hypot(base.x, base.z)

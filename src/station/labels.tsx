@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { CHAIR, linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
+import { CONSOLE_R, linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
 import { useStation } from './stationStore'
 import { describe } from './describe'
 
@@ -126,11 +126,11 @@ export function LabelLayer() {
   )
 }
 
-/** The reactor and the desk stay clear: no label is ever drawn over them. */
-const KEEP_CLEAR = [
-  [-1, 0.3, 0, 1, 3.8, 0, 0, 2.45, 1, 0, 2.45, -1],
-  [CHAIR[0] - 1.1, 0.2, CHAIR[2] - 1.1, CHAIR[0] + 1.1, 1.6, CHAIR[2] + 0.5],
-].map((c) => Array.from({ length: c.length / 3 }, (_, i) => new THREE.Vector3(c[i * 3], c[i * 3 + 1], c[i * 3 + 2])))
+/** The console stays clear: no label is ever drawn over the desk, chair or monitors. */
+const R = CONSOLE_R - 0.4
+const KEEP_CLEAR = [[-R, 0.3, -R, R, 0.3, -R, -R, 0.3, R, R, 0.3, R, -R, 1.95, -R, R, 1.95, -R, -R, 1.95, R, R, 1.95, R]].map((c) =>
+  Array.from({ length: c.length / 3 }, (_, i) => new THREE.Vector3(c[i * 3], c[i * 3 + 1], c[i * 3 + 2])),
+)
 
 /** Inside the canvas: place every label for this frame. */
 export function LabelProjector() {
