@@ -28,7 +28,8 @@ export function CameraRig() {
 
   useEffect(() => {
     // The first measurement can be 0×0, and a NaN camera never recovers.
-    if (!size.width || !size.height) return
+    // Walking drives the camera itself (walk.tsx).
+    if (!size.width || !size.height || mode === 'walk') return
     const aspect = size.width / size.height
     const c = mode === 'talk' && view === 'overview' ? seatCamera(aspect) : cameraFor(view, aspect)
     const pos = new THREE.Vector3(...c.pos)
@@ -58,7 +59,7 @@ export function CameraRig() {
 
   useFrame((_, dt) => {
     const g = goal.current
-    if (!g || !controls) return
+    if (!g || !controls || useStation.getState().mode === 'walk') return
     const k = useHub.getState().prefs.reducedMotion ? 1 : 1 - Math.exp(-dt * 2.6)
     camera.position.lerp(g.pos, k)
     controls.target.lerp(g.target, k)
@@ -73,6 +74,7 @@ export function Controls() {
   const reduced = useHub((s) => s.prefs.reducedMotion)
   const cinematic = mode === 'cinematic'
   const limits = useMemo(() => (cinematic ? { min: -Infinity, max: Infinity } : mode === 'talk' ? { min: -0.6, max: 0.6 } : { min: -1.15, max: 1.15 }), [cinematic, mode])
+  if (mode === 'walk') return null
   return (
     <OrbitControls
       makeDefault

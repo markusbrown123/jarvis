@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
 import { useStore } from '../store'
@@ -46,4 +46,32 @@ export function reactorState() {
   const busy = phase === 'thinking' || phase === 'tooling'
   const color = phase === 'offline' ? COL.offline : live ? COL.listening : phase === 'speaking' ? COL.speaking : busy ? COL.thinking : COL.standby
   return { phase, level: live || phase === 'speaking' ? level : 0, busy, live, error: Boolean(error), color }
+}
+
+/** A texture drawn with the 2D canvas, redrawn when deps change or fonts arrive. */
+export function useCanvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, deps: unknown[]) {
+  const cv = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = w
+    c.height = h
+    return c
+  }, [w, h])
+  const tex = useMemo(() => {
+    const t = new THREE.CanvasTexture(cv)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 8
+    return t
+  }, [cv])
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => {
+    void Promise.all([document.fonts.load('600 40px "Barlow Condensed"'), document.fonts.load('500 30px "IBM Plex Mono"'), document.fonts.load('500 30px "Barlow"')]).then(() => setFontsReady(true))
+  }, [])
+  useEffect(() => {
+    const g = cv.getContext('2d')!
+    g.clearRect(0, 0, w, h)
+    draw(g)
+    tex.needsUpdate = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...deps, fontsReady])
+  return tex
 }

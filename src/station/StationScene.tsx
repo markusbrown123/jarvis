@@ -6,11 +6,12 @@ import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import * as THREE from 'three'
 import { useHub, type Graphics } from '../hub/client'
 import { useStore } from '../store'
-import { BackScreen, Racks, RobotArm, Room } from './parts'
+import { BackScreen, Racks, RobotArm, Room, RoomShell } from './parts'
 import { Floor, Island } from './floor'
 import { Reactor } from './reactor'
 import { Clusters } from './clusters'
 import { Desk } from './desk'
+import { WalkControls } from './walk'
 import { Links } from './links'
 import { CameraRig, Controls } from './camera'
 import { LabelProjector } from './labels'
@@ -195,6 +196,9 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <RobotArm position={[2.6, 0.16, 1.5]} side={1} seed={2} zones={['automaton', 'finance', 'jobs']} />
       <RobotArm position={[-2.6, 0.16, 1.5]} side={-1} seed={1} zones={['needs', 'core', 'roblox']} />
       {q.dust > 0 && <Sparkles count={q.dust} scale={[20, 6, 18]} position={[0, 3.2, 0]} size={1.4} speed={0.12} opacity={0.22} color="#c4b5fd" noise={1} />}
+      {/* On foot the room closes round you: front wall with windows, ceiling. */}
+      {mode === 'walk' && <RoomShell />}
+      {mode === 'walk' && <WalkControls />}
       <Controls />
       <CameraRig />
       <LabelProjector />

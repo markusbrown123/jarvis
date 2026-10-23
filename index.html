@@ -66,6 +66,54 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      If the app can't load at all — a file missing or half-edited after an
+      update — the page would otherwise sit there blank and white, because
+      the dark theme arrives with the app itself. Say what happened instead.
+    -->
+    <style>
+      html,
+      body {
+        background: #01060c;
+      }
+    </style>
+    <script>
+      ;(function () {
+        var shown = false
+        function show(detail) {
+          var root = document.getElementById('root')
+          if (shown || (root && root.childElementCount) || document.querySelector('vite-error-overlay')) return
+          shown = true
+          var box = document.createElement('div')
+          box.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:32px;background:#01060c;color:#dfe6f2;font:15px/1.6 -apple-system,system-ui,sans-serif'
+          var inner = document.createElement('div')
+          inner.style.maxWidth = '680px'
+          var title = document.createElement('b')
+          title.textContent = 'JARVIS couldn\u2019t load the page'
+          title.style.cssText = 'color:#fca5a5;letter-spacing:.08em'
+          var pre = document.createElement('pre')
+          pre.textContent = detail
+          pre.style.cssText = 'white-space:pre-wrap;color:#ffd2a8;font:13px/1.5 ui-monospace,monospace;margin:12px 0'
+          var help = document.createElement('div')
+          help.textContent = 'Usually a file is missing or half-edited after an update. In Terminal: \u201ccd ~/jarvis && git status\u201d lists changed or deleted files, and \u201ctail -40 ~/Library/Logs/jarvis.log\u201d shows the exact error.'
+          inner.append(title, pre, help)
+          box.append(inner)
+          document.body.append(box)
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            var t = e.target
+            if (t && t.tagName === 'SCRIPT') show('A script failed to load: ' + (t.src || 'inline'))
+            else if (e.message) setTimeout(function () { show(e.message) }, 1500)
+          },
+          true,
+        )
+        setTimeout(function () {
+          show('Nothing loaded after 25 seconds.')
+        }, 25000)
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

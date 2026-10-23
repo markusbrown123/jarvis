@@ -21,8 +21,9 @@ import './station.css'
  * and money, the terminal, what needs Markus, what's running — the voice
  * visualizer under the reactor, and a detail panel for whatever is selected.
  *
- * Three modes on the same live data: Talk (J — sat at the desk facing
- * JARVIS, the conversation clear in front of you), Command (panels,
+ * Four modes on the same live data: Talk (J — sat at the desk facing
+ * JARVIS, the conversation clear in front of you), Walk (F — on foot,
+ * first person, E to sit back down or open a zone), Command (panels,
  * labels, details — for working) and Cinematic (C — panels away, camera
  * pulled back and drifting, a strip of every system's live state and the
  * events as they happen).
@@ -190,7 +191,7 @@ function ViewBar() {
             {v === 'overview' ? 'Overview' : ZONE[v].label}
           </button>
         ))}
-      {mode !== 'talk' && (
+      {mode !== 'talk' && mode !== 'walk' && (
         <button
           onClick={() => {
             select(null, false)
@@ -210,6 +211,7 @@ function ViewBar() {
         {(
           [
             ['talk', 'Talk', 'Sit at the desk and talk to JARVIS (J)'],
+            ['walk', 'Walk', 'Get up and walk the station, first person (F)'],
             ['command', 'Command', 'Panels and details, for working (C)'],
             ['cinematic', 'Cinematic', 'The whole station, live, camera drifting (C)'],
           ] as [Mode, string, string][]
@@ -393,7 +395,13 @@ function TalkPanel() {
             <p>{caption}</p>
           </div>
         )}
-        {!shown.length && !live && <p className="st-talk-empty">Say “Hey Jarvis”, hold Space, or type below.</p>}
+        {!shown.length && !live && (
+          <p className="st-talk-empty">
+            Say “Hey Jarvis”, hold Space, or type below.
+            <br />
+            <span>F to get up and walk the station.</span>
+          </p>
+        )}
       </div>
       <form
         className="st-talk-input"
@@ -423,6 +431,22 @@ function TalkPanel() {
   )
 }
 
+/** On foot: a crosshair, what E does here, and the controls. */
+function WalkHud() {
+  const hint = useStation((s) => s.walk.hint)
+  const locked = useStation((s) => s.walk.locked)
+  return (
+    <>
+      <div className="st-cross" aria-hidden />
+      {hint && <p className="st-walk-hint">{hint}</p>}
+      {!locked && <p className="st-walk-look">Click the room to look around with the mouse (Esc lets go)</p>}
+      <p className="st-walk-keys">
+        <b>W A S D</b> move · <b>Shift</b> run · <b>mouse</b> look · <b>E</b> use · <b>Space</b> talk · <b>F</b> sit back down
+      </p>
+    </>
+  )
+}
+
 /** Talk mode's one other thing: what's waiting on Markus, if anything. */
 function TalkWaiting() {
   const items = useStation((s) => s.model?.items)
@@ -442,7 +466,7 @@ export function Station() {
   const mode = useStation((s) => s.mode)
   // With a selection open the right column makes room for its detail.
   const selected = useStation((s) => Boolean(s.selected))
-  // J: Talk. C: Cinematic / Command. R: reset the view. L: Connections View.
+  // J: Talk. F: Walk. C: Cinematic / Command. R: reset the view. L: Connections View.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement
@@ -451,6 +475,7 @@ export function Station() {
       const st = useStation.getState()
       if (e.key === 'c') st.setMode(st.mode === 'cinematic' ? 'command' : 'cinematic')
       else if (e.key === 'j') st.setMode('talk')
+      else if (e.key === 'f') st.setMode(st.mode === 'walk' ? 'talk' : 'walk')
       else if (e.key === 'r') {
         st.select(null, false)
         st.fly('overview')
@@ -486,10 +511,11 @@ export function Station() {
         </>
       )}
       {mode === 'cinematic' && <CineStrip />}
+      {mode === 'walk' && <WalkHud />}
       <TopHud />
       <ViewBar />
-      <Dock captionOnly={mode === 'talk'} />
-      {mode === 'command' && <p className="st-hint">Drag to orbit · click a system · R reset · L links · C cinematic · J talk</p>}
+      <Dock captionOnly={mode === 'talk' || mode === 'walk'} />
+      {mode === 'command' && <p className="st-hint">Drag to orbit · click a system · R reset · L links · C cinematic · J talk · F walk</p>}
     </div>
   )
 }

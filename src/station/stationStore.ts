@@ -26,9 +26,12 @@ type StationStore = {
   /**
    * Talk: sat at the desk facing JARVIS, the conversation in front of you.
    * Command: panels and labels, built for working. Cinematic: the same live
-   * room, camera pulled back and drifting.
+   * room, camera pulled back and drifting. Walk: on foot, first person.
    */
   mode: Mode
+  /** Walk mode: what E would do here, and whether the mouse is captured for looking. */
+  walk: { hint: string | null; locked: boolean }
+  setWalk: (w: Partial<{ hint: string | null; locked: boolean }>) => void
   connections: boolean
   view: View
   /** Bumped to re-fly to the same view (e.g. Reset). */
@@ -47,13 +50,14 @@ type StationStore = {
 
 let seq = 0
 
-export type Mode = 'talk' | 'command' | 'cinematic'
+export type Mode = 'talk' | 'command' | 'cinematic' | 'walk'
 
 // The mode is remembered between visits (and the room opens at the desk).
 const MODE_KEY = 'jarvis.station.mode'
 function savedMode(): Mode {
   try {
     const m = localStorage.getItem(MODE_KEY)
+    // Walking is never where the room opens: you start sat at the desk.
     return m === 'command' || m === 'cinematic' ? m : 'talk'
   } catch {
     return 'talk'
@@ -64,6 +68,12 @@ export const useStation = create<StationStore>((set, get) => ({
   selected: null,
   hovered: null,
   mode: savedMode(),
+  walk: { hint: null, locked: false },
+  setWalk: (w) => {
+    const cur = get().walk
+    if ((w.hint === undefined || w.hint === cur.hint) && (w.locked === undefined || w.locked === cur.locked)) return
+    set({ walk: { ...cur, ...w } })
+  },
   connections: false,
   view: 'overview',
   viewNonce: 0,

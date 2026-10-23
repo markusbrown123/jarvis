@@ -9,6 +9,7 @@ import type { LinkModel } from './model'
  * one per system, the three with tall structures (Roblox, Automaton, Finance)
  * at the back and right, the low ones (Jobs, Needs Markus, Jarvis Core) at
  * the front and left so nothing tall stands between the camera and the core.
+ * The two front pads sit a little apart, leaving the front for the desk.
  */
 
 export type ZoneId = 'roblox' | 'automaton' | 'finance' | 'jobs' | 'needs' | 'core'
@@ -40,8 +41,8 @@ export const ZONES: Zone[] = [
   { id: 'roblox', label: 'Roblox', role: 'games & studio', angle: 330, color: '#4f8bff', pos: at(330) },
   { id: 'automaton', label: 'Automaton', role: 'sites, clients & leads', angle: 30, color: '#22d3ee', pos: at(30) },
   { id: 'finance', label: 'Finance', role: 'trading research', angle: 90, color: '#34d399', pos: at(90) },
-  { id: 'jobs', label: 'Jobs', role: 'running, queued & done', angle: 150, color: '#818cf8', pos: at(150) },
-  { id: 'needs', label: 'Needs Markus', role: 'your actions', angle: 210, color: '#f5a524', pos: at(210) },
+  { id: 'jobs', label: 'Jobs', role: 'running, queued & done', angle: 140, color: '#818cf8', pos: at(140) },
+  { id: 'needs', label: 'Needs Markus', role: 'your actions', angle: 220, color: '#f5a524', pos: at(220) },
   { id: 'core', label: 'Jarvis Core', role: 'AI, voice & health', angle: 270, color: '#c084fc', pos: at(270) },
 ]
 
@@ -68,9 +69,9 @@ export function zoneOfProject(project: string | undefined): ZoneId {
 export const CHAIR: [number, number, number] = [0, 0.16, 4.0]
 export function seatCamera(aspect: number): { pos: [number, number, number]; target: [number, number, number] } {
   const k = Math.max(1, 1.6 / aspect)
-  // Behind and above the chair: the chair and desk in the lower middle, the
-  // reactor straight ahead above them, the front pads either side.
-  return { pos: [0, 3.6 * k, CHAIR[2] + 7.9 * k], target: [0, 0.76, 0] }
+  // Over the chair's shoulder, like the workshop shots: chair and desk with
+  // its monitors across the lower half, the reactor straight ahead above.
+  return { pos: [0, 2.45 * k, CHAIR[2] + 4.3 * k], target: [0, 1.3, 0.4] }
 }
 
 /** Camera presets: where the camera sits and what it looks at. */
@@ -127,4 +128,29 @@ export function linkAnchor(l: LinkModel): [number, number, number] {
   const peak = 1.0 + a.distanceTo(b) * 0.32
   const m = a.add(b).multiplyScalar(0.5)
   return [m.x, peak + 0.15, m.z]
+}
+
+/**
+ * What a person walking the station can't walk through, as circles on the
+ * floor (x, z, radius): the reactor, each pad, the desk and chair, the two
+ * arms and the four pillars. The room's wall bounds the rest.
+ */
+export const WALL_R = 9.6
+export const OBSTACLES: [number, number, number][] = [
+  [0, 0, 2.35],
+  ...ZONES.map((z): [number, number, number] => [z.pos[0], z.pos[2], 1.35]),
+  [CHAIR[0], CHAIR[2], 1.3],
+  [2.6, 1.5, 0.7],
+  [-2.6, 1.5, 0.7],
+  ...[-1, 1].flatMap((side) => [0.62, 0.8].map((f): [number, number, number] => [Math.sin(side * Math.PI * f) * 8.6, Math.cos(side * Math.PI * f) * 8.6, 0.55])),
+]
+
+/** Is a floor point on the raised island (its hex deck)? */
+export function onIsland(x: number, z: number) {
+  const ap = 8.1 * Math.cos(Math.PI / 6)
+  for (let k = 0; k < 3; k++) {
+    const a = Math.PI / 6 + (k * Math.PI) / 3
+    if (Math.abs(x * Math.cos(a) + z * Math.sin(a)) > ap) return false
+  }
+  return true
 }

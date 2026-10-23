@@ -53,14 +53,17 @@ code — no downloaded models — where every light and moving part is live stat
   age), Terminal (filters incl. Errors; narrows to the selection), Needs
   Markus, Running, and a detail panel for whatever is selected.
 
-It opens in **Talk** mode (`J`): a desk and chair in front of the reactor,
-the camera just behind the chair, JARVIS straight ahead, and the whole
-conversation on the left with a line to type to him — the desk and chair
-light up in his colour as he listens, thinks and speaks.
+It opens in **Talk** mode (`J`): Tony's workshop desk in front of the
+reactor, seen over the chair, with three live holo monitors on it (Systems,
+Work, Business), JARVIS straight ahead, and the whole conversation on the
+left with a line to type to him — the desk and chair light up in his colour
+as he listens, thinks and speaks. **Walk** (`F`) gets you up: first person,
+`W A S D` and the mouse, `E` to sit back down at the terminal or open the
+zone you're facing.
 
 Click anything (or a panel row) to focus it; hover for a tooltip. Camera
 presets, Reset (`R`), Connections View (`L`), and **Talk / Command /
-Cinematic** (`J` / `C`) sit under the clock. Cinematic pulls the camera back and drifts round the
+Cinematic / Walk** (`J` / `C` / `F`) sit under the clock. Cinematic pulls the camera back and drifts round the
 whole station with a live caption strip — the same data, not a screensaver.
 The full element-by-element mapping is in [STATION.md](STATION.md).
 
@@ -95,7 +98,7 @@ Colours mean one thing everywhere: violet working, amber needs you, red
 failed, cyan healthy, grey dashed not connected.
 
 Keys (never while typing): `0` station · `1`–`9` sections · `[` `]` collapse panels · `I`
-voice view · in the station `J` talk, `C` cinematic, `R` reset view, `L` connections ·
+voice view · in the station `J` talk, `F` walk (then `W A S D`, `E`), `C` cinematic, `R` reset view, `L` connections ·
 `⌘K` command palette · `Space` talk · `Enter` finish speaking ·
 `M` mic on/off · `Esc` stand down · `D` diagnostics · `T` audio test.
 

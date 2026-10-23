@@ -341,6 +341,51 @@ export function Room() {
   )
 }
 
+/**
+ * The rest of the room, for walking it: the front of the curved wall with a
+ * row of tall windows, and the ceiling with its lamps. (From the overview
+ * the camera is outside this line, so it's only built when you're inside.)
+ */
+export function RoomShell() {
+  const m = useMaterials()
+  const glass = useMemo(() => new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffeccc').multiplyScalar(1.25), toneMapped: false }), [])
+  const lamp = useMemo(() => m.glow('#e8eeff', 2), [m])
+  const windows = useMemo(() => Array.from({ length: 9 }, (_, i) => Math.PI * 1.5 + (i / 8) * Math.PI), [])
+  return (
+    <group>
+      <mesh position-y={4} receiveShadow>
+        <cylinderGeometry args={[11.2, 11.2, 8, 96, 1, true, Math.PI * 1.38, Math.PI * 1.24]} />
+        <meshStandardMaterial attach="material" color="#15161f" metalness={0.4} roughness={0.75} side={THREE.BackSide} />
+      </mesh>
+      {windows.map((a) => (
+        <group key={a} position={[Math.sin(a) * 11.12, 0, Math.cos(a) * 11.12]} rotation-y={a + Math.PI}>
+          <mesh position-y={3.9} material={glass}>
+            <planeGeometry args={[2.2, 2.6]} />
+          </mesh>
+          <mesh position={[0, 3.9, 0.02]} material={m.graphite}>
+            <boxGeometry args={[0.06, 2.6, 0.04]} />
+          </mesh>
+          <mesh position={[0, 5.24, 0.02]} material={m.graphite}>
+            <boxGeometry args={[2.3, 0.1, 0.06]} />
+          </mesh>
+        </group>
+      ))}
+      <mesh position-y={8} rotation-x={Math.PI / 2}>
+        <circleGeometry args={[11.2, 96]} />
+        <meshStandardMaterial attach="material" color="#0b0b12" metalness={0.3} roughness={0.85} side={THREE.DoubleSide} />
+      </mesh>
+      {Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * Math.PI * 2
+        return (
+          <mesh key={i} position={[Math.sin(a) * 6.6, 7.96, Math.cos(a) * 6.6]} rotation-x={Math.PI / 2} material={lamp}>
+            <circleGeometry args={[0.32, 32]} />
+          </mesh>
+        )
+      })}
+    </group>
+  )
+}
+
 /** The latest studio render on a big floating screen behind the core. */
 export function BackScreen() {
   const m = useMaterials()

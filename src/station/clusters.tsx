@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, type ReactNode } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
-import { motion, reactorState, useMaterials } from './shared'
+import { motion, reactorState, useCanvasTex, useMaterials } from './shared'
 import { useStation, type Sel } from './stationStore'
 import { hexPoints, PAD, STATUS, ZONE, type ZoneId } from './layout'
 import { Blob } from './floor'
@@ -47,34 +47,6 @@ function useHit(sel: Sel) {
 /** Is this thing (or its zone) the selected or hovered one? */
 function useEmphasis(kind: Sel['kind'], id: string) {
   return useStation((s) => (s.selected?.kind === kind && s.selected.id === id) || (s.hovered?.kind === kind && s.hovered.id === id))
-}
-
-/** A texture drawn with the 2D canvas, redrawn when deps change or fonts arrive. */
-function useCanvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, deps: unknown[]) {
-  const cv = useMemo(() => {
-    const c = document.createElement('canvas')
-    c.width = w
-    c.height = h
-    return c
-  }, [w, h])
-  const tex = useMemo(() => {
-    const t = new THREE.CanvasTexture(cv)
-    t.colorSpace = THREE.SRGBColorSpace
-    t.anisotropy = 8
-    return t
-  }, [cv])
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => {
-    void Promise.all([document.fonts.load('600 40px "Barlow Condensed"'), document.fonts.load('500 30px "IBM Plex Mono"'), document.fonts.load('500 30px "Barlow"')]).then(() => setFontsReady(true))
-  }, [])
-  useEffect(() => {
-    const g = cv.getContext('2d')!
-    g.clearRect(0, 0, w, h)
-    draw(g)
-    tex.needsUpdate = true
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, fontsReady])
-  return tex
 }
 
 const STATE_RIM: Record<ZoneModel['state'], number> = { loading: 0.5, idle: 0.9, active: 1.8, attention: 1.6, error: 1.4, unavailable: 0.35 }

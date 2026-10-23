@@ -945,6 +945,72 @@
   font: 400 13.5px var(--body);
 }
 
+.st-talk-empty span {
+  font-size: 13px;
+  color: #6f7a90;
+}
+
+/* -------------------------------------------------------- walk mode */
+
+.st-cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  width: 10px;
+  height: 10px;
+  margin: -6px 0 0 -6px;
+  border: 1.5px solid rgba(223, 241, 255, 0.75);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.st-walk-hint {
+  position: absolute;
+  top: calc(50% + 22px);
+  left: 50%;
+  z-index: 20;
+  margin: 0;
+  padding: 5px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(140, 220, 255, 0.35);
+  border-radius: 6px;
+  background: rgba(6, 10, 18, 0.72);
+  font: 600 14px var(--head);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #dff1ff;
+  pointer-events: none;
+}
+.st-walk-look {
+  position: absolute;
+  top: 104px;
+  left: 50%;
+  z-index: 20;
+  margin: 0;
+  transform: translateX(-50%);
+  font: 400 13px var(--body);
+  color: #b9c3d6;
+  text-shadow: 0 1px 8px #000;
+  pointer-events: none;
+}
+.st-walk-keys {
+  position: absolute;
+  left: 24px;
+  bottom: 22px;
+  z-index: 20;
+  margin: 0;
+  font: 400 12.5px var(--body);
+  color: #8f9ab0;
+  text-shadow: 0 1px 8px #000;
+  pointer-events: none;
+}
+.st-walk-keys b {
+  font: 500 11.5px var(--mono);
+  color: #dfe6f2;
+}
+
 /* --------------------------------------------------- cinematic caption */
 
 .st-cine {
