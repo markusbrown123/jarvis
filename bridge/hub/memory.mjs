@@ -177,6 +177,56 @@ export function recall(query, limit = 12) {
   return { facts: f, turns }
 }
 
+// ---------------------------------------------------------------- per-turn context
+
+const STOP = new Set(
+  'the and for are but not you all any can had her was one our out has have him his how its may new now see two who did get let put say she too use what when where which while with this that than then them they there these those from your yours into just like about would could should will been were being more most some such only also very much many want need make made know think tell give said says does doing done going really here over under after before again been jarvis please thanks thank okay yeah yes sir right well what whats today tomorrow'.split(' '),
+)
+
+const terms = (s) => [...new Set(norm(s).split(' ').filter((w) => w.length > 3 && !STOP.has(w)))]
+
+/**
+ * Older memory that bears on what Markus just said, attached to his message
+ * so JARVIS doesn't have to stop and search: past exchanges from before what
+ * the session started with, and background-job findings. Rare words count
+ * for more than common ones; weak matches are left out.
+ */
+export function relevantContext(query, { sessionStart = Date.now(), skipRecent = 40, maxItems = 4, maxChars = 1800 } = {}) {
+  const q = terms(query)
+  if (!q.length) return ''
+  const all = readLog()
+  // What the session already has: the recent turns it was started with, and
+  // everything said since it started.
+  const before = all.filter((t) => t.ts < sessionStart && t.channel !== 'job')
+  const shown = new Set(before.slice(-skipRecent).filter((t) => t.ts >= sessionStart - 72 * 3600000))
+  const pool = all.filter((t) => t.ts < sessionStart && !shown.has(t))
+  if (!pool.length) return ''
+  const df = new Map()
+  for (const t of pool) for (const w of terms(t.text)) df.set(w, (df.get(w) ?? 0) + 1)
+  const N = pool.length
+  const scored = pool
+    .map((t, i) => {
+      const own = new Set(terms(t.text))
+      const hits = q.filter((w) => own.has(w))
+      const score = hits.reduce((a, w) => a + Math.log(1 + N / (df.get(w) ?? 1)), 0)
+      const rare = hits.some((w) => (df.get(w) ?? 0) <= 3 && w.length >= 6)
+      return { t, i, score, ok: hits.length >= 2 || rare }
+    })
+    .filter((r) => r.ok && r.score > 1.2)
+    .sort((a, b) => b.score - a.score || b.i - a.i)
+    .slice(0, maxItems)
+    .sort((a, b) => a.i - b.i)
+  if (!scored.length) return ''
+  let out = ''
+  for (const { t } of scored) {
+    const who = t.channel === 'job' ? 'Background job' : t.role === 'user' ? 'Markus' : 'You'
+    const line = `- ${when(t.ts)} — ${who}: ${t.text.replace(/\s+/g, ' ').slice(0, 500)}\n`
+    if (out.length + line.length > maxChars) break
+    out += line
+  }
+  return out
+}
+
 // ---------------------------------------------------------------- prompt
 
 /**

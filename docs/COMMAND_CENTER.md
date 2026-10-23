@@ -123,6 +123,14 @@ JARVIS remembers across restarts, reloads and `jarvis stop` — in read-only mod
   builds on itself. "What did we find about …" searches all of it (`memory_recall`).
 - **Quant View:** telling him what it is records it (`finance_set_quant_view`), links it on
   the Finance page and resolves the Needs Markus item.
+- **Automatic recall:** older conversation and job findings that bear on what you just said
+  are attached to your message before he sees it, so he answers from memory without
+  stopping to search. Memory housekeeping is silent — no filler line, no working badge.
+- **Thinking:** quick exchanges run at the configured effort (fast); advice, plans,
+  analysis, trading and business questions switch that turn to deep reasoning
+  (`JARVIS_DEEP_EFFORT`, default high); "think hard" goes deeper still. Background jobs
+  run at `JARVIS_JOB_EFFORT` (default high). For advice he leads with a recommendation,
+  the reasons with your numbers, and the next step — tied to your goals.
 - Settings → **Memory** lists every lesson and fact (delete any, or add your own) and can
   clear the conversation log. Files: `~/.jarvis/memory.json`, `~/.jarvis/conversation.jsonl`.
 

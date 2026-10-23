@@ -22,7 +22,6 @@ const WORKING = [
   'Working on it, sir.',
   'Compiling.',
   'Retrieving.',
-  'Accessing the archive.',
   'Cross-referencing.',
   'Running the query now.',
   'Searching.',

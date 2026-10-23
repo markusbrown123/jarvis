@@ -325,8 +325,31 @@ const SYSTEM_PROMPT = `You are JARVIS. You are speaking out loud to one person.
 
 LENGTH. Two sentences is the ceiling in conversation; the median is under twelve
 words. Every word is read aloud and the user waits in silence while it plays, so
-a long answer is a failure however good it is. Length is licensed in exactly one
-case: reading out data they asked you to retrieve. Conversation never licenses it.
+a long answer is a failure however good it is. Length is licensed in two cases:
+reading out data they asked you to retrieve, and advice — when he asks what to
+do, for a plan, a decision, an analysis or your view (see THINKING). Advice gets
+up to five spoken sentences; anything longer goes on a blade.
+
+THINKING. You are his chief of staff for Automaton, trading and his other work,
+not a search box. When he asks for advice, a plan, an analysis or what you
+think:
+- Work it out properly first, from what you actually know: his goals and
+  setup in your memory, the live command-center data (call hub_overview or
+  hub_project), the expense ledger, past research. Never answer from generic
+  knowledge when his own numbers exist.
+- Lead with the recommendation in one sentence. Then the two or three reasons
+  that decide it, with numbers where you have them. Then the next concrete
+  step — ideally one you take yourself (a background job, a check, a draft).
+- Be tactical: tie it to his stated goals and deadlines, name the biggest risk
+  or bottleneck plainly, and say what you would do first and why. If his plan
+  has a flaw, say so once, with the reason. If a choice is genuinely his, give
+  the trade-off in a sentence and your pick.
+- If you lack a fact that changes the answer, ask the one sharp question that
+  settles it instead of guessing.
+- Put the full plan, comparison or steps on a blade with display; speak the
+  headline and the next step.
+- For research or work that takes more than a minute, start a background job
+  and say so; its findings come back into your memory.
 
 URGENCY IS SIGNALLED BY DELETING WORDS, NOT ADDING THEM. As a situation worsens
 your lines get shorter, not louder. A full clause becomes a clause, becomes a
@@ -501,8 +524,12 @@ Memory:
   follow them over your own habits.
 - Research builds up: background job results are kept too, so check
   memory_recall before redoing research that may already exist.
-- "Do you remember…", "what did I say about…", or anything older than what
-  you can see: memory_recall first, then answer.
+- Older memory that bears on his message is attached to it automatically
+  (a note starting "[From your memory"). Use it; never read the note out or
+  mention it. Call memory_recall only for a deliberate deeper search — "what
+  did we find about…", or when the attached memory isn't enough.
+- Saving and recalling are silent housekeeping: never say you are accessing,
+  checking or searching your memory or an archive. Just know it.
 - If he tells you what Quant View is (a name, a link), also call
   finance_set_quant_view so the dashboard links to it.`
 
@@ -761,7 +788,48 @@ const http = await import('node:http')
 
 // Background jobs run as their own sessions, behind the same gate, with the
 // user's MCP servers but none of the per-connection interface ones.
-const runner = createRunner({ model: MODEL, effort: EFFORT, canUseTool: permissionGate, mcpServers: MCP_SERVERS })
+// Jobs run in the background, so they can afford to think harder than chat.
+const runner = createRunner({ model: MODEL, effort: process.env.JARVIS_JOB_EFFORT ?? 'high', canUseTool: permissionGate, mcpServers: MCP_SERVERS })
+
+/**
+ * How hard to think about this turn. Quick exchanges stay at the configured
+ * effort so he answers fast; advice, plans, analysis, trading and business
+ * questions get deep reasoning; "think hard" gets the deepest. Never lower
+ * than the configured level.
+ */
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+const DEEP_EFFORT = process.env.JARVIS_DEEP_EFFORT ?? 'high'
+const STRATEGIC =
+  /\b(plan|planning|strateg\w*|should (i|we)|what do you think|recommend\w*|advice|advise|analy[sz]\w*|compare|decid\w*|decision|improve|grow|growth|increase|optimi[sz]\w*|best way|how (do|can|should|would) (i|we)|why (is|are|did|does|do|isn)|figure out|pros and cons|risk\w*|trade|trading|setup|backtest\w*|strategy|pricing|price|marketing|clients?|leads?|revenue|profit\w*|budget|roadmap|priorit\w*|idea|ideas|research|develop\w*|build|mistake|wrong|learn)\b/i
+function effortFor(text) {
+  const base = Math.max(0, EFFORTS.indexOf(EFFORT))
+  let want = base
+  if (/\b(think (hard|harder|deeply|carefully|it through)|deep dive|really think|take your time)\b/i.test(text)) want = Math.max(want, EFFORTS.indexOf('xhigh'))
+  else if (STRATEGIC.test(text)) want = Math.max(want, EFFORTS.indexOf(DEEP_EFFORT))
+  else if (text.split(/\s+/).length > 30) want = Math.max(want, EFFORTS.indexOf('medium'))
+  return EFFORTS[want] ?? EFFORT
+}
+
+/**
+ * Get a turn ready: set the effort for it, and attach older memory that bears
+ * on it (past conversations, job findings) so he doesn't have to go looking.
+ */
+async function prepareTurn(session, text, sessionStart, effortNow, channel) {
+  const want = effortFor(text)
+  if (want !== effortNow.level && typeof session.applyFlagSettings === 'function') {
+    try {
+      await session.applyFlagSettings({ effortLevel: want })
+      effortNow.level = want
+    } catch (err) {
+      console.warn('[jarvis] could not change effort:', err.message)
+    }
+  }
+  if (want !== EFFORT) hub.term(channel, `thinking deeper (${want})`, 'info')
+  const ctx = memory.relevantContext(text, { sessionStart })
+  return ctx
+    ? `${text}\n\n[From your memory — earlier conversations and research that bear on this. Use what helps; never read this note out:\n${ctx}]`
+    : text
+}
 
 /**
  * The phone conversation: Markus texting (or sending voice notes) from
@@ -829,12 +897,15 @@ function makePhoneChat() {
     pending?.reject(new Error('the phone session ended'))
   })()
   let chain = Promise.resolve()
+  const sessionStart = Date.now()
+  const effortNow = { level: EFFORT }
   return {
     /** `text` is a string, or content blocks (an image and its instructions). */
-    ask(text) {
+    ask(said) {
       const turn = chain.then(
-        () =>
-          new Promise((resolve, reject) => {
+        async () => {
+          const text = typeof said === 'string' ? await prepareTurn(session, said, sessionStart, effortNow, 'phone').catch(() => said) : said
+          return new Promise((resolve, reject) => {
             pending = { resolve, reject }
             reply = ''
             if (wake) {
@@ -842,7 +913,8 @@ function makePhoneChat() {
               wake = null
               w(text)
             } else inbox.push(text)
-          }),
+          })
+        },
       )
       chain = turn.catch(() => {})
       return turn
@@ -1357,6 +1429,10 @@ wss.on('connection', (socket) => {
    * deadlocked assistant is not.
    */
   let settling = Promise.resolve()
+  // Per-session memory and effort bookkeeping (see prepareTurn).
+  const sessionStart = Date.now()
+  const effortNow = { level: EFFORT }
+  let turns = Promise.resolve()
   let finishTurn = null
 
   const turnFinished = () =>
@@ -1384,6 +1460,9 @@ wss.on('connection', (socket) => {
     // the user, and the badge would be describing the very thing they can see.
     if (name.startsWith('mcp__jarvis_ui__')) return
     hub.term('voice', name.replace(/^mcp__(\w+?)__/, '$1 · '), 'tool')
+    // Memory bookkeeping is instant and his own business: no filler line, no
+    // working badge — otherwise every "noted" turn opened with "Retrieving."
+    if (/^mcp__jarvis_hub__(memory_save|memory_forget|learn_lesson|memory_recall)$/.test(name)) return
     if (decideTool(name)) return sendTurn({ type: 'tool', name })
     if (id) heldTools.set(id, name)
   }
@@ -1645,16 +1724,23 @@ wss.on('connection', (socket) => {
       const id = typeof msg.id === 'string' ? msg.id : null
       hub.term('voice', `markus › ${text}`, 'user')
       memory.logTurn({ channel: 'voice', role: 'user', text })
-      void settling.then(() => {
-        answering = id
-        if (deliver) {
-          const resolve = deliver
-          deliver = null
-          resolve(text)
-        } else {
-          inbox.push(text)
-        }
-      })
+      // In order, one at a time: each turn's preparation finishes before the
+      // next one starts, so two quick questions can't swap places.
+      const after = settling
+      turns = turns
+        .then(() => after)
+        .then(() => prepareTurn(session, text, sessionStart, effortNow, 'voice'))
+        .catch(() => text)
+        .then((content) => {
+          answering = id
+          if (deliver) {
+            const resolve = deliver
+            deliver = null
+            resolve(content)
+          } else {
+            inbox.push(content)
+          }
+        })
     }
 
     if (msg.type === 'reply' && typeof msg.id === 'string') {
