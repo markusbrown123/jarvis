@@ -70,11 +70,24 @@ code — no downloaded models — where every light and moving part is live stat
   where they really are, sunsets, stars, and the actual weather (clouds,
   rain on the glass, storms), over a live sea with boats and jet skis, in a
   bay of sandstone cliffs and chaparral hills with houses and the coast road.
+  Round it, the rest of the estate after Tony Stark's: stacked white disc
+  pavilions (one cantilevered over the cliff on a column), a helipad with a
+  sweeping ramp, the drive, a lawn with palms and cypresses.
 
 Each time it opens, the station plays an **opening flight**, like a game's
-loading screen: letterboxed, with the place, time and weather, it holds over
-the sea while the house loads, then flies in over the waves, through the open
-glass and round the room to the desk. Any key or a click skips it.
+loading screen: letterboxed, with the place, time and weather, Cycles-rendered
+stills of the estate and the drones pan and crossfade while the house loads;
+then it cuts to the live scene and flies in over the waves, up over the estate,
+through the open glass and round the room to the desk. Any key or a click
+skips it.
+
+The stills and the drone renders are made with the Blender Agent Skills
+(`github.com/EL4CTEO/blender-skills`: time of day, rendering, geometry-nodes
+scatter, look-dev turntables, asset QA). With a checkout of them:
+
+```
+.bpy/bin/python tools/blender/showcase.py --skills ~/blender-skills      # aerial, cliff, night → public/station/loading/
+```
 - **Panels** over the room: Business & money (each figure with its source and
   age), Terminal (filters incl. Errors; narrows to the selection), Needs
   Markus, Running, and a detail panel for whatever is selected.

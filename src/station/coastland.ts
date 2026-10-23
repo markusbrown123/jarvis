@@ -1,6 +1,7 @@
 import * as THREE from 'three'
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { OUTDOOR } from './environment'
-import { HOUSE } from './layout'
+import { ESTATE, HOUSE } from './layout'
 import { SKY } from './sky'
 
 /**
@@ -98,6 +99,12 @@ export function cliffEdge(x: number, z: number) {
   return HOUSE.deck.r + 0.4 + 40 * t * t * (3 - 2 * t)
 }
 
+/** Where a point is against the estate's lawn: under 1 inside, 1 at its edge. */
+export function lawnNorm(x: number, z: number) {
+  const l = ESTATE.lawn
+  return Math.hypot((x - l.x) / l.rx, (z - l.z) / l.rz)
+}
+
 type Ground = { h: number; s: number }
 export function ground(x: number, z: number): Ground {
   const s = shore(x, z)
@@ -129,10 +136,37 @@ export function ground(x: number, z: number): Ground {
     // Canyons wind down through them to the sea.
     const canyon = Math.pow(1 - Math.abs(fbm(x * 0.0032 + 4, z * 0.0032 + 1, 3) * 2 - 1), 6)
     h = top + far * (hills + ridges - 34 * canyon * smooth(25, 260, k)) + 1.4 * (fbm(x * 0.05, z * 0.05, 3) - 0.5) * smooth(4, 20, k)
+    // The estate's grounds are levelled to a lawn.
+    const lawn = 1 - smooth(0.85, 1.05, lawnNorm(x, z))
+    h += (ESTATE.lawn.y - h) * lawn
   }
   // Under the house's own headland the land stays below its ground.
   if (rH < cliffEdge(x, z) - 1.5) h = Math.min(h, -0.6)
   return { h, s }
+}
+
+/** A lumpy blob: foliage (soft lumps) or a boulder (faceted). */
+export function blob(rock = false) {
+  let g: THREE.BufferGeometry = rock ? new THREE.DodecahedronGeometry(1, 1) : new THREE.IcosahedronGeometry(1, 3)
+  // Foliage shares its vertices so it shades smooth; rock keeps its facets.
+  if (!rock) {
+    g.deleteAttribute('normal')
+    g.deleteAttribute('uv')
+    g = mergeVertices(g)
+  }
+  const p = g.attributes.position as THREE.BufferAttribute
+  const v = new THREE.Vector3()
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i)
+    const n1 = noise(v.x * 2.1 + 5, v.y * 2.1 + v.z * 1.7)
+    const n2 = noise(v.x * 5.3 + v.z * 3.1, v.y * 5.3 + 11)
+    const n3 = noise(v.z * 11 + v.x * 4, v.y * 11 - 3)
+    v.multiplyScalar(rock ? 0.75 + 0.35 * n1 + 0.1 * n2 : 0.7 + 0.26 * n1 + 0.16 * n2 + 0.1 * n3)
+    if (v.y < -0.3) v.y = -0.3 - (v.y + 0.3) * 0.2
+    p.setXYZ(i, v.x, v.y, v.z)
+  }
+  g.computeVertexNormals()
+  return g
 }
 
 // ---------------------------------------------------------------- shaders
@@ -214,7 +248,8 @@ void coastSurface(vec3 p, vec3 n, float dist, float gully) {
   float warp = cFbm(p * 0.03, 3);
   float strata = p.y * 0.3 + warp * 6.0 + cNoise(p * 0.08) * 2.0;
   float band = smoothstep(0.1, 0.9, abs(fract(strata) - 0.5) * 2.0);
-  vec3 rock = mix(vec3(0.29, 0.21, 0.145), vec3(0.43, 0.34, 0.25), band * 0.22 + 0.78 * cFbm(p * vec3(0.07, 0.16, 0.07), 4));
+  vec3 rock = mix(vec3(0.29, 0.165, 0.105), vec3(0.45, 0.3, 0.2), band * 0.22 + 0.78 * cFbm(p * vec3(0.07, 0.16, 0.07), 4));
+  rock = mix(rock, vec3(0.33, 0.29, 0.26), smoothstep(0.55, 0.75, cFbm(p * 0.03 + 21.0, 3)) * 0.6);
   rock = mix(rock, vec3(0.55, 0.49, 0.41), smoothstep(0.55, 0.8, cFbm(p * 0.12, oct)) * 0.5);
   rock *= 0.62 + 0.5 * cFbm(p * vec3(0.02, 0.05, 0.02), 4);
   rock *= 0.7 + 0.42 * cNoise(p * vec3(0.25, 0.012, 0.25));
@@ -230,10 +265,18 @@ void coastSurface(vec3 p, vec3 n, float dist, float gully) {
   vec3 dry = mix(vec3(0.3, 0.24, 0.14), vec3(0.19, 0.15, 0.1), cFbm(p * 0.05 + 9.0, 2));
   dry = mix(dry, vec3(0.29, 0.24, 0.18), cNoise(p * 2.5) * 0.4 * lod);
   vec3 veg = mix(dry, brush, cover);
+  // The estate's lawn: mown in stripes, flower beds round its edge.
+  float lawnN = length((p.xz - vec2(${ESTATE.lawn.x.toFixed(1)}, ${ESTATE.lawn.z.toFixed(1)})) / vec2(${ESTATE.lawn.rx.toFixed(1)}, ${ESTATE.lawn.rz.toFixed(1)}));
+  float lawn = (1.0 - smoothstep(0.82, 0.96, lawnN + (cNoise(p * 0.08) - 0.5) * 0.06)) * (1.0 - smoothstep(0.1, 0.25, slope)) * step(-1.5, p.y);
+  vec3 grass = vec3(0.055, 0.12, 0.028) * (0.9 + 0.18 * step(0.5, fract(p.x * 0.09 + p.z * 0.03)));
+  grass *= 0.82 + 0.3 * cNoise(p * 0.45) + 0.1 * cNoise(p * 4.0) * lod;
+  float bed = smoothstep(0.66, 0.69, lawnN) * (1.0 - smoothstep(0.76, 0.79, lawnN)) * smoothstep(0.48, 0.58, cNoise(p * 0.12 + 4.0));
+  grass = mix(grass, mix(vec3(0.42, 0.06, 0.18), vec3(0.62, 0.36, 0.52), cNoise(p * 2.5)), bed * 0.75);
+  veg = mix(veg, grass, lawn);
   // Rock where it's steep; sand down at the water, dark where it's wet.
   float rocky = smoothstep(0.4, 0.62, slope + (cFbm(p * 0.09, 2) - 0.5) * 0.35);
   // Scrub hangs on in patches even on the steep faces.
-  rock = mix(rock, brush, smoothstep(0.6, 0.72, cFbm(p * 0.06 + 11.0, 3)) * 0.85);
+  rock = mix(rock, brush, smoothstep(0.5, 0.64, cFbm(p * 0.06 + 11.0, 3) + n.y * 0.25) * 0.9);
   vec3 col = mix(veg, rock, rocky);
   float sand = (1.0 - smoothstep(${(SEA + 0.9).toFixed(2)}, ${(SEA + 1.8).toFixed(2)}, p.y)) * (1.0 - rocky * 0.6);
   vec3 sandCol = mix(vec3(0.55, 0.47, 0.36), vec3(0.27, 0.23, 0.18), 1.0 - smoothstep(${(SEA - 0.3).toFixed(2)}, ${(SEA + 0.6).toFixed(2)}, p.y));
@@ -241,7 +284,7 @@ void coastSurface(vec3 p, vec3 n, float dist, float gully) {
   // Darker down in the folds of the land, where less of the sky reaches.
   gAlbedo = col * (1.0 - 0.4 * uWet) * (1.0 - 0.35 * gully);
   gRough = mix(0.95, 0.55, uWet) - sand * 0.1;
-  gBump = (rocky * (band * 0.8 + cFbm(p * 0.5, oct) * 1.1) + (1.0 - rocky) * (cover * 0.35 + cNoise(p * 1.7) * 0.08)) * lod;
+  gBump = (rocky * (band * 0.8 + cFbm(p * 0.5, oct) * 1.1) + (1.0 - rocky) * (cover * 0.35 * (1.0 - lawn) + cNoise(p * 1.7) * 0.08)) * lod;
 }
 `
 

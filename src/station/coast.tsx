@@ -1,11 +1,10 @@
 import { useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Graphics } from '../hub/client'
 import { HOUSE } from './layout'
 import { SKY } from './sky'
-import { BAY, cliffEdge, fbm, ground, landMaterial, coastMaterial, noise, shore } from './coastland'
+import { BAY, blob, cliffEdge, fbm, ground, landMaterial, coastMaterial, lawnNorm, shore } from './coastland'
 
 /**
  * The coast round the house: the house's headland sits at the back of a
@@ -107,7 +106,7 @@ function shrubs(count: number) {
     const x = Math.sin(a) * d
     const z = -Math.cos(a) * d
     const g = ground(x, z)
-    if (g.s < 14 || Math.hypot(x, z) < cliffEdge(x, z) + 3) continue
+    if (g.s < 14 || Math.hypot(x, z) < cliffEdge(x, z) + 3 || lawnNorm(x, z) < 1.1) continue
     if (slopeAt(x, z) > 0.42) continue
     // In clumps, as chaparral grows.
     if (fbm(x * 0.03 + 4, z * 0.03, 3) < 0.42 + r() * 0.15) continue
@@ -121,30 +120,6 @@ function shrubs(count: number) {
     out.push({ m: m.clone(), c })
   }
   return out
-}
-
-/** A lumpy blob: foliage (soft lumps) or a boulder (faceted). */
-function blob(rock = false) {
-  let g: THREE.BufferGeometry = rock ? new THREE.DodecahedronGeometry(1, 1) : new THREE.IcosahedronGeometry(1, 3)
-  // Foliage shares its vertices so it shades smooth; rock keeps its facets.
-  if (!rock) {
-    g.deleteAttribute('normal')
-    g.deleteAttribute('uv')
-    g = mergeVertices(g)
-  }
-  const p = g.attributes.position as THREE.BufferAttribute
-  const v = new THREE.Vector3()
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i)
-    const n1 = noise(v.x * 2.1 + 5, v.y * 2.1 + v.z * 1.7)
-    const n2 = noise(v.x * 5.3 + v.z * 3.1, v.y * 5.3 + 11)
-    const n3 = noise(v.z * 11 + v.x * 4, v.y * 11 - 3)
-    v.multiplyScalar(rock ? 0.75 + 0.35 * n1 + 0.1 * n2 : 0.7 + 0.26 * n1 + 0.16 * n2 + 0.1 * n3)
-    if (v.y < -0.3) v.y = -0.3 - (v.y + 0.3) * 0.2
-    p.setXYZ(i, v.x, v.y, v.z)
-  }
-  g.computeVertexNormals()
-  return g
 }
 
 /** Boulders fallen from the cliffs, along their foot and out into the surf. */
@@ -188,6 +163,7 @@ function homes(count: number) {
     // Most along the cliff tops, past the road; in neighbourhoods, not evenly spread.
     const row = g.s > 48 && g.s < 170
     if (!row && (g.s < 170 || g.s > 650 || r() < 0.55)) continue
+    if (lawnNorm(x, z) < 1.4) continue
     if (fbm(x * 0.006 + 1, z * 0.006 + 4, 3) < 0.46) continue
     if (slopeAt(x, z) > 0.2) continue
     if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 32)) continue
@@ -225,9 +201,15 @@ function roadPath() {
       if (s < 32) lo = mid
       else hi = mid
     }
+    if (shore(BAY.cx + dir.x * lo, BAY.cz + dir.y * lo) > 40) {
+      if (pts.length && pts[pts.length - 1].x !== Infinity) pts.push(new THREE.Vector3(Infinity, 0, 0))
+      continue
+    }
+    // Round the back of the estate's grounds, not through them.
+    while (lawnNorm(BAY.cx + dir.x * lo, BAY.cz + dir.y * lo) < 1.18 && lo < BAY.r + 400) lo += 1.5
     const x = BAY.cx + dir.x * lo
     const z = BAY.cz + dir.y * lo
-    if (shore(x, z) > 40 || Math.hypot(x, z) < 90) {
+    if (Math.hypot(x, z) < 70) {
       if (pts.length && pts[pts.length - 1].x !== Infinity) pts.push(new THREE.Vector3(Infinity, 0, 0))
       continue
     }

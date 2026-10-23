@@ -10,8 +10,8 @@ import { useStation } from './stationStore'
 /**
  * The opening, like a game's loading screen: while the house streams in,
  * the camera waits far out over the sea; then it flies — low over the
- * waves past the boats, up towards the house on its cliff, down over the
- * terrace and the pool, in through the open glass, round the stage past the
+ * waves past the boats, rising to see the whole estate on its headland, down
+ * over the terrace and the pool, in through the open glass, round the stage past the
  * drones and the build bay, and settles behind the chair at the desk, where
  * Talk mode takes over. Letterbox bars, the title and the real place, time
  * and weather over it; any key or a click skips it.
@@ -23,14 +23,19 @@ import { useStation } from './stationStore'
 
 /** Seconds along the flight for each waypoint. */
 const KEYS: { t: number; pos: [number, number, number]; look: [number, number, number]; fov: number }[] = [
+  // Low over the waves out in the bay…
   { t: 0, pos: [-470, -23, -360], look: [-60, -6, -20], fov: 30 },
-  { t: 3.2, pos: [-290, -18, -230], look: [-15, -5, 0], fov: 32 },
-  { t: 6.2, pos: [-110, 2, -100], look: [0, -2, -8], fov: 36 },
-  { t: 8.6, pos: [-17, 7.5, -42], look: [0, 1.5, -12], fov: 42 },
-  { t: 10.4, pos: [-2.5, 3.3, -24.5], look: [0, 2.3, -10], fov: 46 },
-  { t: 11.8, pos: [0, 2.7, -15.4], look: [-1, 2.2, -6], fov: 50 },
-  { t: 13.3, pos: [-5.2, 3.3, -8.6], look: [-0.5, 1.5, -3.5], fov: 50 },
-  { t: 14.9, pos: [-6.9, 3.1, 0.6], look: [0, 1.3, -1.6], fov: 46 },
+  { t: 3.2, pos: [-290, -16, -230], look: [-10, -4, 5], fov: 32 },
+  // …rising to see the whole estate on its headland…
+  { t: 6.4, pos: [-150, 32, -90], look: [14, -2, 22], fov: 34 },
+  { t: 9.0, pos: [-62, 26, -46], look: [8, 0, 12], fov: 38 },
+  // …down over the terrace and the pool, in through the open glass…
+  { t: 11.0, pos: [-17, 7.5, -42], look: [0, 1.5, -12], fov: 42 },
+  { t: 12.8, pos: [-2.5, 3.3, -24.5], look: [0, 2.3, -10], fov: 46 },
+  { t: 14.2, pos: [0, 2.7, -15.4], look: [-1, 2.2, -6], fov: 50 },
+  // …round the stage, past the drones and the build bay, to the desk.
+  { t: 15.7, pos: [-5.2, 3.3, -8.6], look: [-0.5, 1.5, -3.5], fov: 50 },
+  { t: 17.3, pos: [-6.9, 3.1, 0.6], look: [0, 1.3, -1.6], fov: 46 },
 ]
 const SETTLE = 1.6 // from the last waypoint to the seat
 
@@ -122,6 +127,51 @@ export function IntroFlight() {
   return null
 }
 
+/**
+ * While it loads: stills of the house and the estate rendered in Blender
+ * with Cycles (tools/blender/showcase.py) and of the drones, slowly panning
+ * and crossfading — the way a game's loading screen shows its artwork —
+ * until the flight cuts in. Any that haven't been rendered are just left out.
+ */
+const SLIDES = ['aerial', 'cliff', 'night', 'hero_quad', 'hero_whoop'].map((n) => `/station/loading/${n}.jpg`)
+
+function Slides({ on }: { on: boolean }) {
+  const [ready, setReady] = useState<string[]>([])
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    let live = true
+    for (const src of SLIDES) {
+      const im = new Image()
+      im.onload = () => live && setReady((r) => SLIDES.filter((s) => s === src || r.includes(s)))
+      im.src = src
+    }
+    return () => {
+      live = false
+    }
+  }, [])
+  useEffect(() => {
+    if (ready.length < 2) return
+    const t = setInterval(() => setI((n) => n + 1), 5200)
+    return () => clearInterval(t)
+  }, [ready.length])
+  if (!ready.length) return null
+  // After dark, start with the estate at night.
+  const first = SKY_STATE.sunAlt < -6 ? Math.max(0, ready.findIndex((s) => s.includes('night'))) : 0
+  const cur = (first + i) % ready.length
+  const prev = (cur - 1 + ready.length) % ready.length
+  return (
+    <div className={`cine-slides${on ? '' : ' cine-slides-out'}`}>
+      {ready.map((src, k) => (
+        <div
+          key={src}
+          className={`cine-slide${k === cur ? ' on' : k === prev && ready.length > 1 && i > 0 ? ' off' : ''}`}
+          style={{ backgroundImage: `url(${src})`, ['--pan' as string]: k % 2 ? '-2.5%' : '2.5%' }}
+        />
+      ))}
+    </div>
+  )
+}
+
 const TIPS = [
   'Say “Hey Jarvis” any time — or hold Space and talk.',
   'F gets you up from the desk to walk the house. The glass ahead opens onto the terrace.',
@@ -175,6 +225,7 @@ export function IntroOverlay() {
   const sky = WEATHER.live ? WEATHER.summary : SKY_STATE.sunAlt > 0 ? 'daylight' : SKY_STATE.sunAlt > -8 ? 'twilight' : 'night'
   return (
     <div className={`cine cine-${phase === 'done' ? 'leave' : phase}`} aria-label="Loading the station">
+      {phase !== 'done' && <Slides on={phase === 'loading'} />}
       <div className="cine-bar cine-bar-top" />
       <div className="cine-bar cine-bar-bottom" />
       <div className="cine-title">

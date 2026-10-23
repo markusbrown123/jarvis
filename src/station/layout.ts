@@ -151,6 +151,24 @@ export const HOUSE = {
   sea: -28,
 }
 
+/**
+ * The rest of the estate round the house (tools/blender/estate.py builds
+ * it; these mirror its plan): the disc-roofed wings as circles on the
+ * ground (x, z, roof radius), the helipad, the drive's turning circle, and
+ * the lawn — an ellipse the ground is levelled to.
+ */
+export const ESTATE = {
+  wings: [
+    [24.5, 8.5, 12.5],
+    [-27, 2, 11.2],
+    [3, 29, 14.2],
+  ] as [number, number, number][],
+  helipad: { x: 54, z: 58, r: 9.5, top: -0.25 + 2.4 },
+  /** The ramp from the helipad comes down here; the drive leaves from it. */
+  turn: { x: 8.5, z: 66, r: 8 },
+  lawn: { x: 24, z: 46, rx: 60, rz: 48, y: -0.25 },
+}
+
 /** A floor point's angle, the house's way (see HOUSE). */
 export const houseAngle = (x: number, z: number) => Math.atan2(-z, x)
 

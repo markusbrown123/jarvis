@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import type { Graphics } from '../hub/client'
 import { reactorState } from './shared'
 import { useStation } from './stationStore'
-import { HOUSE } from './layout'
+import { ESTATE, HOUSE } from './layout'
 import { ROOM, roomify } from './houselight'
 
 // The terrace's downlights, softer on its pale stone than indoors.
@@ -152,6 +152,29 @@ function unfold(src: THREE.BufferGeometry) {
     nrm.setXYZ(i, va.x, va.y, va.z)
   }
   return g
+}
+
+/** The garden's plants, less any standing where the estate's pavilions now are (estate.tsx). */
+function clearPlants(src: THREE.BufferGeometry) {
+  const g = src.index ? src.toNonIndexed() : src.clone()
+  const p = g.attributes.position as THREE.BufferAttribute
+  const keep: number[] = []
+  const v = new THREE.Vector3()
+  for (let i = 0; i < p.count; i += 3) {
+    v.fromBufferAttribute(p, i).add(new THREE.Vector3().fromBufferAttribute(p, i + 1)).add(new THREE.Vector3().fromBufferAttribute(p, i + 2)).divideScalar(3)
+    const under = ESTATE.wings.some(([x, z, r]) => Math.hypot(v.x - x, v.z - z) < r + 1) || Math.hypot(v.x - 1, v.z - 17) < 3.5
+    if (!under) keep.push(i)
+  }
+  const out = new THREE.BufferGeometry()
+  for (const [name, attr] of Object.entries(g.attributes)) {
+    const a = attr as THREE.BufferAttribute
+    const arr = new Float32Array(keep.length * 3 * a.itemSize)
+    keep.forEach((i, k) => {
+      for (let j = 0; j < 3; j++) for (let c = 0; c < a.itemSize; c++) arr[(k * 3 + j) * a.itemSize + c] = a.getComponent(i + j, c)
+    })
+    out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize))
+  }
+  return out
 }
 
 /** The light strips, split into the ones up in the ceiling and the rest. */
@@ -317,6 +340,7 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
   const led = useMemo(() => (nodes.led_warm ? splitByHeight(nodes.led_warm.geometry, 2.5) : null), [nodes])
   const floors = useMemo(() => (['floor', 'stage'] as const).filter((n) => nodes[n]).map((n) => ({ n, ...mirrorFloor(nodes[n]) })), [nodes])
   const cliff = useMemo(() => (nodes.cliff ? unfold(nodes.cliff.geometry) : null), [nodes])
+  const plants = useMemo(() => (nodes.plants ? clearPlants(nodes.plants.geometry) : null), [nodes])
   const pool = HOUSE.pool
 
   useFrame(() => {
@@ -369,7 +393,7 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
         </mesh>
       ))}
       {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'cliff', 'plants', 'frames', 'rail'] as const).map((n) =>
-        nodes[n] && show(n) ? <mesh key={n} geometry={n === 'cliff' && cliff ? cliff : nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
+        nodes[n] && show(n) ? <mesh key={n} geometry={n === 'cliff' && cliff ? cliff : n === 'plants' && plants ? plants : nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
       )}
       {nodes.glass && <mesh geometry={nodes.glass.geometry} {...at(nodes.glass)} material={mats.glass} renderOrder={5} />}
       {led && nodes.led_warm && <mesh geometry={led.low} {...at(nodes.led_warm)} material={mats.led} />}

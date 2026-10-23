@@ -24,6 +24,7 @@ import { Links } from './links'
 import { CameraRig, Controls, TalkFraming } from './camera'
 import { LabelProjector } from './labels'
 import { IntroFlight } from './intro'
+import { Estate, Grounds } from './estate'
 import { useStation } from './stationStore'
 
 /**
@@ -284,6 +285,12 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
           <Lair graphics={graphics} reflector={q.reflector} />
         </Suspense>
       </ConsoleGuard>
+      <ConsoleGuard what="estate">
+        <Suspense fallback={null}>
+          <Estate graphics={graphics} />
+        </Suspense>
+      </ConsoleGuard>
+      <Grounds />
       <ZoneLight />
       <ConsoleGuard what="centre console">
         <Suspense fallback={null}>
@@ -293,7 +300,11 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <Links />
       <Clusters />
       <Foundry />
-      <Drones />
+      <ConsoleGuard what="drones">
+        <Suspense fallback={null}>
+          <Drones />
+        </Suspense>
+      </ConsoleGuard>
       <FloorWorks />
       {/* Dust hanging in the light. */}
       {q.dust > 0 && <Sparkles count={q.dust} scale={[18, 4, 16]} position={[0, 2.3, -2]} size={1.2} speed={0.08} opacity={0.18} color="#cdd8ff" noise={1} />}

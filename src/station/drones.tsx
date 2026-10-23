@@ -196,7 +196,8 @@ function keepClear(p: V3) {
 // ---------------------------------------------------------------- the models
 
 const TRAIL = 40
-const PROP_COLORS = ['#3aa0ff', '#ff5a3c', '#36e0a0', '#ffc23a', '#c46bff', '#e8edf5', '#ff3fa4', '#3af0ff', '#ffe95a']
+// Teal props on the quads (a touch different on each), clear ones on the whoops.
+const PROP_COLORS = ['#2fb8d0', '#3ac4da', '#2aaac4', '#41cde0', '#30b2cb', '#38bed4', '#e9eef2', '#e9eef2', '#e9eef2']
 
 /**
  * One drone's scene objects: its own copy of the model (shared geometry,
@@ -215,7 +216,7 @@ function build(nodes: Record<string, THREE.Object3D>, kind: Kind, propColor: str
       const mesh = m as THREE.Mesh
       if (!mesh.isMesh) return
       const name = (mesh.material as THREE.Material).name
-      if (name === 'prop') mesh.material = prop
+      if (name === 'prop' || name === 'prop_clear') mesh.material = prop
       else if (name === 'led') mesh.material = led
       mesh.castShadow = true
     })

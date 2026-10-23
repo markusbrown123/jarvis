@@ -4,13 +4,17 @@ tiny whoop, built part by part the way the real ones are.
 
   5-inch quad   true-X carbon frame (5 mm arms with lightening slots,
                 chamfered edges), aluminium standoffs, a two-board flight
-                stack, four 2306 motors (vented bells, copper windings
-                showing through, shafts and prop nuts), twisted tri-blade
-                5.1" props, an FPV camera tilted up 30° in TPU side plates,
-                a 6S pack strapped on top with its leads and XT60, a
-                lollipop antenna out the back, LED strips under the arms
-  tiny whoop    four ducts on a moulded frame, 4-blade 31 mm props, a
-                canopy over the board with its camera, a 1S pack underneath
+                stack, four 2306 motors (black vented bells with a gold
+                band, copper windings showing through, prop nuts), teal
+                tri-blade 5.1" props, an orange FPV camera tilted up 30° in
+                black TPU side plates, a GoPro in its TPU cradle on the top
+                plate, a 6S pack strapped on behind it with its leads, XT60
+                and a red cap, a lollipop antenna out the back, LED strips
+                under the arms
+  tiny whoop    translucent blue ducts with guard ribs and feet on a
+                moulded frame, silver motors wired to the board, clear
+                3-blade props, the board showing under a silver camera cage
+                with a big lens, a long antenna, a 1S pack underneath
 
 Textures (carbon twill, the pack's wrap) are drawn here with numpy and
 packed into the file; everything else is plain PBR (anodised metal,
@@ -237,15 +241,15 @@ def pack_wrap(w=512, h=256):
     """The battery's wrap: dark with a bold stripe and blocks of print."""
     from PIL import Image, ImageDraw, ImageFont
 
-    im = Image.new('RGB', (w, h), (18, 18, 22))
+    im = Image.new('RGB', (w, h), (16, 16, 19))
     d = ImageDraw.Draw(im)
-    d.rectangle([0, h * 0.38, w, h * 0.62], fill=(214, 40, 40))
+    d.rectangle([0, h * 0.44, w * 0.62, h * 0.58], fill=(232, 112, 22))
     try:
-        f = ImageFont.truetype('DejaVuSans-Bold.ttf', 34)
+        f = ImageFont.truetype('DejaVuSans-Bold.ttf', 20)
         s = ImageFont.truetype('DejaVuSans.ttf', 16)
     except Exception:
         f = s = ImageFont.load_default()
-    d.text((18, h * 0.40), 'JARVIS  6S  1300', font=f, fill=(250, 250, 250))
+    d.text((18, h * 0.445), 'JARVIS  6S  1300', font=f, fill=(20, 20, 22))
     d.text((18, 24), '22.2V  ·  120C  ·  LiPo', font=s, fill=(200, 200, 205))
     d.text((18, h - 44), 'FLIGHT PACK  //  DATA LINK', font=s, fill=(160, 160, 170))
     for i in range(6):
@@ -368,19 +372,23 @@ def motor(name, x, y, z, mats, r=0.0142, h=0.009):
     assign(base, mats['alu'])
     stator = cyl(name + '_stator', r * 0.78, h * 0.85, z=z + 0.006, x=x, y=y, n=24)
     assign(stator, mats['copper'])
-    bell = cyl(name + '_bell', r, h, z=z + 0.006, x=x, y=y, n=48, bevel=0.0009)
+    bell = cyl(name + '_bell', r, h - 0.0005, z=z + 0.0065, x=x, y=y, n=48, bevel=0.0009)
     # Vents round the bell, the windings showing through.
     for k in range(6):
         a = k * math.tau / 6
         c = box('vent', 0.006, 0.03, h * 0.5, loc=(x + math.cos(a) * r, y + math.sin(a) * r, z + 0.006 + h * 0.5), rot=(0, 0, a + math.pi / 2))
         cut(bell, c)
+    # The printed band: proud of the bell (so the two never fight), below its vents.
+    band = cyl(name + '_band', r + 0.0007, h * 0.1, z=z + 0.0067, x=x, y=y, n=48)
+    cut(band, cyl('bandin', r - 0.0004, h, z=z + 0.005, x=x, y=y, n=48))
+    assign(band, mats['gold'])
     top = cyl(name + '_cap', r * 0.98, 0.0016, z=z + 0.006 + h, x=x, y=y, n=48, bevel=0.0006)
     for k in range(4):
         a = k * math.tau / 4 + math.pi / 4
         cut(top, cyl('hole', 0.0028, 0.01, z=z + h, x=x + math.cos(a) * r * 0.55, y=y + math.sin(a) * r * 0.55, n=12))
-    shaft = cyl(name + '_shaft', 0.0025, 0.012, z=z + 0.006 + h, x=x, y=y, n=16)
+    shaft = cyl(name + '_shaft', 0.0025, 0.011, z=z + 0.0069 + h, x=x, y=y, n=16)
     nut = cyl(name + '_nut', 0.0045, 0.006, z=z + 0.006 + h + 0.004, x=x, y=y, n=6, bevel=0.0005)
-    rotor_parts = [bell, top, shaft, nut]
+    rotor_parts = [bell, band, top, shaft, nut]
     for o in (bell, top):
         assign(o, mats['bell'])
     for o in (shaft, nut):
@@ -402,6 +410,15 @@ def quad(mats):
             cut(a, cyl('h', 0.0012, 0.02, z=-0.005, x=sx * S + math.cos(ang) * 0.008, y=sy * S + math.sin(ang) * 0.008, n=10))
         cut(a, cyl('c', 0.003, 0.02, z=-0.005, x=sx * S, y=sy * S, n=16))
         arms.append(a)
+    # One piece, as they're cut from one sheet (no overlapping faces where they meet).
+    for a in arms[1:]:
+        m = arms[0].modifiers.new('u', 'BOOLEAN')
+        m.operation = 'UNION'
+        m.solver = 'EXACT'
+        m.object = a
+        apply_mods(arms[0])
+        bpy.data.objects.remove(a)
+    arms = arms[:1]
     bottom = outline_slab('bottom', rounded_rect(0.044, 0.1, 0.008), 0.003, 0.005, bevel=0.0006)
     top = outline_slab('top', rounded_rect(0.038, 0.094, 0.007), 0.002, 0.031, bevel=0.0005)
     cut(top, outline_slab('topslot', rounded_rect(0.014, 0.04, 0.005, cy=-0.012), 0.02, 0.02))
@@ -427,7 +444,7 @@ def quad(mats):
     glass = cyl('glass', 0.0055, 0.001, z=0, n=32)
     glass.rotation_euler = (math.radians(90), 0, 0)
     glass.location = (0, 0.0665, 0.022)
-    for o, m in ((body, mats['plastic']), (lens, mats['plastic']), (glass, mats['glass'])):
+    for o, m in ((body, mats['tpu']), (lens, mats['plastic']), (glass, mats['glass'])):
         assign(o, m)
         cam.append(o)
     piv = Vector((0, 0.048, 0.022))
@@ -436,21 +453,22 @@ def quad(mats):
         bake_transform(o)
         o.data.transform(rot)
     parts += cam
-    for x in (-0.0115, 0.0115):
+    for x in (-0.0105, 0.0105):
         side = outline_slab('tpu', rounded_rect(0.03, 0.026, 0.006, cy=0.047), 0.0025, 0.0, bevel=0.0005)
         side.rotation_euler = (0, math.radians(90), 0)
-        side.location = (x - 0.00125, 0, 0.022)
+        side.location = (x - 0.00125, 0, 0.022)  # just outside the camera
         bake_transform(side)
         side.location = (0, 0, 0)
-        parts.append(assign(side, mats['tpu']))
-    # The pack: rounded, wrapped, strapped, with its leads to an XT60.
-    pack = box('pack', 0.036, 0.075, 0.034, loc=(0, -0.004, 0.033 + 0.017), bevel=0.004)
+        parts.append(assign(side, mats['tpu_black']))
+    # The pack: rounded, wrapped, strapped on behind the GoPro, with its
+    # leads to an XT60 and the red cap of a spare plug.
+    pack = box('pack', 0.034, 0.064, 0.032, loc=(0, -0.02, 0.033 + 0.016), bevel=0.004)
     cube_uv(pack, 0.08)
     parts.append(assign(pack, mats['wrap']))
-    for y in (-0.022, 0.016):
-        strap = box('strap', 0.0372, 0.012, 0.0352, loc=(0, y, 0.0501), bevel=0.0015)
+    for y in (-0.036, -0.006):
+        strap = box('strap', 0.0352, 0.01, 0.0332, loc=(0, y, 0.0491), bevel=0.0015)
         parts.append(assign(strap, mats['strap']))
-    lead_pts = [(0.008, -0.041, 0.046), (0.011, -0.049, 0.044), (0.013, -0.054, 0.039)]
+    lead_pts = [(0.008, -0.05, 0.044), (0.011, -0.057, 0.041), (0.013, -0.061, 0.036)]
     for k, m in ((0, mats['red']), (1, mats['black'])):
         cu = bpy.data.curves.new('lead', 'CURVE')
         cu.dimensions = '3D'
@@ -468,18 +486,44 @@ def quad(mats):
         lead = link(bpy.data.objects.new('lead', me))
         bpy.data.objects.remove(ob)
         parts.append(assign(lead, m))
-    parts.append(assign(box('xt60', 0.008, 0.016, 0.008, loc=(0.012, -0.056, 0.037), bevel=0.001), mats['xt60']))
+    parts.append(assign(box('xt60', 0.008, 0.016, 0.008, loc=(0.012, -0.062, 0.034), bevel=0.001), mats['xt60']))
+    parts.append(assign(box('cap', 0.007, 0.009, 0.007, loc=(-0.012, -0.05, 0.068), bevel=0.0012), mats['red']))
+    # A GoPro in its TPU cradle, tilted up like the FPV camera: the body,
+    # its big square lens housing, the glass, the button.
+    gp = []
+    gbody = box('gopro', 0.031, 0.022, 0.03, loc=(0, 0.03, 0.033 + 0.017), bevel=0.0025)
+    gp.append(assign(gbody, mats['gopro']))
+    hood = box('gphood', 0.024, 0.006, 0.024, loc=(0.0, 0.0425, 0.051), bevel=0.0025)
+    gp.append(assign(hood, mats['gopro']))
+    gglass = box('gpglass', 0.018, 0.0012, 0.018, loc=(0.0, 0.0464, 0.051), bevel=0.0004)
+    gp.append(assign(gglass, mats['glass']))
+    glens = cyl('gplens', 0.0058, 0.0012, z=0, n=32)
+    glens.rotation_euler = (math.radians(90), 0, 0)
+    glens.location = (0, 0.0468, 0.051)
+    gp.append(assign(glens, mats['plastic']))
+    gp.append(assign(cyl('gpbtn', 0.0035, 0.0012, z=0.033 + 0.032, x=0.0, y=0.026, n=20), mats['red']))
+    gpiv = Vector((0, 0.03, 0.035))
+    grot = Matrix.Translation(gpiv) @ Matrix.Rotation(math.radians(-18), 4, 'X') @ Matrix.Translation(-gpiv)
+    for o in gp:
+        bake_transform(o)
+        o.data.transform(grot)
+    parts += gp
+    cradle = outline_slab('cradle', rounded_rect(0.036, 0.03, 0.004, cy=0.03), 0.003, 0.033, bevel=0.0006)
+    parts.append(assign(cradle, mats['tpu_black']))
+    for x in (-0.0175, 0.0175):
+        wing = box('cradlewing', 0.003, 0.024, 0.02, loc=(x, 0.03, 0.044), bevel=0.001)
+        parts.append(assign(wing, mats['tpu_black']))
     # Lollipop antenna out the back.
-    mount = box('antmount', 0.012, 0.012, 0.01, loc=(-0.009, -0.05, 0.038), bevel=0.002)
-    parts.append(assign(mount, mats['tpu']))
+    mount = box('antmount', 0.012, 0.012, 0.01, loc=(-0.009, -0.059, 0.038), bevel=0.002)
+    parts.append(assign(mount, mats['tpu_black']))
     coax = cyl('coax', 0.0012, 0.05, z=0, n=10)
-    coax.rotation_euler = (math.radians(-40), 0, 0)
+    coax.rotation_euler = (math.radians(40), 0, 0)  # up and back
     coax.location = (-0.009, -0.052, 0.042)
     bake_transform(coax)
     parts.append(assign(coax, mats['black']))
     bulb = cyl('bulb', 0.0055, 0.003, z=-0.0015, n=24, bevel=0.0012)
-    bulb.rotation_euler = (math.radians(50), 0, 0)
-    bulb.location = (-0.009, -0.084, 0.08)
+    bulb.rotation_euler = (math.radians(40), 0, 0)
+    bulb.location = (-0.009, -0.0695, 0.0635)
     bake_transform(bulb)
     parts.append(assign(bulb, mats['clear']))
     # LED strips under the arms (lit in the browser in JARVIS's colours).
@@ -493,7 +537,7 @@ def quad(mats):
     for name, sx, sy, hand in (('fl', -1, 1, 1), ('fr', 1, 1, -1), ('rl', -1, -1, -1), ('rr', 1, -1, 1)):
         fixed, spin, ztop = motor('m_' + name, sx * S, sy * S, 0.005, mats)
         parts += fixed
-        p = prop_mesh('prop', 0.065, 0.006, 3, 0.017, 26, 11, hand=hand)
+        p = prop_mesh('prop', 0.065, 0.006, 3, 0.021, 26, 11, hand=hand)
         p.location = (sx * S, sy * S, ztop)
         assign(p, mats['prop'])
         bake_transform(p)
@@ -513,52 +557,130 @@ def quad(mats):
 
 # ---------------------------------------------------------------- tiny whoop
 
+def tube(name, pts, r, res=4):
+    """A round wire or bar along points."""
+    cu = bpy.data.curves.new(name, 'CURVE')
+    cu.dimensions = '3D'
+    sp = cu.splines.new('BEZIER')
+    sp.bezier_points.add(len(pts) - 1)
+    for i, p in enumerate(pts):
+        bp = sp.bezier_points[i]
+        bp.co = p
+        bp.handle_left_type = bp.handle_right_type = 'AUTO'
+    cu.bevel_depth = r
+    cu.bevel_resolution = res
+    cu.use_fill_caps = True
+    ob = link(bpy.data.objects.new(name, cu))
+    bpy.context.view_layer.update()
+    me = bpy.data.meshes.new_from_object(ob.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+    out = link(bpy.data.objects.new(name, me))
+    bpy.data.objects.remove(ob)
+    for p in out.data.polygons:
+        p.use_smooth = True
+    return out
+
+
 def whoop(mats):
     S = 0.0265  # 75 mm wheelbase
     parts = []
-    ducts = []
+    frame = []
     for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
         x, y = sx * S, sy * S
-        ring = outline_slab('duct', circle(x, y, 0.0205, 48), 0.013, 0.0, bevel=0.0006, holes=[circle(x, y, 0.0178, 48)[::-1]])
-        lip = outline_slab('lip', circle(x, y, 0.0212, 48), 0.0015, 0.0115, bevel=0.0004, holes=[circle(x, y, 0.0178, 48)[::-1]])
-        spokes = [outline_slab('spoke', capsule(x, y, x + math.cos(a) * 0.019, y + math.sin(a) * 0.019, 0.0022, 0.0022, 6), 0.0015, 0.0) for a in (math.pi / 4 + k * math.pi / 2 for k in range(4))]
-        mount = cyl('mmount', 0.0045, 0.0025, z=0.0, x=x, y=y, n=24)
-        ducts += [ring, lip, mount] + spokes
-    center = outline_slab('center', rounded_rect(0.03, 0.034, 0.006), 0.002, 0.0, bevel=0.0005)
-    arms = [outline_slab('warm', capsule(0, 0, sx * S * 0.72, sy * S * 0.72, 0.006, 0.005, 6), 0.002, 0.0) for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1))]
-    frame = join('whoop_frame', ducts + arms + [center])
-    assign(frame, mats['whoop'])
-    parts.append(frame)
-    parts.append(assign(box('fc', 0.026, 0.026, 0.0012, loc=(0, 0, 0.004), bevel=0.0003), mats['pcb']))
-    # Canopy with the camera looking out of its nose.
-    me = bpy.data.meshes.new('canopy')
-    bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=32, v_segments=16, radius=1.0)
-    for v in list(bm.verts):
-        if v.co.z < -0.05:
-            bm.verts.remove(v)
-    for v in bm.verts:
-        v.co = Vector((v.co.x * 0.014, v.co.y * 0.019, max(v.co.z, 0) * 0.013))
-    bm.to_mesh(me)
-    bm.free()
-    can = link(bpy.data.objects.new('canopy', me))
-    can.location = (0, -0.002, 0.004)
-    for p in can.data.polygons:
-        p.use_smooth = True
-    parts.append(assign(can, mats['canopy']))
-    camb = box('wcam', 0.009, 0.009, 0.009, loc=(0, 0.013, 0.01), bevel=0.0008, rot=(math.radians(-20), 0, 0))
-    lens = cyl('wlens', 0.0032, 0.004, z=0, n=20)
-    lens.rotation_euler = (math.radians(70), 0, 0)
-    lens.location = (0, 0.0175, 0.0115)
-    parts += [assign(camb, mats['plastic']), assign(lens, mats['glass'])]
-    parts.append(assign(box('1s', 0.012, 0.045, 0.008, loc=(0, 0, -0.006), bevel=0.0015), mats['wrap_small']))
+        # The duct: a ring with a rolled lip, and guard ribs curving down
+        # and in under it to a small foot ring.
+        frame.append(outline_slab('duct', circle(x, y, 0.0206, 64), 0.011, 0.0, bevel=0.0005, holes=[circle(x, y, 0.0192, 64)[::-1]]))
+        frame.append(outline_slab('lip', circle(x, y, 0.0216, 64), 0.0016, 0.011, bevel=0.0005, holes=[circle(x, y, 0.0196, 64)[::-1]]))
+        out = math.atan2(sy, sx)
+        for k in range(7):
+            a = out + (k - 3) * math.radians(36)
+            ca, sa = math.cos(a), math.sin(a)
+            frame.append(tube('rib', [(x + ca * 0.0204, y + sa * 0.0204, 0.004), (x + ca * 0.0206, y + sa * 0.0206, -0.002), (x + ca * 0.0165, y + sa * 0.0165, -0.0085)], 0.0009, 2))
+        frame.append(outline_slab('foot', circle(x, y, 0.0172, 48), 0.0014, -0.0095, bevel=0.0003, holes=[circle(x, y, 0.0152, 48)[::-1]]))
+        # Motor mount on four spokes across the duct's bottom.
+        frame.append(cyl('mmount', 0.0048, 0.0022, z=0.0, x=x, y=y, n=24))
+        for k in range(4):
+            a = math.pi / 4 + k * math.pi / 2
+            frame.append(outline_slab('spoke', capsule(x, y, x + math.cos(a) * 0.0196, y + math.sin(a) * 0.0196, 0.0026, 0.002, 6), 0.0016, 0.0))
+    frame.append(outline_slab('center', rounded_rect(0.032, 0.036, 0.007), 0.0022, 0.0, bevel=0.0005))
+    # (As thick as the spokes, so the union merges their tops into one.)
+    frame += [outline_slab('warm', capsule(sx * 0.009, sy * 0.009, sx * S * 0.7, sy * S * 0.7, 0.007, 0.006, 6), 0.0016, 0.0) for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1))]
+    # One moulded piece: union everything into the centre plate, so the
+    # translucent plastic has no overlapping faces inside it.
+    hub = frame[-5]
+    coll = bpy.data.collections.new('frameparts')
+    bpy.context.scene.collection.children.link(coll)
+    for o in frame:
+        if o is not hub:
+            for c in o.users_collection:
+                c.objects.unlink(o)
+            coll.objects.link(o)
+    m = hub.modifiers.new('u', 'BOOLEAN')
+    m.operation = 'UNION'
+    m.solver = 'EXACT'
+    m.operand_type = 'COLLECTION'
+    m.collection = coll
+    apply_mods(hub)
+    for o in list(coll.objects):
+        bpy.data.objects.remove(o)
+    bpy.data.collections.remove(coll)
+    hub.name = 'whoop_frame'
+    parts.append(assign(hub, mats['whoop']))
+    # The all-in-one board on its grommets: black, with its chips, the
+    # receiver's red board and a few parts.
+    parts.append(assign(box('fc', 0.026, 0.026, 0.0012, loc=(0, -0.002, 0.0045), bevel=0.0003), mats['pcb2']))
+    for k, (cx, cy, w, d) in enumerate(((-0.006, -0.006, 0.006, 0.006), (0.006, -0.008, 0.004, 0.004), (0.007, 0.002, 0.003, 0.005), (-0.007, 0.004, 0.004, 0.003), (0.0, -0.011, 0.008, 0.002))):
+        parts.append(assign(box('chip', w, d, 0.0012, loc=(cx, cy, 0.0057)), mats['chip']))
+    parts.append(assign(box('rx', 0.009, 0.011, 0.0016, loc=(-0.0032, -0.004, 0.0068), bevel=0.0003), mats['rxboard']))
+    for gx in (-0.0105, 0.0105):
+        for gy in (-0.0125, 0.0085):
+            parts.append(assign(cyl('grommet', 0.0016, 0.004, z=0.0018, x=gx, y=gy, n=12), mats['black']))
+    # The silver camera cage: two side cheeks on a top bridge, the camera
+    # held between them looking out of the nose, tilted up.
+    cage = []
+    for x in (-0.0085, 0.0085):
+        cheek = outline_slab('cheek', [(-0.012, 0.0), (0.016, 0.0), (0.018, 0.006), (0.012, 0.019), (-0.004, 0.02), (-0.012, 0.008)], 0.0018, 0.0, bevel=0.0004,
+                             holes=[circle(0.008, 0.011, 0.0032, 20)[::-1]])
+        cheek.rotation_euler = (math.radians(90), 0, math.radians(90))
+        cheek.location = (x + 0.0009, 0, 0.0055)
+        bake_transform(cheek)
+        cage.append(cheek)
+    cage.append(box('bridge', 0.019, 0.016, 0.0018, loc=(0, -0.003, 0.0235), bevel=0.0006))
+    cage.append(box('cagebase', 0.019, 0.006, 0.0018, loc=(0, 0.012, 0.0068), bevel=0.0005))
+    parts.append(assign(join('cage', cage), mats['silver']))
+    camb = box('wcam', 0.0145, 0.012, 0.0135, loc=(0, 0.011, 0.0135), bevel=0.0012)
+    barrel = cyl('wbarrel', 0.0052, 0.007, z=0, n=32, bevel=0.0005)
+    barrel.rotation_euler = (math.radians(-90), 0, 0)
+    barrel.location = (0, 0.0175, 0.0135)
+    ring = cyl('wring', 0.0058, 0.0016, z=0, n=32, bevel=0.0004)
+    ring.rotation_euler = (math.radians(-90), 0, 0)
+    ring.location = (0, 0.0235, 0.0135)
+    lens = cyl('wlens', 0.0042, 0.0008, z=0, n=32)
+    lens.rotation_euler = (math.radians(-90), 0, 0)
+    lens.location = (0, 0.0247, 0.0135)
+    cam = [assign(camb, mats['plastic']), assign(barrel, mats['plastic']), assign(ring, mats['silver']), assign(lens, mats['glass'])]
+    piv = Vector((0, 0.011, 0.0135))
+    rot = Matrix.Translation(piv) @ Matrix.Rotation(math.radians(-22), 4, 'X') @ Matrix.Translation(-piv)
+    for o in cam:
+        bake_transform(o)
+        o.data.transform(rot)
+    parts += cam
+    # The antenna: a black whip up and back from the cage, white at the tip.
+    parts.append(assign(tube('whip', [(0.004, -0.008, 0.024), (0.006, -0.014, 0.04), (0.008, -0.02, 0.058)], 0.0011, 3), mats['black']))
+    parts.append(assign(tube('whiptip', [(0.008, -0.02, 0.058), (0.0088, -0.0224, 0.066)], 0.0006, 2), mats['white']))
+    # The 1S pack underneath, in its slot.
+    parts.append(assign(box('1s', 0.012, 0.042, 0.008, loc=(0, -0.002, -0.0039), bevel=0.0015), mats['wrap_small']))
     rotors = []
     for name, sx, sy, hand in (('fl', -1, 1, 1), ('fr', 1, 1, -1), ('rl', -1, -1, -1), ('rr', 1, -1, 1)):
         x, y = sx * S, sy * S
-        parts.append(assign(cyl('wm', 0.0037, 0.006, z=0.0025, x=x, y=y, n=20, bevel=0.0004), mats['bell']))
-        p = prop_mesh('wprop', 0.0158, 0.0025, 4, 0.006, 24, 14, hand=hand, sections=12, chord_pts=7, thick=0.0006)
-        p.location = (x, y, 0.009)
-        assign(p, mats['prop'])
+        # Silver motor on the mount, its three wires running in to the board.
+        parts.append(assign(cyl('wm', 0.0042, 0.0055, z=0.0022, x=x, y=y, n=24, bevel=0.0004), mats['alu']))
+        for k, m in enumerate((mats['black'], mats['white'], mats['black'])):
+            off = (k - 1) * 0.0011
+            nx, ny = -sy * off, sx * off
+            parts.append(assign(tube('wire', [(x * 0.8 + nx, y * 0.8 + ny, 0.0028), (x * 0.6 + nx, y * 0.6 + ny, 0.0032), (x * 0.4 + nx, y * 0.4 + ny, 0.0046)], 0.00045, 2), m))
+        p = prop_mesh('wprop', 0.0158, 0.0025, 3, 0.0075, 24, 14, hand=hand, sections=12, chord_pts=7, thick=0.0006)
+        p.location = (x, y, 0.0085)
+        assign(p, mats['prop_clear'])
         bake_transform(p)
         p.name = 'whoop_rotor_' + name
         bpy.context.view_layer.objects.active = p
@@ -600,10 +722,16 @@ def materials():
         'black': principled('lead_black', (0.02, 0.02, 0.02), 0.0, 0.45),
         'xt60': principled('xt60', (0.85, 0.65, 0.05), 0.0, 0.4),
         'clear': principled('clear', (0.8, 0.85, 0.9), 0.0, 0.1, alpha=0.6),
-        'prop': principled('prop', (0.1, 0.55, 0.9), 0.0, 0.2, alpha=0.88),
+        'prop': principled('prop', (0.12, 0.62, 0.75), 0.0, 0.18, alpha=0.92),
+        'prop_clear': principled('prop_clear', (0.85, 0.88, 0.9), 0.0, 0.2, alpha=0.8),
+        'gold': principled('gold', (0.92, 0.7, 0.22), 1.0, 0.3),
+        'gopro': principled('gopro', (0.03, 0.03, 0.035), 0.0, 0.55),
+        'tpu_black': principled('tpu_black', (0.035, 0.035, 0.04), 0.0, 0.7),
+        'silver': principled('silver', (0.72, 0.73, 0.76), 0.9, 0.32),
+        'rxboard': principled('rxboard', (0.5, 0.05, 0.04), 0.0, 0.4),
+        'white': principled('white', (0.85, 0.85, 0.85), 0.0, 0.4),
         'led': principled('led', (0.0, 0.0, 0.0), 0.0, 0.4, emission=(0.45, 0.55, 1.0), strength=6.0),
-        'whoop': principled('whoop', (0.05, 0.05, 0.06), 0.0, 0.5),
-        'canopy': principled('canopy', (0.9, 0.9, 0.92), 0.0, 0.3, coat=0.5),
+        'whoop': principled('whoop', (0.3, 0.62, 0.88), 0.0, 0.25, alpha=0.78),
     }
 
 
@@ -616,8 +744,8 @@ def preview(objs):
     sc.view_settings.view_transform = 'AgX'
     world = bpy.data.worlds.new('w')
     sc.world = world
-    world.node_tree.nodes['Background'].inputs['Color'].default_value = (0.02, 0.022, 0.03, 1)
-    sc.view_settings.exposure = -0.6
+    world.node_tree.nodes['Background'].inputs['Color'].default_value = (0.3, 0.32, 0.36, 1)
+    sc.view_settings.exposure = -0.3
     for loc, energy, size in (((0.3, -0.25, 0.35), 9, 0.3), ((-0.35, 0.2, 0.25), 4, 0.4), ((0, 0.4, 0.05), 2, 0.5)):
         l = bpy.data.lights.new('l', 'AREA')
         l.energy = energy
@@ -626,11 +754,11 @@ def preview(objs):
         lo.location = loc
         lo.rotation_euler = (Vector((0, 0, 0.02)) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
     floor = mesh_from('floor', [(-1, -1, -0.004), (1, -1, -0.004), (1, 1, -0.004), (-1, 1, -0.004)], [(0, 1, 2, 3)], smooth=False)
-    assign(floor, principled('floor', (0.03, 0.03, 0.035), 0.0, 0.25))
+    assign(floor, principled('floor', (0.5, 0.5, 0.52), 0.0, 0.6))
     cam = link(bpy.data.objects.new('cam', bpy.data.cameras.new('cam')))
-    cam.data.lens = 60
-    cam.location = (0.22, -0.32, 0.2)
-    cam.rotation_euler = (Vector((0.06, 0.0, 0.02)) - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    cam.data.lens = 50
+    cam.location = (0.36, 0.34, 0.19)
+    cam.rotation_euler = (Vector((0.075, 0.0, 0.03)) - cam.location).to_track_quat('-Z', 'Y').to_euler()
     sc.camera = cam
     sc.render.filepath = os.path.join(OUT, 'fpv-preview.png')
     bpy.ops.render.render(write_still=True)

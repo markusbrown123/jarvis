@@ -1135,6 +1135,45 @@
   background: #000;
   animation: cine-fade 1.6s ease forwards;
 }
+/* The loading screen's stills: slow pans, crossfading; gone when the flight cuts in. */
+.cine-slides {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.9s ease;
+}
+.cine-slides-out {
+  opacity: 0;
+}
+.cine-slide {
+  position: absolute;
+  inset: -5%;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transform: scale(1.03);
+  transition: opacity 1.4s ease;
+}
+.cine-slide.on,
+.cine-slide.off {
+  animation: cine-pan 7.5s linear forwards;
+}
+.cine-slide.on {
+  opacity: 1;
+}
+@keyframes cine-pan {
+  from {
+    transform: scale(1.03) translateX(0);
+  }
+  to {
+    transform: scale(1.11) translateX(var(--pan));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cine-slide.on,
+  .cine-slide.off {
+    animation: none;
+  }
+}
 .cine-loading::after {
   content: '';
   position: absolute;
