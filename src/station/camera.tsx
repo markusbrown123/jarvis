@@ -35,9 +35,9 @@ export function CameraRig() {
     const pos = new THREE.Vector3(...c.pos)
     const target = new THREE.Vector3(...c.target)
     if (mode === 'cinematic' && view === 'overview') {
-      // Inside the cave, high on one side, drifting round the stage.
-      pos.set(0, 6.4, 11.2)
-      target.set(0, 1.4, 0)
+      // Inside the house, up near the ceiling, drifting round the stage.
+      pos.set(0, 3.4, 12.2)
+      target.set(0, 1.2, 0)
     }
     goal.current = { pos, target }
     // Start where the view is, rather than flying in from nowhere.

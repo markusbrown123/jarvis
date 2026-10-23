@@ -2,14 +2,16 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
-import { CONSOLE_R, OBSTACLES, onIsland, WALL_R, ZONES } from './layout'
+import { CONSOLE_R, FOUNDRY, OBSTACLES, onIsland, walkable, ZONES } from './layout'
 import { useStation } from './stationStore'
 
 /**
  * Walk mode: the station on foot, first person. W A S D (or the arrows) to
  * move, Shift to run, the mouse to look — click to capture it, or drag.
  * You stand up behind the console; E sits you back down at it, or opens
- * the zone you're facing. Talking to JARVIS works as everywhere else.
+ * the zone you're facing. The open glass panel straight ahead leads out
+ * onto the terrace, round the pool to the balustrade. Talking to JARVIS
+ * works as everywhere else.
  *
  * While walking these keys belong to walking: they're taken before the
  * app's own shortcuts (D is diagnostics, E expands panels) see them.
@@ -109,12 +111,14 @@ export function WalkControls() {
     const mz = fz * ahead - Math.sin(yaw) * side
     const len = Math.hypot(mx, mz)
     const running = k.has('shift')
+    const was = { x: pos.x, z: pos.z }
     if (len > 0) {
       const step = ((running ? RUN : WALK) * d) / len
       pos.x += mx * step
       pos.z += mz * step
     }
-    // Slide round anything solid, and stay inside the room.
+    // Slide round anything solid; walls, glass, pool and rail stop you,
+    // sliding along them where they can.
     for (const [ox, oz, r] of OBSTACLES) {
       const dx = pos.x - ox
       const dz = pos.z - oz
@@ -125,8 +129,12 @@ export function WalkControls() {
         pos.z = oz + (dz / dist) * min
       }
     }
+    if (!walkable(pos.x, pos.z, BODY)) {
+      if (walkable(pos.x, was.z, BODY)) pos.z = was.z
+      else if (walkable(was.x, pos.z, BODY)) pos.x = was.x
+      else pos.set(was.x, 0, was.z)
+    }
     const fromCentre = Math.hypot(pos.x, pos.z)
-    if (fromCentre > WALL_R) pos.multiplyScalar(WALL_R / fromCentre)
     // Step up onto the island's deck and down off it.
     ground.current += ((onIsland(pos.x, pos.z) ? 0.16 : 0) - ground.current) * Math.min(1, d * 10)
     const still = useHub.getState().prefs.reducedMotion
@@ -144,9 +152,11 @@ export function WalkControls() {
       act.current = () => st.setMode('talk')
     } else {
       let best = Infinity
-      for (const z of ZONES) {
-        const dx = z.pos[0] - pos.x
-        const dz = z.pos[2] - pos.z
+      // The zones, and the build bay (which opens Jobs).
+      const spots = [...ZONES.map((z) => ({ x: z.pos[0], z: z.pos[2], label: z.label, id: z.id })), { x: FOUNDRY[0], z: FOUNDRY[2], label: 'the build bay', id: 'jobs' as const }]
+      for (const z of spots) {
+        const dx = z.x - pos.x
+        const dz = z.z - pos.z
         const dist = Math.hypot(dx, dz)
         if (dist < 3 && dist < best && (dx * fx + dz * fz) / dist > 0.5) {
           best = dist

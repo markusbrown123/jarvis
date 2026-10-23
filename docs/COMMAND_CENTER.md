@@ -50,17 +50,24 @@ code — no downloaded models — where every light and moving part is live stat
   filled in.
 - **Connections** from the console to each zone flow, pulse, break or flash
   with what is really happening; packets travel them as events land.
-- **The room** is a lair cut into a sea cliff: rock walls and vault, polished
-  stone floor, and a wall of glass over the sea at blue hour — modelled in
-  Blender with its light ray-traced in Cycles (`tools/blender/lair.py`), the
-  sky and sea drawn live with the moon glittering on the water.
+- **The build bay** straight ahead of the desk: a holo-table where each job
+  is a tower rising floor by floor as it reports its steps, with a crane
+  lowering the next floor; queued jobs are empty plots, finished ones stand
+  lit, failed ones fall in.
+- **The house** is a round glass pavilion on a sea cliff, Malibu-style:
+  travertine floors round a black marble stage, concrete behind, a curved
+  glass wall opening onto a terrace with an infinity pool — modelled in
+  Blender with its light ray-traced in Cycles (`tools/blender/lair.py`).
+  Outside is the real sky for this moment where you are: the sun and moon
+  where they really are, sunsets, stars, and the actual weather (clouds,
+  rain on the glass, storms), over a live sea with boats and jet skis.
 - **Panels** over the room: Business & money (each figure with its source and
   age), Terminal (filters incl. Errors; narrows to the selection), Needs
   Markus, Running, and a detail panel for whatever is selected.
 
 It opens in **Talk** mode (`J`): sat at the console, seen over the chair,
-looking out across the desk and its monitors to the room (with a shallow
-depth of field on High and Ultra), and the whole conversation on the left
+looking out across the desk and its monitors to the room and the sea (with
+a gentle depth of field on High and Ultra), and the whole conversation on the left
 with a line to type to him. **Walk** (`F`) gets you up: first person,
 `W A S D` and the mouse, `E` to sit back down at the console or open the
 zone you're facing.

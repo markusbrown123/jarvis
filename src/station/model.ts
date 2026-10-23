@@ -33,7 +33,7 @@ export type GameNode = { id: string; name: string; status: 'building' | 'blocked
 export type StageNode = { id: string; label: string; count: number | null; sites: string[] }
 export type ServiceNode = { id: string; name: string; up: boolean; detail: string }
 export type CapNode = { id: string; label: string; state: 'ok' | 'warn' | 'off' | 'error'; detail: string }
-export type JobNode = { id: string; title: string; zone: ZoneId; state: Job['state']; stale: boolean; stage: string; worker: string; updated: number; cancellable: boolean }
+export type JobNode = { id: string; title: string; zone: ZoneId; state: Job['state']; stale: boolean; stage: string; worker: string; updated: number; cancellable: boolean; progress: { done: number; total: number } | null }
 export type ItemNode = { id: string; title: string; zone: ZoneId; priority: Item['priority']; why: string }
 export type LinkStyle = 'active' | 'queued' | 'idle' | 'attention' | 'disconnected' | 'failed'
 export type LinkModel = { id: string; from: ZoneId | 'reactor'; to: ZoneId; style: LinkStyle; label: string }
@@ -100,6 +100,8 @@ function jobNode(j: Job): JobNode {
     worker: j.worker ?? j.source,
     updated: j.heartbeatAt ?? j.updatedAt,
     cancellable: j.cancel === 'supported' && (j.state === 'running' || j.state === 'queued'),
+    // Only what the job itself reports; never estimated.
+    progress: j.total && j.total > 0 ? { done: Math.max(0, Math.min(j.done ?? 0, j.total)), total: j.total } : null,
   }
 }
 

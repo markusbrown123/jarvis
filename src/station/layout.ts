@@ -104,6 +104,10 @@ export const PATH_TO = RING - PAD * 0.866 - 0.06
 /** The stage's top surface. */
 export const DECK_TOP = 0.16
 
+/** The build bay's holo-table (foundry.tsx): straight back from the console, between the back pads. */
+export const FOUNDRY: [number, number, number] = [0, DECK_TOP, -5.6]
+export const FOUNDRY_R = 1.1
+
 /** Where a zone's pathway starts and ends on the stage. */
 export function along(zone: ZoneId, f: number, out: THREE.Vector3, y = DECK_TOP + 0.08) {
   const [x, , z] = ZONE[zone].pos
@@ -126,27 +130,62 @@ export function linkAnchor(l: LinkModel): [number, number, number] {
 }
 
 /**
- * What a person walking the station can't walk through, as circles on the
- * floor (x, z, radius): the console and each pad. The cave's
- * rock (lair.py: 15 m, bulging in by up to ~1.5 m) bounds the rest.
+ * The house (tools/blender/lair.py builds it; these mirror its sizes). In
+ * scene terms, angles are measured as in Blender — from +X towards −Z —
+ * so the glass, which faces −Z, runs from 0 to π.
  */
-export const WALL_R = 13.0
+export const HOUSE = {
+  /** Glass and back wall. */
+  r: 15,
+  ceiling: 4.6,
+  /** The glass in 13 bays; the middle one stands open onto the terrace. */
+  bays: 13,
+  door: 6,
+  /** The roof: 16.2 m out at the back, reaching 3.9 m further over the terrace. */
+  roofBack: 16.2,
+  roofReach: 3.9,
+  roofSwoop: 0.7,
+  deck: { r: 24, a0: (-8 * Math.PI) / 180, a1: Math.PI + (8 * Math.PI) / 180 },
+  rail: 23.7,
+  pool: { r0: 17.8, r1: 21.2, a0: Math.PI / 2 - (40 * Math.PI) / 180, a1: Math.PI / 2 + (40 * Math.PI) / 180, depth: 1.3 },
+  sea: -28,
+}
+
+/** A floor point's angle, the house's way (see HOUSE). */
+export const houseAngle = (x: number, z: number) => Math.atan2(-z, x)
+
+/**
+ * What a person walking the station can't walk through, as circles on the
+ * floor (x, z, radius): the console, each pad and the build bay. The house's walls, glass,
+ * pool and rail bound the rest (walkable).
+ */
 export const OBSTACLES: [number, number, number][] = [
   [0, 0, CONSOLE_R],
   ...ZONES.map((z): [number, number, number] => [z.pos[0], z.pos[2], 1.35]),
+  [FOUNDRY[0], FOUNDRY[2], FOUNDRY_R],
 ]
 
-/** The raised stone stage in the middle of the lair. */
+/** Can someone stand here? Inside, out through the open bay, and on the terrace. */
+export function walkable(x: number, z: number, body = 0.3) {
+  const r = Math.hypot(x, z)
+  const a = houseAngle(x, z)
+  const R = HOUSE.r
+  if (r < R - body) return true
+  const step = Math.PI / HOUSE.bays
+  const inDoor = a > HOUSE.door * step + body / R && a < (HOUSE.door + 1) * step - body / R
+  if (r <= R + body) return inDoor
+  const d = HOUSE.deck
+  const onDeck = a > d.a0 + body / r && a < d.a1 - body / r && r < HOUSE.rail - body
+  if (!onDeck) return false
+  const p = HOUSE.pool
+  const inPool = a > p.a0 - (0.12 + body) / r && a < p.a1 + (0.12 + body) / r && r > p.r0 - 0.12 - body && r < p.r1 + 0.12 + body
+  return !inPool
+}
+
+/** The raised stone stage in the middle of the house. */
 export const STAGE_R = 8.1
 
 /** Is a floor point up on the stage? */
 export function onIsland(x: number, z: number) {
   return Math.hypot(x, z) < STAGE_R
 }
-
-/**
- * Where the moon is, seen from the lair: 17° up, a little right of straight
- * out of the window. The baked moonlight (lair.py) and the live sky, sea
- * and shadows all use it.
- */
-export const MOON_DIR = new THREE.Vector3(0.231, 0.292, -0.928).normalize()

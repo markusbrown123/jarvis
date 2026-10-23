@@ -1,38 +1,55 @@
 """
-Builds the JARVIS Station's room — a lair cut into a sea cliff — in Blender
-and bakes its lighting with Cycles for the live scene.
+Builds the JARVIS Station's house — a round glass pavilion on a sea cliff,
+in the spirit of Tony Stark's Malibu house — in Blender, and bakes its
+lighting with Cycles for the live scene.
 
-Rock walls and a rock ceiling (the cave), a polished dark stone floor with
-a raised stage in the middle for the console and the six zones, and across
-the back a 130° wall of glass in steel mullions looking out over the sea
-(the browser draws the sky and the water live behind it).
+Inside: a polished travertine floor round a black marble stage (the console
+and the six zones stand on it), board-formed concrete walls behind, a white
+ceiling with a raised coffer over the console, and across the front half a
+curved wall of floor-to-ceiling glass in slim black frames, its middle
+panel slid open. Outside: a travertine terrace with an infinity pool and a
+glass balustrade at the cliff edge, the roof cantilevered out over it with
+a ribbon of light under its lip, limestone cliffs dropping to the sea, and
+gardens either side. The browser draws the sky, the sun, the sea and the
+pool's water live.
 
-Lighting is baked the way games do it, in two layers per surface:
+Each baked surface gets two maps:
 
-  detail   the surface colour with its crevices darkened (short-range
-           ambient occlusion), at full resolution — crisp up close
-  light    the light falling on it: moonlight through the window with the
-           mullions' shadows, the blue-hour sky, the warm ceiling coves and
-           the uplights on the rock, bounced around the room (Cycles global
-           illumination), denoised with Open Image Denoise when available
+  detail   its colour — travertine pores and veins, marble veins, hairline
+           cracks, board marks — with crevices darkened (short-range ambient
+           occlusion), at full resolution
+  light    the light falling on it, bounced round the house by Cycles and
+           denoised, with three kinds of light kept apart in its channels:
+             red    the house's warm lights (downlights, uplights, coves,
+                    LED strips)
+             green  JARVIS's own light (the halo in the coffer, the line
+                    round the stage, the glow of the console and zones)
+             blue   daylight from the sky, through the glass and round the
+                    terrace
+           so the browser can colour each live: JARVIS's light in his
+           current colour, the sky's by the real time of day. (For that
+           bake every surface is made grey, so the channels don't mix.)
+           Direct sun and moonlight are added live too, with the shadows of
+           the window frames and the roof worked out in the shader.
 
-The browser multiplies the two. The floor also gets a normal map, for its
-live reflections. Glass and the live light strips are exported as their own
-meshes.
+The floor, stage, terrace and walls also get normal maps. Frames, rails,
+glass and the light strips are exported as their own meshes.
 
 Run from the repo root (Blender's Python module, ~400 MB):
 
   python3 -m venv .bpy && .bpy/bin/pip install bpy pillow
-  .bpy/bin/python tools/blender/lair.py                    # full bake
-  .bpy/bin/python tools/blender/lair.py --size 512 --light 256 --samples 8  # quick test
+  .bpy/bin/python tools/blender/lair.py                      # full bake
+  .bpy/bin/python tools/blender/lair.py --size 512 --light 256 --samples 8 --out /tmp/lair
+  .bpy/bin/python tools/blender/lair.py --preview-only --out /tmp/lair   # just a render
 
 Optional: `pip install oidn` for denoising (its bundled libtbb may need a
 `libtbb.so.12` symlink next to it); without it a gentler filter is used.
 
-Writes public/station/lair.glb, public/station/{name}_{detail,light}_{ultra,
-high,low}.jpg, floor/stage normal maps, and a Cycles render, lair-preview.png.
-Blender is Z-up with the window towards +Y; glTF turns that into three.js's
-Y-up with the window at −Z, which is where the console's chair faces.
+Writes lair.glb, {name}_{detail,light}_{ultra,high,low}.jpg, normal maps and
+a Cycles render, lair-preview.png, to public/station (or --out). Blender is
+Z-up with the window towards +Y; glTF turns that into three.js's Y-up with
+the window at −Z, which is where the console's chair faces. The sizes here
+are mirrored in src/station/layout.ts (HOUSE).
 """
 
 import math
@@ -46,7 +63,6 @@ from mathutils import Vector, noise
 from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-OUT = os.path.join(ROOT, 'public', 'station')
 
 
 def arg(name, default):
@@ -57,29 +73,46 @@ def arg(name, default):
 
 SIZE = arg('--size', 4096)  # detail maps
 LIGHT = arg('--light', 2048)  # lightmaps
-SAMPLES = arg('--samples', 96)
+SAMPLES = arg('--samples', 64)
+OUT = os.path.abspath(arg('--out', os.path.join(ROOT, 'public', 'station')))
 PREVIEW = '--no-preview' not in sys.argv
-# Lighting is stored as light / LM_SCALE so bright spots survive 8 bits.
-LM_SCALE = 4.0
+PREVIEW_ONLY = '--preview-only' in sys.argv
+# Rebake only the lighting (the detail maps from an earlier run still fit:
+# the model and its UVs come out the same every time).
+LIGHT_ONLY = '--light-only' in sys.argv
+# Light is stored as light / LM_SCALE so bright spots survive 8 bits.
+LM_SCALE = 6.0
 
-R = 15.0  # rock wall radius
-H = 9.0  # ceiling height
+R = 15.0  # the house: glass and back wall
+WALL_T = 0.4
+H = 4.6  # ceiling
 STAGE_R = 8.1
 STAGE_H = 0.16
-WIN_R = 14.5
-WIN_SPAN = math.radians(130)
-FORWARD = math.pi / 2  # +Y: the window
-SILL = 0.6
-HEAD = 7.4
-MULLIONS = 12
-# The rock band in three parts, so the overview can cut the front one away.
-ROCK_PARTS = {
-    'rock_left': (FORWARD + WIN_SPAN / 2 - 0.02, math.radians(225)),
-    'rock_front': (math.radians(225), math.radians(315)),
-    'rock_right': (math.radians(315), FORWARD - WIN_SPAN / 2 + math.tau + 0.02),
-}
-MOON_ELEV = math.radians(17)
-MOON_AZ = FORWARD - math.radians(14)  # a little to the right of centre, seen from inside
+FORWARD = math.pi / 2  # +Y: out of the window
+GLASS_A0, GLASS_A1 = 0.0, math.pi  # the front half is glass
+BAYS = 13
+DOOR = BAYS // 2  # the middle bay stands open onto the terrace
+COFFER_R = 4.2
+DECK_A0, DECK_A1 = -math.radians(8), math.pi + math.radians(8)
+DECK_R = 24.0
+RAIL_R = 23.7
+POOL_R0, POOL_R1 = 17.8, 21.2
+POOL_A0, POOL_A1 = FORWARD - math.radians(40), FORWARD + math.radians(40)
+POOL_D = 1.3
+SEA = -28.0
+
+
+def roof_edge(a):
+    """The roof's outline: a long cantilever over the terrace, tight at the back."""
+    w = max(0.0, math.cos(a - FORWARD)) ** 1.3
+    return R + 1.2 + 3.9 * w + 0.7 * math.sin(2 * a + 0.6) * w
+
+
+def cliff_edge(a):
+    """Where the land ends: just past the terrace in front, far off behind."""
+    da = abs(math.atan2(math.sin(a - FORWARD), math.cos(a - FORWARD)))
+    t = min(1.0, max(0.0, (da - math.radians(95)) / math.radians(55)))
+    return DECK_R + 0.4 + 40.0 * t * t * (3 - 2 * t) + (0.25 + t) * noise.noise(Vector((math.cos(a) * 3, math.sin(a) * 3, 0.5)))
 
 
 # ---------------------------------------------------------------- helpers
@@ -107,22 +140,17 @@ def evaluated(ob, name):
     return out
 
 
-def sector(name, r_in, r_out, z0, z1, a0, a1, bevel=0.01, res=None):
-    """A slab cut from a ring between angles a0..a1 (or a full disc/ring)."""
-    full = a1 - a0 >= math.tau - 1e-6
-    res = res or max(16, int(abs(a1 - a0) / math.tau * 256))
+def arc(fr, a0, a1, res):
+    """Points along a curve at radius fr(a) (a number or a function of a)."""
+    f = fr if callable(fr) else (lambda a: fr)
+    return [(f(a) * math.cos(a), f(a) * math.sin(a)) for a in np.linspace(a0, a1, res)]
+
+
+def slab(name, loops, z0, z1, bevel=0.0):
+    """An extruded 2D shape: the first loop is the outline, the rest holes."""
     cu = bpy.data.curves.new(name, 'CURVE')
     cu.dimensions = '2D'
     cu.fill_mode = 'BOTH'
-    loops = []
-    if full:
-        loops.append([(r_out * math.cos(a), r_out * math.sin(a)) for a in np.linspace(0, math.tau, res, endpoint=False)])
-        if r_in > 0:
-            loops.append([(r_in * math.cos(a), r_in * math.sin(a)) for a in np.linspace(math.tau, 0, res, endpoint=False)])
-    else:
-        pts = [(r_out * math.cos(a), r_out * math.sin(a)) for a in np.linspace(a0, a1, res)]
-        pts += [(r_in * math.cos(a), r_in * math.sin(a)) for a in np.linspace(a1, a0, res)]
-        loops.append(pts)
     for loop in loops:
         sp = cu.splines.new('POLY')
         sp.points.add(len(loop) - 1)
@@ -130,7 +158,7 @@ def sector(name, r_in, r_out, z0, z1, a0, a1, bevel=0.01, res=None):
             sp.points[i].co = (x, y, 0, 1)
         sp.use_cyclic_u = True
     h = z1 - z0
-    cu.bevel_depth = min(bevel, h / 2 - 1e-4)
+    cu.bevel_depth = min(bevel, h / 2 - 1e-4) if bevel else 0.0
     cu.bevel_resolution = 2
     cu.extrude = max(0.0, h / 2 - cu.bevel_depth)
     cu.offset = -cu.bevel_depth
@@ -139,12 +167,28 @@ def sector(name, r_in, r_out, z0, z1, a0, a1, bevel=0.01, res=None):
     return evaluated(ob, name)
 
 
-def box(name, half, loc, rot_z=0.0, bevel=0.01):
+def sector(name, r_in, r_out, z0, z1, a0, a1, bevel=0.01, res=None):
+    """A slab cut from a ring between angles a0..a1 (or a full disc/ring)."""
+    full = a1 - a0 >= math.tau - 1e-6
+    res = res or max(16, int(abs(a1 - a0) / math.tau * 256))
+    if full:
+        loops = [arc(r_out, 0, math.tau, res + 1)[:-1]]
+        if r_in > 0:
+            loops.append(arc(r_in, math.tau, 0, res + 1)[:-1])
+    else:
+        loops = [arc(r_out, a0, a1, res) + arc(r_in, a1, a0, res)]
+    return slab(name, loops, z0, z1, bevel)
+
+
+def box(name, half, loc, rot_z=0.0, bevel=0.01, shape=None):
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=2.0)
     for v in bm.verts:
-        v.co = Vector((v.co.x * half[0], v.co.y * half[1], v.co.z * half[2]))
+        x, y, z = v.co.x * half[0], v.co.y * half[1], v.co.z * half[2]
+        if shape:
+            x, y, z = shape(x, y, z)
+        v.co = Vector((x, y, z))
     bm.to_mesh(me)
     bm.free()
     ob = link(bpy.data.objects.new(name, me))
@@ -155,6 +199,24 @@ def box(name, half, loc, rot_z=0.0, bevel=0.01):
         m.width = bevel
         m.segments = 2
     return evaluated(ob, name)
+
+
+def blob(name, loc, radius, squash, seed):
+    """A lumpy ball: a shrub or a tree's crown."""
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=3, radius=radius)
+    for v in bm.verts:
+        d = v.co.normalized()
+        k = 1 + 0.28 * noise.noise(d * 2.2 + Vector((seed, seed * 1.3, 0))) + 0.1 * noise.noise(d * 6 + Vector((seed, 0, seed)))
+        v.co = Vector((v.co.x * k, v.co.y * k, v.co.z * k * squash))
+    bm.to_mesh(me)
+    bm.free()
+    ob = link(bpy.data.objects.new(name, me))
+    ob.location = loc
+    for p in ob.data.polygons:
+        p.use_smooth = True
+    return ob
 
 
 def join(name, parts):
@@ -174,84 +236,7 @@ def fbm(p, octaves=5):
     return noise.fractal(p, 0.55, 2.1, octaves, noise_basis='PERLIN_ORIGINAL')
 
 
-# ---------------------------------------------------------------- rock
-
-def rock_band(name, a0, a1, seg_per_rad=40, rows=56):
-    """A cave wall: a cylinder band from a0 to a1, pushed in and out by noise.
-
-    Faces point inwards. The rock bulges towards the room near the window's
-    edges, framing it, and leans in at the top where it meets the ceiling.
-    """
-    cols = max(8, int((a1 - a0) * seg_per_rad))
-    me = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    grid = []
-    for j in range(rows + 1):
-        z = -0.3 + (H + 0.9) * j / rows
-        row = []
-        for i in range(cols + 1):
-            a = a0 + (a1 - a0) * i / cols
-            d = Vector((math.cos(a), math.sin(a), 0))
-            p = Vector((math.cos(a) * 3.1, math.sin(a) * 3.1, z * 0.32))
-            # Large lumpy forms, then strata: ledges that wander along the wall.
-            r = R + 1.1 * fbm(p * 0.6) + 0.35 * fbm(p * 2.2, 4)
-            strata = z * 2.3 + 1.6 * fbm(p * 0.8, 3)
-            r -= 0.22 * (abs((strata % 2.0) - 1.0) ** 3)
-            # Rock masses either side of the window.
-            for edge in (FORWARD + WIN_SPAN / 2, FORWARD - WIN_SPAN / 2):
-                da = math.atan2(math.sin(a - edge), math.cos(a - edge))
-                r -= 1.1 * math.exp(-(da / 0.09) ** 2)
-            # Leaning in towards the ceiling, out a little at the floor.
-            r -= 0.9 * max(0.0, (z - H * 0.65) / (H * 0.35)) ** 2
-            row.append(bm.verts.new((d.x * r, d.y * r, z)))
-        grid.append(row)
-    for j in range(rows):
-        for i in range(cols):
-            # Wound so the faces look into the room.
-            bm.faces.new((grid[j][i], grid[j + 1][i], grid[j + 1][i + 1], grid[j][i + 1]))
-    bm.normal_update()
-    bm.to_mesh(me)
-    bm.free()
-    ob = link(bpy.data.objects.new(name, me))
-    for p in ob.data.polygons:
-        p.use_smooth = True
-    return ob
-
-
-def rock_ceiling():
-    """A rock vault: a disc with its underside pushed down by noise, coves cut in."""
-    me = bpy.data.meshes.new('ceiling')
-    bm = bmesh.new()
-    rings, segs = 40, 160
-    verts = []
-    for j in range(rings + 1):
-        rr = (R + 0.6) * j / rings
-        row = []
-        for i in range(segs if j else 1):
-            a = math.tau * i / segs
-            x, y = rr * math.cos(a), rr * math.sin(a)
-            p = Vector((x * 0.22, y * 0.22, 7.0))
-            z = H + 0.6 - 0.7 * (0.5 + 0.5 * fbm(p)) - 0.15 * fbm(p * 4, 3)
-            # Coves: two shallow channels the light rings sit in.
-            for cove in (2.4, 6.0):
-                z += 0.35 * math.exp(-((rr - cove) / 0.45) ** 2)
-            row.append(bm.verts.new((x, y, z)))
-        verts.append(row)
-    for i in range(segs):
-        bm.faces.new((verts[0][0], verts[1][(i + 1) % segs], verts[1][i]))
-    for j in range(1, rings):
-        for i in range(segs):
-            bm.faces.new((verts[j][i], verts[j][(i + 1) % segs], verts[j + 1][(i + 1) % segs], verts[j + 1][i]))
-    bm.normal_update()
-    bm.to_mesh(me)
-    bm.free()
-    ob = link(bpy.data.objects.new('ceiling', me))
-    for p in ob.data.polygons:
-        p.use_smooth = True
-    return ob
-
-
-# ---------------------------------------------------------------- materials
+# ---------------------------------------------------------------- node helpers
 
 def new_mat(name):
     m = bpy.data.materials.new(name)
@@ -264,162 +249,338 @@ def n(nt, kind, **inputs):
         if k.startswith('_'):
             setattr(node, k[1:], v)
         else:
-            node.inputs[k].default_value = v
+            put(nt, node.inputs[k], v)
     return node
 
 
-def rock_material():
-    """Dark layered rock: big mottling, wandering strata, fine grit."""
-    m, nt, b = new_mat('rock')
-    L = nt.links.new
-    co = n(nt, 'ShaderNodeTexCoord')
-    big = n(nt, 'ShaderNodeTexNoise', Scale=0.25, Detail=6.0, Roughness=0.6)
-    L(co.outputs['Object'], big.inputs['Vector'])
-    # Strata: bands along the height, bent by noise.
-    warp = n(nt, 'ShaderNodeTexNoise', Scale=0.5, Detail=4.0)
-    L(co.outputs['Object'], warp.inputs['Vector'])
-    sep = n(nt, 'ShaderNodeSeparateXYZ')
-    L(co.outputs['Object'], sep.inputs['Vector'])
-    bend = n(nt, 'ShaderNodeMath', _operation='MULTIPLY_ADD')
-    L(warp.outputs['Fac'], bend.inputs[0])
-    bend.inputs[1].default_value = 1.4
-    L(sep.outputs['Z'], bend.inputs[2])
-    band = n(nt, 'ShaderNodeMath', _operation='MULTIPLY')
-    band.inputs[1].default_value = 3.1
-    L(bend.outputs['Value'], band.inputs[0])
-    sine = n(nt, 'ShaderNodeMath', _operation='SINE')
-    L(band.outputs['Value'], sine.inputs[0])
-    grit = n(nt, 'ShaderNodeTexNoise', Scale=9.0, Detail=12.0, Roughness=0.7)
-    L(co.outputs['Object'], grit.inputs['Vector'])
-    # Colour: cool grey to warm umber by the big noise, banded, gritty.
-    ramp = n(nt, 'ShaderNodeValToRGB')
-    ramp.color_ramp.elements[0].color = (0.028, 0.03, 0.034, 1)
-    ramp.color_ramp.elements[1].color = (0.12, 0.105, 0.09, 1)
-    mixf = n(nt, 'ShaderNodeMath', _operation='MULTIPLY_ADD')
-    L(sine.outputs['Value'], mixf.inputs[0])
-    mixf.inputs[1].default_value = 0.12
-    L(big.outputs['Fac'], mixf.inputs[2])
-    L(mixf.outputs['Value'], ramp.inputs['Fac'])
-    gritc = n(nt, 'ShaderNodeMapRange', **{'To Min': 0.75, 'To Max': 1.1})
-    L(grit.outputs['Fac'], gritc.inputs['Value'])
-    mix = n(nt, 'ShaderNodeMix', _data_type='RGBA', _blend_type='MULTIPLY', Factor=1.0)
-    L(ramp.outputs['Color'], mix.inputs[6])
-    L(gritc.outputs['Result'], mix.inputs[7])
-    L(mix.outputs[2], b.inputs['Base Color'])
-    b.inputs['Roughness'].default_value = 0.86
-    height = n(nt, 'ShaderNodeMath', _operation='MULTIPLY_ADD')
-    L(sine.outputs['Value'], height.inputs[0])
-    height.inputs[1].default_value = 0.35
-    L(grit.outputs['Fac'], height.inputs[2])
-    bump = n(nt, 'ShaderNodeBump', Strength=0.7, Distance=0.05)
-    L(height.outputs['Value'], bump.inputs['Height'])
-    L(bump.outputs['Normal'], b.inputs['Normal'])
-    return m
-
-
-def stone_material(name, base, base2, rough, slab, seam=0.006, radial=False):
-    """Polished dark stone in large slabs with fine seams."""
-    m, nt, b = new_mat(name)
-    L = nt.links.new
-    co = n(nt, 'ShaderNodeTexCoord')
-    vary = n(nt, 'ShaderNodeTexNoise', Scale=0.6, Detail=6.0)
-    L(co.outputs['Object'], vary.inputs['Vector'])
-    grain = n(nt, 'ShaderNodeTexNoise', Scale=24.0, Detail=10.0)
-    L(co.outputs['Object'], grain.inputs['Vector'])
-    ramp = n(nt, 'ShaderNodeValToRGB')
-    ramp.color_ramp.elements[0].color = (*base, 1)
-    ramp.color_ramp.elements[1].color = (*base2, 1)
-    L(vary.outputs['Fac'], ramp.inputs['Fac'])
-    if radial:
-        # Rings and spokes, like stone laid round a centre.
-        sep = n(nt, 'ShaderNodeSeparateXYZ')
-        L(co.outputs['Object'], sep.inputs['Vector'])
-        ang = n(nt, 'ShaderNodeMath', _operation='ARCTAN2')
-        L(sep.outputs['Y'], ang.inputs[0])
-        L(sep.outputs['X'], ang.inputs[1])
-        spokes = n(nt, 'ShaderNodeMath', _operation='MULTIPLY')
-        spokes.inputs[1].default_value = 36 / math.tau
-        L(ang.outputs['Value'], spokes.inputs[0])
-        ln = n(nt, 'ShaderNodeVectorMath', _operation='LENGTH')
-        L(co.outputs['Object'], ln.inputs[0])
-        rings = n(nt, 'ShaderNodeMath', _operation='MULTIPLY')
-        rings.inputs[1].default_value = 1 / slab
-        L(ln.outputs['Value'], rings.inputs[0])
-        seams = []
-        for src, w in ((spokes, 0.02), (rings, seam / slab)):
-            pp = n(nt, 'ShaderNodeMath', _operation='PINGPONG')
-            pp.inputs[1].default_value = 0.5
-            L(src.outputs['Value'], pp.inputs[0])
-            gt = n(nt, 'ShaderNodeMath', _operation='GREATER_THAN')
-            gt.inputs[1].default_value = w
-            L(pp.outputs['Value'], gt.inputs[0])
-            seams.append(gt)
-        seam_mask = n(nt, 'ShaderNodeMath', _operation='MINIMUM')
-        L(seams[0].outputs['Value'], seam_mask.inputs[0])
-        L(seams[1].outputs['Value'], seam_mask.inputs[1])
-        mask_out = seam_mask.outputs['Value']
+def put(nt, inp, v):
+    if isinstance(v, bpy.types.NodeSocket):
+        nt.links.new(v, inp)
     else:
-        brick = n(nt, 'ShaderNodeTexBrick', Scale=1.0 / slab, **{'Mortar Size': seam, 'Mortar Smooth': 0.1, 'Brick Width': 1.0, 'Row Height': 1.0, 'Bias': 0.0})
-        brick.inputs['Color1'].default_value = (1, 1, 1, 1)
-        brick.inputs['Color2'].default_value = (1, 1, 1, 1)
-        brick.inputs['Mortar'].default_value = (0, 0, 0, 1)
-        brick.offset = 0.5
-        L(co.outputs['Object'], brick.inputs['Vector'])
-        mask_out = brick.outputs['Fac']
-        inv = n(nt, 'ShaderNodeMath', _operation='SUBTRACT')
-        inv.inputs[0].default_value = 1.0
-        L(brick.outputs['Fac'], inv.inputs[1])
-        mask_out = inv.outputs['Value']
-    darken = n(nt, 'ShaderNodeMapRange', **{'To Min': 0.45, 'To Max': 1.0})
-    L(mask_out, darken.inputs['Value'])
-    mix = n(nt, 'ShaderNodeMix', _data_type='RGBA', _blend_type='MULTIPLY', Factor=1.0)
-    L(ramp.outputs['Color'], mix.inputs[6])
-    L(darken.outputs['Result'], mix.inputs[7])
-    L(mix.outputs[2], b.inputs['Base Color'])
-    rmap = n(nt, 'ShaderNodeMapRange', **{'To Min': rough - 0.06, 'To Max': rough + 0.08})
-    L(grain.outputs['Fac'], rmap.inputs['Value'])
-    L(rmap.outputs['Result'], b.inputs['Roughness'])
-    b.inputs['Metallic'].default_value = 0.0
-    bump = n(nt, 'ShaderNodeBump', Strength=0.5, Distance=0.004)
-    L(mask_out, bump.inputs['Height'])
-    L(bump.outputs['Normal'], b.inputs['Normal'])
+        inp.default_value = v
+
+
+def op(nt, operation, a, b=0.0, c=0.0):
+    m = nt.nodes.new('ShaderNodeMath')
+    m.operation = operation
+    for i, v in enumerate((a, b, c)):
+        put(nt, m.inputs[i], v)
+    return m.outputs[0]
+
+
+def remap(nt, x, f0, f1, t0, t1, smooth=False):
+    m = n(nt, 'ShaderNodeMapRange', Value=x, **{'From Min': f0, 'From Max': f1, 'To Min': t0, 'To Max': t1})
+    if smooth:
+        m.interpolation_type = 'SMOOTHSTEP'
+    m.clamp = True
+    return m.outputs['Result']
+
+
+def coords(nt):
+    return n(nt, 'ShaderNodeTexCoord').outputs['Object']
+
+
+def stretch(nt, vec, sx, sy, sz, offset=(0, 0, 0)):
+    m = n(nt, 'ShaderNodeMapping', Vector=vec)
+    m.inputs['Scale'].default_value = (sx, sy, sz)
+    m.inputs['Location'].default_value = offset
+    return m.outputs['Vector']
+
+
+def tex_noise(nt, vec, scale, detail=6.0, rough=0.55, distortion=0.0, out='Fac'):
+    return n(nt, 'ShaderNodeTexNoise', Vector=vec, Scale=scale, Detail=detail, Roughness=rough, Distortion=distortion).outputs[out]
+
+
+def mul(nt, col, k):
+    """Colour times a value (or another colour)."""
+    m = n(nt, 'ShaderNodeMix', _data_type='RGBA', _blend_type='MULTIPLY', Factor=1.0)
+    put(nt, m.inputs[6], col)
+    put(nt, m.inputs[7], k)
+    return m.outputs[2]
+
+
+def blend(nt, fac, a, b):
+    m = n(nt, 'ShaderNodeMix', _data_type='RGBA', Factor=fac)
+    put(nt, m.inputs[6], a)
+    put(nt, m.inputs[7], b)
+    return m.outputs[2]
+
+
+def veins(nt, vec, scale, width, distortion=2.0, detail=6.0):
+    """Marble veins: thin lines along a warped noise's contour."""
+    nz = tex_noise(nt, vec, scale, detail, 0.6, distortion)
+    d = op(nt, 'ABSOLUTE', op(nt, 'SUBTRACT', nz, 0.5))
+    return remap(nt, d, 0.0, width, 1.0, 0.0, smooth=True)
+
+
+def cracks(nt, vec, scale, width, amount):
+    """Hairline cracks: wiggly cell edges, only here and there."""
+    warp = tex_noise(nt, vec, scale * 3.0, 4.0, 0.5, 0.0, out='Color')
+    shifted = n(nt, 'ShaderNodeVectorMath', _operation='SUBTRACT', **{})
+    put(nt, shifted.inputs[0], warp)
+    shifted.inputs[1].default_value = (0.5, 0.5, 0.5)
+    scaled = n(nt, 'ShaderNodeVectorMath', _operation='SCALE')
+    nt.links.new(shifted.outputs[0], scaled.inputs[0])
+    scaled.inputs['Scale'].default_value = 0.45 / scale
+    moved = n(nt, 'ShaderNodeVectorMath', _operation='ADD')
+    put(nt, moved.inputs[0], vec)
+    nt.links.new(scaled.outputs[0], moved.inputs[1])
+    vo = n(nt, 'ShaderNodeTexVoronoi', _feature='DISTANCE_TO_EDGE', Scale=scale)
+    nt.links.new(moved.outputs[0], vo.inputs['Vector'])
+    line = remap(nt, vo.outputs['Distance'], 0.0, width * scale, 1.0, 0.0, smooth=True)
+    where = remap(nt, tex_noise(nt, stretch(nt, vec, 1, 1, 1, (17.3, 4.1, 9.7)), scale * 0.6, 3.0), 1.0 - amount, 1.06 - amount, 0.0, 1.0, smooth=True)
+    return op(nt, 'MULTIPLY', line, where)
+
+
+def finish(nt, b, color, rough, height, strength, distance=0.004):
+    put(nt, b.inputs['Base Color'], color)
+    put(nt, b.inputs['Roughness'], rough)
+    bump = n(nt, 'ShaderNodeBump', Strength=strength, Distance=distance, Height=height)
+    nt.links.new(bump.outputs['Normal'], b.inputs['Normal'])
+
+
+# ---------------------------------------------------------------- materials
+
+def travertine(name, rough, slab_w=2.4, slab_h=1.2):
+    """Cream travertine in big offset slabs: streaky bands, pores, faint
+    veins, hairline cracks and the odd darker slab."""
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    brick = n(nt, 'ShaderNodeTexBrick', Vector=co, Scale=1.0, Bias=0.0, **{'Mortar Size': 0.004, 'Mortar Smooth': 0.3, 'Brick Width': slab_w, 'Row Height': slab_h})
+    brick.offset = 0.5
+    brick.inputs['Color1'].default_value = (0.47, 0.41, 0.32, 1)
+    brick.inputs['Color2'].default_value = (0.56, 0.5, 0.4, 1)
+    brick.inputs['Mortar'].default_value = (0, 0, 0, 1)
+    seam = brick.outputs['Fac']
+    streak = tex_noise(nt, stretch(nt, co, 0.35, 5.0, 1.0), 2.2, 8.0, 0.55, 0.3)
+    pores_v = n(nt, 'ShaderNodeTexVoronoi', Vector=stretch(nt, co, 1.0, 4.5, 1.0), Scale=38.0).outputs['Distance']
+    pores = op(nt, 'MULTIPLY', remap(nt, pores_v, 0.0, 0.13, 1.0, 0.0, smooth=True), remap(nt, tex_noise(nt, co, 1.3, 2.0), 0.4, 0.7, 0.2, 1.0))
+    vein = veins(nt, co, 0.22, 0.012, 2.2)
+    crack = cracks(nt, co, 0.42, 0.004, 0.42)
+    col = mul(nt, brick.outputs['Color'], remap(nt, streak, 0.3, 0.72, 0.84, 1.07))
+    col = mul(nt, col, op(nt, 'SUBTRACT', 1.0, op(nt, 'MULTIPLY', pores, 0.4)))
+    col = mul(nt, col, op(nt, 'SUBTRACT', 1.0, op(nt, 'MULTIPLY', vein, 0.16)))
+    col = mul(nt, col, op(nt, 'SUBTRACT', 1.0, op(nt, 'MULTIPLY', crack, 0.6)))
+    col = mul(nt, col, op(nt, 'SUBTRACT', 1.0, op(nt, 'MULTIPLY', seam, 0.55)))
+    r = op(nt, 'ADD', rough, op(nt, 'ADD', op(nt, 'MULTIPLY', pores, 0.3), op(nt, 'MULTIPLY', crack, 0.4)))
+    height = op(nt, 'SUBTRACT', op(nt, 'MULTIPLY', streak, 0.05), op(nt, 'ADD', seam, op(nt, 'ADD', op(nt, 'MULTIPLY', crack, 0.7), op(nt, 'MULTIPLY', pores, 0.45))))
+    finish(nt, b, col, r, height, 0.6, 0.003)
     return m
 
 
-def steel_material():
-    m, nt, b = new_mat('frame')
-    b.inputs['Base Color'].default_value = (0.03, 0.033, 0.04, 1)
-    b.inputs['Metallic'].default_value = 0.9
-    b.inputs['Roughness'].default_value = 0.35
+def black_marble(name):
+    """Nero Marquina: near-black, white veins, laid in rings and spokes."""
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    cloud = remap(nt, tex_noise(nt, co, 0.6, 6.0), 0.3, 0.7, 0.75, 1.3)
+    base = mul(nt, (0.011, 0.011, 0.013, 1), cloud)
+    v1 = veins(nt, co, 0.2, 0.006, 2.6, 7.0)
+    v2 = op(nt, 'MULTIPLY', veins(nt, stretch(nt, co, 1, 1, 1, (5.1, 2.3, 0.7)), 0.85, 0.0035, 1.6, 5.0), 0.5)
+    crack = cracks(nt, co, 0.5, 0.0035, 0.5)
+    v = op(nt, 'MAXIMUM', op(nt, 'MAXIMUM', v1, v2), op(nt, 'MULTIPLY', crack, 0.7))
+    col = blend(nt, v, base, (0.34, 0.33, 0.305, 1))
+    # Rings and spokes, like stone laid round a centre.
+    sep = n(nt, 'ShaderNodeSeparateXYZ', Vector=co)
+    ang = op(nt, 'ARCTAN2', sep.outputs['Y'], sep.outputs['X'])
+    spokes = op(nt, 'PINGPONG', op(nt, 'MULTIPLY', ang, 36 / math.tau), 0.5)
+    ln = n(nt, 'ShaderNodeVectorMath', _operation='LENGTH')
+    put(nt, ln.inputs[0], co)
+    rings = op(nt, 'PINGPONG', op(nt, 'MULTIPLY', ln.outputs['Value'], 1 / 1.35), 0.5)
+    seam = op(nt, 'MAXIMUM', remap(nt, spokes, 0.0, 0.008, 1.0, 0.0), remap(nt, rings, 0.0, 0.004, 1.0, 0.0))
+    col = mul(nt, col, op(nt, 'SUBTRACT', 1.0, op(nt, 'MULTIPLY', seam, 0.7)))
+    rough = op(nt, 'ADD', 0.07, op(nt, 'ADD', op(nt, 'MULTIPLY', v, 0.08), op(nt, 'MULTIPLY', tex_noise(nt, co, 30.0, 4.0), 0.06)))
+    height = op(nt, 'SUBTRACT', 0.0, op(nt, 'ADD', seam, op(nt, 'MULTIPLY', crack, 0.5)))
+    finish(nt, b, col, rough, height, 0.5, 0.003)
     return m
 
 
-def concrete_material():
-    m, nt, b = new_mat('concrete')
-    L = nt.links.new
-    co = n(nt, 'ShaderNodeTexCoord')
-    nz = n(nt, 'ShaderNodeTexNoise', Scale=3.0, Detail=10.0)
-    L(co.outputs['Object'], nz.inputs['Vector'])
-    ramp = n(nt, 'ShaderNodeValToRGB')
-    ramp.color_ramp.elements[0].color = (0.05, 0.05, 0.055, 1)
-    ramp.color_ramp.elements[1].color = (0.09, 0.09, 0.095, 1)
-    L(nz.outputs['Fac'], ramp.inputs['Fac'])
-    L(ramp.outputs['Color'], b.inputs['Base Color'])
-    b.inputs['Roughness'].default_value = 0.8
+def concrete(name, board=0.25):
+    """Board-formed concrete: plank marks, tie holes, the odd crack."""
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    sep = n(nt, 'ShaderNodeSeparateXYZ', Vector=co)
+    z = sep.outputs['Z']
+    u = op(nt, 'MULTIPLY', op(nt, 'ARCTAN2', sep.outputs['Y'], sep.outputs['X']), R)
+    plank = op(nt, 'FLOOR', op(nt, 'DIVIDE', z, board))
+    rnd = n(nt, 'ShaderNodeTexWhiteNoise', _noise_dimensions='1D', W=plank).outputs['Value']
+    line = remap(nt, op(nt, 'PINGPONG', op(nt, 'DIVIDE', z, board), 0.5), 0.0, 0.025, 1.0, 0.0)
+    grain = tex_noise(nt, stretch(nt, co, 0.6, 0.6, 14.0), 3.0, 8.0, 0.6)
+    mott = tex_noise(nt, co, 0.8, 6.0, 0.6)
+    tu = op(nt, 'SUBTRACT', op(nt, 'FRACT', op(nt, 'DIVIDE', u, 0.9)), 0.5)
+    tv = op(nt, 'SUBTRACT', op(nt, 'FRACT', op(nt, 'DIVIDE', op(nt, 'ADD', z, 0.375), 0.75)), 0.5)
+    tie = remap(nt, op(nt, 'ADD', op(nt, 'MULTIPLY', tu, tu), op(nt, 'MULTIPLY', tv, tv)), 0.0, 0.0012, 1.0, 0.0, smooth=True)
+    crack = cracks(nt, co, 0.6, 0.004, 0.3)
+    tone = op(nt, 'MULTIPLY', remap(nt, rnd, 0, 1, 0.9, 1.08), remap(nt, mott, 0.3, 0.7, 0.86, 1.1))
+    tone = op(nt, 'MULTIPLY', tone, remap(nt, grain, 0.3, 0.7, 0.92, 1.05))
+    col = mul(nt, (0.29, 0.275, 0.255, 1), tone)
+    dark = op(nt, 'MAXIMUM', op(nt, 'MAXIMUM', op(nt, 'MULTIPLY', line, 0.35), op(nt, 'MULTIPLY', tie, 0.7)), op(nt, 'MULTIPLY', crack, 0.55))
+    col = mul(nt, col, op(nt, 'SUBTRACT', 1.0, dark))
+    height = op(nt, 'SUBTRACT', op(nt, 'MULTIPLY', grain, 0.3), op(nt, 'ADD', line, op(nt, 'ADD', tie, crack)))
+    finish(nt, b, col, 0.82, height, 0.45, 0.006)
     return m
 
 
-def emission(name, color, strength):
+def plaster(name, color=(0.62, 0.6, 0.56)):
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    tone = remap(nt, tex_noise(nt, co, 1.5, 6.0), 0.3, 0.7, 0.95, 1.04)
+    finish(nt, b, mul(nt, (*color, 1), tone), 0.88, tex_noise(nt, co, 40.0, 4.0), 0.05, 0.002)
+    return m
+
+
+def tiles(name):
+    """Pool mosaic: small glass tiles in aqua."""
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    brick = n(nt, 'ShaderNodeTexBrick', Vector=co, Scale=1.0, Bias=0.0, **{'Mortar Size': 0.002, 'Mortar Smooth': 0.2, 'Brick Width': 0.025, 'Row Height': 0.025})
+    brick.offset = 0.0
+    brick.inputs['Color1'].default_value = (0.04, 0.26, 0.3, 1)
+    brick.inputs['Color2'].default_value = (0.09, 0.38, 0.4, 1)
+    brick.inputs['Mortar'].default_value = (0.5, 0.52, 0.5, 1)
+    finish(nt, b, brick.outputs['Color'], 0.15, op(nt, 'SUBTRACT', 0.0, brick.outputs['Fac']), 0.4, 0.002)
+    return m
+
+
+def bronze(name):
+    """The two pillars framing the glass: dark bronze-clad, brushed."""
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    brush = tex_noise(nt, stretch(nt, co, 40.0, 40.0, 0.4), 4.0, 6.0)
+    patina = tex_noise(nt, co, 1.2, 6.0)
+    col = mul(nt, (0.16, 0.095, 0.055, 1), op(nt, 'MULTIPLY', remap(nt, brush, 0.3, 0.7, 0.85, 1.12), remap(nt, patina, 0.3, 0.7, 0.75, 1.15)))
+    # Metallic in the browser; flat here so its colour bakes.
+    finish(nt, b, col, 0.4, brush, 0.15, 0.002)
+    return m
+
+
+def flat(name, color, metal=0.0, rough=0.5):
+    m, nt, b = new_mat(name)
+    b.inputs['Base Color'].default_value = (*color, 1)
+    b.inputs['Metallic'].default_value = metal
+    b.inputs['Roughness'].default_value = rough
+    return m
+
+
+def limestone(name):
+    """The cliffs: pale layered limestone, weathered."""
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    sep = n(nt, 'ShaderNodeSeparateXYZ', Vector=co)
+    warp = tex_noise(nt, co, 0.08, 4.0)
+    strata = op(nt, 'SINE', op(nt, 'MULTIPLY', op(nt, 'MULTIPLY_ADD', warp, 6.0, sep.outputs['Z']), 1.7))
+    big = tex_noise(nt, co, 0.05, 6.0, 0.6)
+    grit = tex_noise(nt, co, 3.0, 10.0, 0.7)
+    ramp = n(nt, 'ShaderNodeValToRGB', Fac=op(nt, 'MULTIPLY_ADD', strata, 0.1, big))
+    ramp.color_ramp.elements[0].color = (0.2, 0.18, 0.145, 1)
+    ramp.color_ramp.elements[1].color = (0.5, 0.45, 0.37, 1)
+    streak = remap(nt, tex_noise(nt, stretch(nt, co, 1.0, 1.0, 0.15), 0.4, 5.0), 0.45, 0.75, 1.0, 0.6)
+    col = mul(nt, mul(nt, ramp.outputs['Color'], remap(nt, grit, 0.3, 0.7, 0.8, 1.1)), streak)
+    finish(nt, b, col, 0.9, op(nt, 'MULTIPLY_ADD', strata, 0.3, grit), 0.8, 0.08)
+    return m
+
+
+def garden(name):
+    """Ground round the house: grass, earth and stones."""
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    patch = tex_noise(nt, co, 0.3, 6.0, 0.6)
+    fine = tex_noise(nt, co, 6.0, 8.0, 0.7)
+    col = blend(nt, remap(nt, patch, 0.4, 0.62, 0.0, 1.0, smooth=True), (0.045, 0.075, 0.025, 1), (0.11, 0.085, 0.055, 1))
+    col = mul(nt, col, remap(nt, fine, 0.3, 0.7, 0.7, 1.2))
+    finish(nt, b, col, 0.95, fine, 0.6, 0.05)
+    return m
+
+
+def foliage(name, c0, c1):
+    m, nt, b = new_mat(name)
+    co = coords(nt)
+    v = tex_noise(nt, co, 4.0, 6.0, 0.7)
+    leaf = n(nt, 'ShaderNodeTexVoronoi', Vector=co, Scale=14.0).outputs['Distance']
+    col = mul(nt, blend(nt, v, (*c0, 1), (*c1, 1)), remap(nt, leaf, 0.0, 0.4, 0.55, 1.1))
+    finish(nt, b, col, 0.75, leaf, 0.6, 0.03)
+    return m
+
+
+def emission(name, color, strength, channel):
     m, nt, b = new_mat(name)
     b.inputs['Base Color'].default_value = (0, 0, 0, 1)
     b.inputs['Emission Color'].default_value = (*color, 1)
     b.inputs['Emission Strength'].default_value = strength
+    m['channel'] = channel
     return m
 
 
 def assign(ob, mat):
     ob.data.materials.clear()
     ob.data.materials.append(mat)
+    return ob
+
+
+# ---------------------------------------------------------------- terrain
+
+def cliff_band(name, rows=44, cols=520):
+    """The cliff face all round, from the lip down into the sea: steep,
+    ledged, leaning out a little towards the bottom. Faces point out."""
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    grid = []
+    for j in range(rows + 1):
+        t = j / rows
+        z = -0.2 + (SEA - 3.0 + 0.2) * t
+        row = []
+        for i in range(cols):
+            a = math.tau * i / cols
+            p = Vector((math.cos(a) * 9, math.sin(a) * 9, z * 0.3))
+            r = cliff_edge(a) + 0.15 + 6.0 * t ** 1.6 + (2.2 * fbm(p * 0.7) + 0.6 * fbm(p * 3.0, 4)) * min(1.0, t * 6)
+            strata = z * 0.9 + 1.2 * fbm(p * 0.5, 3)
+            r += 0.5 * abs((strata % 2.0) - 1.0) ** 3 * min(1.0, t * 8)
+            row.append(bm.verts.new((math.cos(a) * r, math.sin(a) * r, z)))
+        grid.append(row)
+    for j in range(rows):
+        for i in range(cols):
+            k = (i + 1) % cols
+            bm.faces.new((grid[j][i], grid[j][k], grid[j + 1][k], grid[j + 1][i]))
+    bm.normal_update()
+    bm.to_mesh(me)
+    bm.free()
+    ob = link(bpy.data.objects.new(name, me))
+    for p in ob.data.polygons:
+        p.use_smooth = True
+    return ob
+
+
+def plants(leaf_a, leaf_b, trunk):
+    """Shrubs along the terrace's ends and round the house, a few trees."""
+    rng = np.random.default_rng(7)
+    shrubs, crowns, trunks = [], [], []
+    for i in range(70):
+        side = rng.choice([-1, 1])
+        if i < 40:  # either end of the terrace
+            a = (DECK_A0 - rng.uniform(0.02, 0.5)) if side < 0 else (DECK_A1 + rng.uniform(0.02, 0.5))
+            r = rng.uniform(R + 1.5, cliff_edge(a) - 1.2)
+        else:  # round the back
+            a = rng.uniform(DECK_A1 + 0.5, DECK_A0 + math.tau - 0.5)
+            r = rng.uniform(R + 2.0, R + 12.0)
+        s = rng.uniform(0.35, 0.95)
+        shrubs.append(blob(f'shrub{i}', (r * math.cos(a), r * math.sin(a), -0.2 + s * 0.4), s, rng.uniform(0.55, 0.85), i * 1.7))
+    for i in range(9):
+        a = (DECK_A0 - rng.uniform(0.12, 0.6)) if i % 2 else (DECK_A1 + rng.uniform(0.12, 0.6))
+        if i > 6:
+            a = rng.uniform(DECK_A1 + 0.6, DECK_A0 + math.tau - 0.6)
+        r = rng.uniform(R + 3.0, min(R + 9.0, cliff_edge(a) - 2.0))
+        x, y = r * math.cos(a), r * math.sin(a)
+        h = rng.uniform(3.8, 6.5)
+        trunks.append(box(f'trunk{i}', (0.12, 0.12, h / 2), (x, y, -0.2 + h / 2), rng.uniform(0, 3), bevel=0.04, shape=lambda x_, y_, z_: (x_ * (0.7 if z_ > 0 else 1.2), y_ * (0.7 if z_ > 0 else 1.2), z_)))
+        for k in range(3):
+            off = Vector((rng.uniform(-1, 1), rng.uniform(-1, 1), 0)) * 1.1
+            crowns.append(blob(f'crown{i}_{k}', (x + off.x, y + off.y, -0.2 + h - 0.3 + rng.uniform(-0.5, 0.6)), rng.uniform(1.1, 1.8), 0.62, i * 3.1 + k))
+    for ob in shrubs:
+        assign(ob, leaf_a)
+    for ob in crowns:
+        assign(ob, leaf_b)
+    for ob in trunks:
+        assign(ob, trunk)
+    return join('plants', shrubs + crowns + trunks)
 
 
 # ---------------------------------------------------------------- build
@@ -427,102 +588,207 @@ def assign(ob, mat):
 def build():
     reset()
     sc = bpy.context.scene
-    rock = rock_material()
-    floor_m = stone_material('floor_m', (0.028, 0.03, 0.036), (0.045, 0.047, 0.055), 0.22, 2.4)
-    stage_m = stone_material('stage_m', (0.02, 0.022, 0.028), (0.034, 0.036, 0.044), 0.16, 1.35, radial=True)
-    frame = steel_material()
-    concrete = concrete_material()
-    warm = emission('warm', (1.0, 0.72, 0.45), 18.0)
-    cool = emission('cool', (0.55, 0.65, 1.0), 10.0)
-    up = emission('uplight', (1.0, 0.68, 0.4), 30.0)
+    floor_m = travertine('floor_m', 0.1)
+    deck_m = travertine('deck_m', 0.42, 2.8, 1.4)
+    stage_m = black_marble('stage_m')
+    wall_m = concrete('wall_m')
+    ceil_m = plaster('ceiling_m')
+    tile_m = tiles('pool_m')
+    pillar_m = bronze('pillar_m')
+    frame_m = flat('frame_m', (0.018, 0.018, 0.02), 0.85, 0.3)
+    rail_m = flat('rail_m', (0.62, 0.62, 0.64), 1.0, 0.18)
+    rock_m = limestone('cliff_m')
+    ground_m = garden('terrain_m')
+    leaf_a = foliage('leaf_a', (0.02, 0.06, 0.015), (0.06, 0.11, 0.03))
+    leaf_b = foliage('leaf_b', (0.025, 0.055, 0.02), (0.07, 0.1, 0.035))
+    bark = flat('bark', (0.07, 0.05, 0.035), 0.0, 0.9)
+    warm = emission('warm', (1.0, 0.72, 0.45), 14.0, 'warm')
+    cool = emission('cool', (0.55, 0.65, 1.0), 10.0, 'cool')
 
     parts = {}
-    for name, (a0, a1) in ROCK_PARTS.items():
-        ob = rock_band(name, a0, a1)
-        assign(ob, rock)
-        parts[name] = ob
-    ceil = rock_ceiling()
-    assign(ceil, rock)
-    parts['ceiling'] = ceil
+    # Inside: travertine floor round the black marble stage.
+    parts['floor'] = assign(sector('floor', STAGE_R - 0.05, R + 0.2, -0.05, 0.0, 0, math.tau, bevel=0.0, res=192), floor_m)
+    parts['stage'] = assign(sector('stage', 0, STAGE_R, -0.02, STAGE_H, 0, math.tau, bevel=0.03, res=192), stage_m)
 
-    floor = sector('floor', STAGE_R - 0.05, R + 1.2, -0.05, 0.0, 0, math.tau, bevel=0.0, res=192)
-    assign(floor, floor_m)
-    parts['floor'] = floor
-    stage = sector('stage', 0, STAGE_R, -0.02, STAGE_H, 0, math.tau, bevel=0.03, res=192)
-    assign(stage, stage_m)
-    parts['stage'] = stage
+    # The back half: board-formed concrete, in three parts so the overview
+    # can cut the one nearest the camera away.
+    walls = {
+        'wall_left': (GLASS_A1, math.radians(225)),
+        'wall_front': (math.radians(225), math.radians(315)),
+        'wall_right': (math.radians(315), math.tau),
+    }
+    for name, (a0, a1) in walls.items():
+        parts[name] = assign(sector(name, R, R + WALL_T, 0.0, H + 0.05, a0, a1, bevel=0.0), wall_m)
 
-    # The window wall: sill, header, mullions and a transom, in steel and concrete.
-    a0, a1 = FORWARD - WIN_SPAN / 2, FORWARD + WIN_SPAN / 2
-    sill = sector('sill', WIN_R - 0.25, WIN_R + 0.45, -0.02, SILL, a0, a1, bevel=0.02)
-    head = sector('head', WIN_R - 0.35, WIN_R + 0.45, HEAD, H + 0.7, a0, a1, bevel=0.02)
-    for ob in (sill, head):
-        assign(ob, concrete)
+    # Roof: one slab, the ceiling inside and a cantilever out over the
+    # terrace, with a raised coffer over the console.
+    outline = arc(roof_edge, 0, math.tau, 361)[:-1]
+    hole = arc(COFFER_R, math.tau, 0, 129)[:-1]
+    roof = slab('roof_slab', [outline, hole], H, H + 0.55, bevel=0.05)
+    coffer_wall = sector('coffer_wall', COFFER_R, COFFER_R + 0.3, H + 0.5, H + 1.2, 0, math.tau, bevel=0.0, res=128)
+    coffer_cap = sector('coffer_cap', 0, COFFER_R + 0.3, H + 1.2, H + 1.35, 0, math.tau, bevel=0.0, res=128)
+    parts['roof'] = assign(join('roof', [roof, coffer_wall, coffer_cap]), ceil_m)
+
+    # The glass wall's frame: slim black mullions, a channel top and bottom,
+    # two black trims across the ceiling; the rail on the terrace.
+    step = (GLASS_A1 - GLASS_A0) / BAYS
     frames = []
-    for i in range(MULLIONS + 1):
-        a = a0 + (a1 - a0) * i / MULLIONS
-        mull = box(f'mull{i}', (0.18, 0.09, (HEAD - SILL) / 2), (WIN_R * math.cos(a), WIN_R * math.sin(a), (HEAD + SILL) / 2), a, bevel=0.015)
-        assign(mull, frame)
-        frames.append(mull)
-    transom = sector('transom', WIN_R - 0.12, WIN_R + 0.12, 2.75, 2.88, a0, a1, bevel=0.01)
-    assign(transom, frame)
-    window = join('window', [sill, head, transom, *frames])
-    parts['window'] = window
+    for i in range(BAYS + 1):
+        a = GLASS_A0 + step * i
+        frames.append(box(f'mull{i}', (0.07, 0.03, H / 2), (R * math.cos(a), R * math.sin(a), H / 2), a, bevel=0.008))
+    for i in range(BAYS):
+        if i == DOOR:
+            continue
+        a0, a1 = GLASS_A0 + step * i, GLASS_A0 + step * (i + 1)
+        frames.append(sector(f'sill{i}', R - 0.06, R + 0.06, 0.0, 0.05, a0, a1, bevel=0.005, res=24))
+    frames.append(sector('head', R - 0.07, R + 0.07, H - 0.07, H, GLASS_A0, GLASS_A1, bevel=0.005))
+    for r, a0, a1 in ((10.6, math.radians(200), math.radians(340)), (12.2, math.radians(30), math.radians(150))):
+        frames.append(sector(f'trim{r}', r - 0.05, r + 0.05, H - 0.03, H, a0, a1, bevel=0.005))
+    parts_frames = assign(join('frames', frames), frame_m)
 
-    # Lights that are part of the room: ceiling coves, uplights on the rock.
-    lights = []
-    for r, mat, nm in ((2.4, cool, 'emit_halo'), (6.0, warm, 'cove_warm')):
-        ring = sector(nm, r - 0.05, r + 0.05, H + 0.1, H + 0.2, 0, math.tau, bevel=0.01, res=160)
-        assign(ring, mat)
-        lights.append(ring)
-    ups = []
+    rail = []
+    n_posts = int((DECK_A1 - DECK_A0) * RAIL_R / 2.6)
+    for i in range(n_posts + 1):
+        a = DECK_A0 + (DECK_A1 - DECK_A0) * i / n_posts
+        rail.append(box(f'post{i}', (0.025, 0.025, 0.54), (RAIL_R * math.cos(a), RAIL_R * math.sin(a), 0.54), a, bevel=0.006))
+    rail.append(sector('handrail', RAIL_R - 0.03, RAIL_R + 0.03, 1.04, 1.09, DECK_A0, DECK_A1, bevel=0.02))
+    parts_rail = assign(join('rail', rail), rail_m)
+
+    # Bronze pillars where the glass meets the concrete, leaning out a little.
+    pillars = []
+    for a in (GLASS_A0, GLASS_A1):
+        def lean(x, y, z):
+            return (x + (0.45 if z > 0 else 0.0), y * (1.0 if z > 0 else 0.72), z)
+        pillars.append(box(f'pillar{a:.1f}', (0.55, 0.42, (H + 0.3) / 2), ((R + 0.25) * math.cos(a), (R + 0.25) * math.sin(a), (H + 0.3) / 2), a, bevel=0.03, shape=lean))
+    parts['pillars'] = assign(join('pillars', pillars), pillar_m)
+
+    # Terrace, pool and garden.
+    deck_outline = arc(R, DECK_A0, DECK_A1, 160) + arc(DECK_R, DECK_A1, DECK_A0, 220)
+    pool_hole = arc(POOL_R1, POOL_A1, POOL_A0, 80) + arc(POOL_R0, POOL_A0, POOL_A1, 70)
+    parts['deck'] = assign(slab('deck', [deck_outline, pool_hole], -0.05, 0.0), deck_m)
+    pool = [
+        sector('pool_floor', POOL_R0, POOL_R1, -POOL_D - 0.1, -POOL_D, POOL_A0, POOL_A1, bevel=0.0),
+        sector('pool_in', POOL_R0 - 0.12, POOL_R0, -POOL_D - 0.1, 0.0, POOL_A0, POOL_A1, bevel=0.0),
+        sector('pool_out', POOL_R1, POOL_R1 + 0.12, -POOL_D - 0.1, -0.06, POOL_A0, POOL_A1, bevel=0.0),
+    ]
+    for a, d in ((POOL_A0, -1), (POOL_A1, 1)):
+        e = 0.12 / POOL_R0
+        pool.append(sector(f'pool_end{d}', POOL_R0 - 0.12, POOL_R1 + 0.12, -POOL_D - 0.1, 0.0, min(a, a + d * e), max(a, a + d * e), bevel=0.0, res=4))
+    parts['pool'] = assign(join('pool', pool), tile_m)
+
+    land_outline = arc(cliff_edge, 0, math.tau, 361)[:-1]
+    land_hole = arc(DECK_R, DECK_A0, DECK_A1, 160) + arc(R + WALL_T, DECK_A1, DECK_A0 + math.tau, 200)
+    land_hole.reverse()
+    terrain = assign(slab('terrain', [land_outline, land_hole], -0.45, -0.2), ground_m)
+    cliff = assign(cliff_band('cliff'), rock_m)
+    greenery = plants(leaf_a, leaf_b, bark)
+
+    # The house's lights.
+    led = []
+    # A cove of light round the top of the glass and the walls.
+    led.append(sector('cove', R - 0.12, R - 0.08, H - 0.075, H - 0.045, 0, math.tau, bevel=0.0, res=256))
+    # Under the roof's lip, and along the terrace's edge.
+    lip = arc(lambda a: roof_edge(a) - 0.1, 0, math.tau, 361)[:-1]
+    lip_in = arc(lambda a: roof_edge(a) - 0.16, math.tau, 0, 361)[:-1]
+    led.append(slab('lip', [lip, lip_in], H - 0.02, H + 0.005))
+    led.append(sector('deck_edge', RAIL_R - 0.24, RAIL_R - 0.2, 0.0, 0.02, DECK_A0, DECK_A1, bevel=0.0))
+    # Recessed downlights, each a real spot in the bake.
+    spots = []
+    for ring, count in ((6.6, 10), (11.6, 18)):
+        for i in range(count):
+            a = math.tau * (i + 0.5) / count
+            spots.append(((ring * math.cos(a), ring * math.sin(a), H - 0.01), None, 110, 70))
+    for i in range(11):
+        a = FORWARD + math.radians(-60 + 12 * i)
+        rr = (R + roof_edge(a)) / 2 + 0.4
+        if roof_edge(a) - R > 2.2:
+            spots.append(((rr * math.cos(a), rr * math.sin(a), H - 0.01), None, 140, 80))
+    # Uplights grazing the concrete.
     for i in range(14):
-        a = FORWARD + WIN_SPAN / 2 + 0.25 + (math.tau - WIN_SPAN - 0.5) * i / 13
-        x, y = (R - 1.6) * math.cos(a), (R - 1.6) * math.sin(a)
-        u = box(f'up{i}', (0.09, 0.09, 0.012), (x, y, 0.012), a, bevel=0.006)
-        assign(u, up)
-        ups.append(u)
-        # The light itself: a warm spot grazing up the rock face.
-        sl = bpy.data.lights.new(f'upspot{i}', 'SPOT')
-        sl.energy = 900
-        sl.color = (1.0, 0.7, 0.42)
-        sl.spot_size = math.radians(58)
-        sl.spot_blend = 0.6
-        sl.shadow_soft_size = 0.05
-        so = link(bpy.data.objects.new(f'upspot{i}', sl))
-        so.location = (x, y, 0.05)
-        aim = Vector((R * math.cos(a), R * math.sin(a), 4.2)) - so.location
-        so.rotation_euler = aim.to_track_quat('-Z', 'Y').to_euler()
-    uplights = join('uplights', ups)
-    edge = sector('emit_stage', STAGE_R + 0.005, STAGE_R + 0.02, 0.05, 0.08, 0, math.tau, bevel=0.003, res=192)
-    assign(edge, cool)
-    lights += [uplights, edge]
+        a = GLASS_A1 + 0.18 + (math.pi - 0.36) * i / 13
+        x, y = (R - 0.45) * math.cos(a), (R - 0.45) * math.sin(a)
+        spots.append(((x, y, 0.03), Vector((R * math.cos(a), R * math.sin(a), 3.6)), 400, 50))
+        led.append(box(f'up{i}', (0.09, 0.09, 0.012), (x, y, 0.012), a, bevel=0.006))
+    for i, (loc, aim, energy, angle) in enumerate(spots):
+        sl = bpy.data.lights.new(f'spot{i}', 'SPOT')
+        sl.energy = energy
+        sl.color = (1.0, 0.74, 0.5)
+        sl.spot_size = math.radians(angle)
+        sl.spot_blend = 0.55
+        sl.shadow_soft_size = 0.04
+        sl['channel'] = 'warm'
+        so = link(bpy.data.objects.new(f'spot{i}', sl))
+        so.location = loc
+        if aim is not None:
+            so.rotation_euler = (aim - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
+        if loc[2] > 1:
+            can = sector(f'can{i}', 0, 0.07, H - 0.012, H - 0.004, 0, math.tau, bevel=0.0, res=16)
+            can.location.x, can.location.y = loc[0], loc[1]
+            led.append(can)
+    led_warm = assign(join('led_warm', led), warm)
+    halo = assign(sector('emit_halo', COFFER_R - 0.08, COFFER_R - 0.04, H + 0.04, H + 0.08, 0, math.tau, bevel=0.0, res=160), cool)
+    edge = assign(sector('emit_stage', STAGE_R + 0.005, STAGE_R + 0.02, 0.05, 0.08, 0, math.tau, bevel=0.003, res=192), cool)
+    # The console's screens and the zones' holograms light the stage.
+    glow = bpy.data.lights.new('stage_glow', 'AREA')
+    glow.energy = 220
+    glow.size = 6
+    glow.color = (0.55, 0.62, 1.0)
+    glow['channel'] = 'cool'
+    go = link(bpy.data.objects.new('stage_glow', glow))
+    go.location = (0, 0, H - 0.4)
 
-    glass = sector('glass', WIN_R - 0.01, WIN_R + 0.01, SILL, HEAD, a0, a1, bevel=0.0)
+    # Glass: the wall (its middle bay open) and the balustrade.
+    panes = []
+    for i in range(BAYS):
+        if i == DOOR:
+            continue
+        a0, a1 = GLASS_A0 + step * i + 0.002, GLASS_A0 + step * (i + 1) - 0.002
+        panes.append(sector(f'pane{i}', R - 0.01, R + 0.01, 0.05, H - 0.07, a0, a1, bevel=0.0, res=24))
+    panes.append(sector('balustrade', RAIL_R - 0.01, RAIL_R + 0.01, 0.06, 1.04, DECK_A0, DECK_A1, bevel=0.0))
+    glass = join('glass', panes)
 
-    # Moonlight from outside the window; blue-hour sky behind it.
+    # Daylight: the sky all round (blue channel in the light bake).
     world = bpy.data.worlds.new('sky')
     sc.world = world
+    if not world.node_tree.nodes.get('Background'):
+        out = world.node_tree.nodes.new('ShaderNodeOutputWorld')
+        world.node_tree.links.new(world.node_tree.nodes.new('ShaderNodeBackground').outputs[0], out.inputs['Surface'])
+    unlit = {'frames': parts_frames, 'rail': parts_rail, 'terrain': terrain, 'cliff': cliff, 'plants': greenery}
+    emitters = [led_warm, halo, edge]
+    return parts, unlit, emitters, glass
+
+
+# ---------------------------------------------------------------- light-bake mode
+
+def light_bake_mode():
+    """Grey every surface and give each kind of light its own channel."""
+    for m in bpy.data.materials:
+        nt = m.node_tree
+        b = nt.nodes.get('Principled BSDF') if nt else None
+        if b is None:
+            continue
+        if 'channel' in m:
+            b.inputs['Emission Color'].default_value = (1, 0, 0, 1) if m['channel'] == 'warm' else (0, 1, 0, 1)
+            continue
+        bc = b.inputs['Base Color']
+        if bc.is_linked:
+            src = bc.links[0].from_socket
+            bw = nt.nodes.new('ShaderNodeRGBToBW')
+            nt.links.new(src, bw.inputs[0])
+            nt.links.new(bw.outputs[0], bc)
+        else:
+            c = bc.default_value
+            y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+            bc.default_value = (y, y, y, 1)
+        b.inputs['Metallic'].default_value = 0.0
+    for lamp in bpy.data.lights:
+        lamp.color = (1, 0, 0) if lamp.get('channel') == 'warm' else (0, 1, 0)
+    world = bpy.context.scene.world
     bg = world.node_tree.nodes.get('Background')
-    if bg:
-        bg.inputs['Color'].default_value = (0.03, 0.05, 0.11, 1)
-        bg.inputs['Strength'].default_value = 1.6
-    moon = bpy.data.lights.new('moon', 'SUN')
-    moon.energy = 1.4
-    moon.color = (0.62, 0.72, 1.0)
-    moon.angle = math.radians(0.6)
-    mo = link(bpy.data.objects.new('moon', moon))
-    d = Vector((math.cos(MOON_AZ) * math.cos(MOON_ELEV), math.sin(MOON_AZ) * math.cos(MOON_ELEV), math.sin(MOON_ELEV)))
-    mo.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler()
-    # A soft cool light over the stage, as the console's monitors and the
-    # zones would give off.
-    pool = bpy.data.lights.new('pool', 'AREA')
-    pool.energy = 260
-    pool.size = 6
-    pool.color = (0.55, 0.62, 1.0)
-    po = link(bpy.data.objects.new('pool', pool))
-    po.location = (0, 0, 6.5)
-    return parts, lights, glass
+    for l in list(bg.inputs['Color'].links):  # the preview's sunset sky
+        world.node_tree.links.remove(l)
+    bg.inputs['Color'].default_value = (0, 0, 1, 1)
+    bg.inputs['Strength'].default_value = 1.0
 
 
 # ---------------------------------------------------------------- bake
@@ -593,7 +859,7 @@ def denoise(color, albedo, normal):
         return out
 
 
-def save(arr, name, size, srgb, quality=90):
+def save(arr, name, size, srgb, quality=90, subsampling=-1):
     """Write ultra (full), high (half) and low (quarter) versions."""
     a = np.clip(arr, 0, 1)
     if srgb:
@@ -601,33 +867,40 @@ def save(arr, name, size, srgb, quality=90):
     im = Image.fromarray(np.clip(a * 255 + 0.5, 0, 255).astype(np.uint8))
     for level, div in (('ultra', 1), ('high', 2), ('low', 4)):
         s = max(128, size // div)
-        (im if s == im.width else im.resize((s, s), Image.LANCZOS)).save(os.path.join(OUT, f'{name}_{level}.jpg'), quality=quality, optimize=True)
+        (im if s == im.width else im.resize((s, s), Image.LANCZOS)).save(os.path.join(OUT, f'{name}_{level}.jpg'), quality=quality, optimize=True, subsampling=subsampling)
 
 
-def bake_surface(ob, detail_size, light_size, normal_map=False):
+def bake_detail(ob, size, normal_map):
     sc = bpy.context.scene
-    unwrap(ob)
     sc.cycles.samples = 1
-    albedo = bake(ob, 'albedo', detail_size, type='DIFFUSE', pass_filter={'COLOR'})
+    albedo = bake(ob, 'albedo', size, type='DIFFUSE', pass_filter={'COLOR'})
     sc.world.light_settings.distance = 0.35
     sc.cycles.samples = 24
-    ao = bake(ob, 'ao', detail_size, type='AO')[..., :1]
+    ao = bake(ob, 'ao', size, type='AO')[..., :1]
     # Detail: colour with its crevices darkened. (Albedo is linear here;
     # it's saved as sRGB.)
-    save(albedo * (0.35 + 0.65 * ao), f'{ob.name}_detail', detail_size, srgb=True)
+    save(albedo * (0.35 + 0.65 * ao), f'{ob.name}_detail', size, srgb=True)
     if normal_map:
         sc.cycles.samples = 1
-        nrm = bake(ob, 'normal', detail_size, type='NORMAL', normal_space='TANGENT')
-        save(nrm, f'{ob.name}_normal', detail_size, srgb=False, quality=94)
-    # Light: everything falling on the surface, bounced, at lightmap size.
+        nrm = bake(ob, 'normal', size, type='NORMAL', normal_space='TANGENT')
+        save(nrm, f'{ob.name}_normal', size, srgb=False, quality=94)
+    print('detail', ob.name, flush=True)
+
+
+def bake_light(ob, size):
+    """Light falling on the surface, bounced: red warm, green JARVIS, blue sky."""
+    sc = bpy.context.scene
     sc.cycles.samples = SAMPLES
-    light = bake(ob, 'light', light_size, float_buffer=True, type='DIFFUSE', pass_filter={'DIRECT', 'INDIRECT'})
+    light = bake(ob, 'light', size, float_buffer=True, type='DIFFUSE', pass_filter={'DIRECT', 'INDIRECT'})
     sc.cycles.samples = 1
-    alb_small = bake(ob, 'albedo', light_size, type='DIFFUSE', pass_filter={'COLOR'})
-    nrm_ws = bake(ob, 'normal', light_size, type='NORMAL', normal_space='OBJECT')
-    light = denoise(np.clip(light / LM_SCALE, 0, 1), np.full_like(alb_small, 0.5), nrm_ws * 2 - 1)
-    save(light, f'{ob.name}_light', light_size, srgb=True, quality=92)
-    print('baked', ob.name, flush=True)
+    nrm_ws = bake(ob, 'normal', size, type='NORMAL', normal_space='OBJECT')
+    for c, label in enumerate(('warm', 'jarvis', 'sky')):
+        ch = light[..., c]
+        print(f'  {label}: p50 {np.percentile(ch, 50):.3f}  p99 {np.percentile(ch, 99):.3f}  max {ch.max():.3f}', flush=True)
+    light = denoise(np.clip(light / LM_SCALE, 0, 1), np.full_like(light, 0.5), nrm_ws * 2 - 1)
+    # 4:4:4 so the three channels don't bleed into each other.
+    save(light, f'{ob.name}_light', size, srgb=True, quality=92, subsampling=0)
+    print('light', ob.name, flush=True)
 
 
 def export(objs):
@@ -647,51 +920,89 @@ def export(objs):
 
 
 def preview():
-    """A full Cycles render from the console's chair, looking out of the window."""
+    """A Cycles render from the console's chair at sunset, looking out."""
     sc = bpy.context.scene
-    glass = bpy.data.objects.get('glass')
-    if glass:
-        glass.hide_render = True
+    world = sc.world
+    nt = world.node_tree
+    bg = nt.nodes.get('Background')
+    try:
+        sky = nt.nodes.new('ShaderNodeTexSky')
+        sky.sun_elevation = math.radians(4)
+        sky.sun_rotation = math.radians(100)
+        nt.links.new(sky.outputs['Color'], bg.inputs['Color'])
+        bg.inputs['Strength'].default_value = 0.25
+    except Exception as e:
+        print('  no sky texture:', e, flush=True)
+        bg.inputs['Color'].default_value = (0.35, 0.3, 0.32, 1)
+        bg.inputs['Strength'].default_value = 0.4
+    sea = link(bpy.data.objects.new('sea', bpy.data.meshes.new('sea')))
+    bm = bmesh.new()
+    bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=900)
+    bm.to_mesh(sea.data)
+    bm.free()
+    sea.location.z = SEA
+    assign(sea, flat('sea_m', (0.01, 0.03, 0.05), 0.0, 0.05))
     cam = link(bpy.data.objects.new('cam', bpy.data.cameras.new('cam')))
-    cam.data.lens = 24
-    cam.location = (0, -4.4, 2.5)
-    cam.rotation_euler = (Vector((0, 8, 1.6)) - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    cam.data.lens = 22
+    cam.location = (0, -4.6, 2.7)
+    look = Vector((0, 30, 0.6))
+    if '--aerial' in sys.argv:  # from out over the sea, above the roof
+        cam.location = (-38, 62, 26)
+        look = Vector((0, 4, -4))
+    cam.rotation_euler = (look - cam.location).to_track_quat('-Z', 'Y').to_euler()
     sc.camera = cam
-    sc.render.resolution_x = 1600
-    sc.render.resolution_y = 900
+    sc.render.resolution_x = arg('--preview-width', 1600)
+    sc.render.resolution_y = sc.render.resolution_x * 9 // 16
     sc.cycles.samples = arg('--preview-samples', 128)
     sc.cycles.use_denoising = True
     sc.view_settings.view_transform = 'AgX'
     sc.render.filepath = os.path.join(OUT, 'lair-preview.png')
     bpy.ops.render.render(write_still=True)
+    bpy.data.objects.remove(sea)
+    bpy.data.objects.remove(cam)
+    bg.inputs['Strength'].default_value = 1.0
     print('preview written', flush=True)
 
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    parts, lights, glass = build()
+    parts, unlit, emitters, glass = build()
     sc = bpy.context.scene
     sc.render.engine = 'CYCLES'
     sc.cycles.device = 'CPU'
     sc.cycles.max_bounces = 6
     sc.cycles.diffuse_bounces = 4
-    # The glass is drawn live; for the bake the window is open.
-    glass.hide_render = True
-    plan = [
-        ('floor', SIZE, LIGHT, True),
-        ('stage', SIZE, LIGHT, True),
-        ('rock_left', SIZE // 2, LIGHT // 2, False),
-        ('rock_front', SIZE // 2, LIGHT // 2, False),
-        ('rock_right', SIZE // 2, LIGHT // 2, False),
-        ('window', SIZE // 2, LIGHT // 2, False),
-        ('ceiling', SIZE // 2, LIGHT // 2, False),
-    ]
-    for name, ds, ls, nm in plan:
-        bake_surface(parts[name], max(256, ds), max(128, ls), nm)
-    glass.hide_render = False
-    export([*parts.values(), *lights, glass])
-    if PREVIEW:
+    glass.hide_render = True  # drawn live; for the bakes the glass is open
+    if (PREVIEW or PREVIEW_ONLY) and not LIGHT_ONLY:
         preview()
+    if PREVIEW_ONLY:
+        return
+    plan = {
+        'floor': (SIZE, LIGHT, True),
+        'stage': (SIZE, LIGHT, True),
+        'deck': (SIZE, LIGHT, True),
+        'pool': (SIZE // 4, LIGHT // 4, False),
+        'wall_left': (SIZE // 2, LIGHT // 2, True),
+        'wall_front': (SIZE // 2, LIGHT // 2, True),
+        'wall_right': (SIZE // 2, LIGHT // 2, True),
+        'roof': (SIZE // 2, LIGHT // 2, False),
+        'pillars': (SIZE // 4, LIGHT // 4, False),
+    }
+    detail_only = {'terrain': (SIZE // 2, True), 'cliff': (SIZE // 2, True), 'plants': (SIZE // 4, False)}
+    for name in plan:
+        unwrap(parts[name])
+    for name in detail_only:
+        unwrap(unlit[name])
+    if not LIGHT_ONLY:
+        for name, (ds, _, nm) in plan.items():
+            bake_detail(parts[name], max(256, ds), nm)
+        for name, (ds, nm) in detail_only.items():
+            bake_detail(unlit[name], max(256, ds), nm)
+    light_bake_mode()
+    for name, (_, ls, _) in plan.items():
+        bake_light(parts[name], max(128, ls))
+    glass.hide_render = False
+    export([*parts.values(), *unlit.values(), *emitters, glass])
 
 
 main()

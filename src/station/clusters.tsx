@@ -1,8 +1,9 @@
 import { useMemo, useRef, type ReactNode } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { motion, reactorState, useCanvasTex, useMaterials } from './shared'
-import { useStation, type Sel } from './stationStore'
+import { useStation } from './stationStore'
+import { boxEdges, holo, steel, useEmphasis, useHit } from './holo'
 import { PAD, STATUS, ZONE, type ZoneId } from './layout'
 import { Blob } from './floor'
 import type { StationModel, ZoneModel } from './model'
@@ -18,45 +19,6 @@ const DECK = 0.16
 const PAD_H = 0.2
 export const PAD_TOP = DECK + PAD_H
 
-
-/** Brushed steel for the hardware on the pads. */
-const steel = new THREE.MeshStandardMaterial({ color: '#4a5162', metalness: 0.75, roughness: 0.3, envMapIntensity: 1.2 })
-
-/**
- * The data itself is projected light, not objects: translucent, additive,
- * with a brighter outline — the same holographic look as the console's
- * monitors, standing over solid metal projectors.
- */
-function holo(color: string, opacity = 0.28) {
-  return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
-}
-const boxEdges = (w: number, h: number, d: number) => new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d))
-
-/** Pointer handlers that hover and select a thing. */
-function useHit(sel: Sel) {
-  const hover = useStation((s) => s.hover)
-  const select = useStation((s) => s.select)
-  return {
-    onPointerOver: (e: ThreeEvent<PointerEvent>) => {
-      e.stopPropagation()
-      hover(sel)
-      document.body.style.cursor = 'pointer'
-    },
-    onPointerOut: () => {
-      hover(null)
-      document.body.style.cursor = ''
-    },
-    onClick: (e: ThreeEvent<MouseEvent>) => {
-      e.stopPropagation()
-      select(sel)
-    },
-  }
-}
-
-/** Is this thing (or its zone) the selected or hovered one? */
-function useEmphasis(kind: Sel['kind'], id: string) {
-  return useStation((s) => (s.selected?.kind === kind && s.selected.id === id) || (s.hovered?.kind === kind && s.hovered.id === id))
-}
 
 const STATE_RIM: Record<ZoneModel['state'], number> = { loading: 0.5, idle: 0.9, active: 1.8, attention: 1.6, error: 1.4, unavailable: 0.35 }
 

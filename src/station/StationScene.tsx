@@ -1,6 +1,6 @@
-import { Component, Suspense, useRef, useState, type ReactNode } from 'react'
+import { Component, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Environment, Lightformer, PerformanceMonitor, Sparkles } from '@react-three/drei'
+import { PerformanceMonitor, Sparkles } from '@react-three/drei'
 import { Bloom, ChromaticAberration, DepthOfField, EffectComposer, N8AO, Noise, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import * as THREE from 'three'
@@ -8,10 +8,15 @@ import { useHub, type Graphics } from '../hub/client'
 import { useStore } from '../store'
 import { ZoneLight } from './floor'
 import { Clusters } from './clusters'
+import { Foundry } from './foundry'
 import { Console } from './console'
 import { Lair } from './lair'
 import { Outside } from './outside'
-import { MOON_DIR } from './layout'
+import { HouseEnvironment } from './environment'
+import { patchHouseLight, ROOM } from './houselight'
+import { setSkyTime, SKY, SKY_STATE, updateSky, WEATHER } from './sky'
+import { easeWeather, startWeather, tryWeather } from './weather'
+import { Rain } from './rain'
 import { WalkControls } from './walk'
 import { Links } from './links'
 import { CameraRig, Controls, TalkFraming } from './camera'
@@ -19,14 +24,16 @@ import { LabelProjector } from './labels'
 import { useStation } from './stationStore'
 
 /**
- * The station: a lair cut into a sea cliff (lair.tsx) — rock walls and vault,
- * a polished stone floor and stage, and a wall of glass over the sea at blue
- * hour (outside.tsx). On the stage: the command console (console.tsx), the
- * six systems on their pads and the pathways between them. The
- * room's light is baked in Blender with Cycles; what's live — JARVIS, the
- * zones, the console — is lit for real (PBR, image-based
- * reflections, a moonlight shadow map, mirror reflections in the stone) and
- * finished with bloom, depth of field in Talk, and ambient occlusion on Ultra.
+ * The station: a glass house on a sea cliff (lair.tsx), under the real sky
+ * for this moment — sun, moon, stars and clouds — over a live sea with boats
+ * on it (outside.tsx, sky.ts, boats.tsx). On its black marble stage: the
+ * command console (console.tsx), the six systems on their pads, the
+ * pathways between them and the build bay (foundry.tsx). The house's own
+ * light is baked in Blender with Cycles and coloured live; the sun or moon
+ * shines in through the glass (houselight.ts); everything live is lit for
+ * real (PBR, reflections of the room and sky, a shadow map, mirror
+ * reflections in the stone) and finished with bloom, depth of field in
+ * Talk, and ambient occlusion on Ultra.
  *
  * Everything that moves or glows is driven by live state through the
  * station model (model.ts); see docs/STATION.md for the full mapping.
@@ -40,43 +47,103 @@ import { useStation } from './stationStore'
 
 const QUALITY: Record<
   Graphics,
-  { maxDpr: number; shadows: boolean; map: number; reflector: number; ao: boolean; soft: boolean; dust: number; msaa: number; lens: boolean; env: number }
+  { maxDpr: number; shadows: boolean; map: number; reflector: number; ao: boolean; soft: boolean; dust: number; msaa: number; lens: boolean; env: number; rain: number }
 > = {
-  low: { maxDpr: 1, shadows: false, map: 0, reflector: 0, ao: false, soft: false, dust: 0, msaa: 0, lens: false, env: 64 },
-  high: { maxDpr: 1.5, shadows: true, map: 2048, reflector: 512, ao: false, soft: false, dust: 60, msaa: 0, lens: false, env: 128 },
-  ultra: { maxDpr: 2, shadows: true, map: 4096, reflector: 1024, ao: true, soft: true, dust: 120, msaa: 4, lens: true, env: 256 },
+  low: { maxDpr: 1, shadows: false, map: 0, reflector: 0, ao: false, soft: false, dust: 0, msaa: 0, lens: false, env: 64, rain: 3000 },
+  high: { maxDpr: 1.5, shadows: true, map: 2048, reflector: 512, ao: false, soft: false, dust: 60, msaa: 0, lens: false, env: 128, rain: 6000 },
+  ultra: { maxDpr: 2, shadows: true, map: 4096, reflector: 1024, ao: true, soft: true, dust: 120, msaa: 4, lens: true, env: 256, rain: 10000 },
+}
+
+patchHouseLight()
+
+/**
+ * The key light: the sun by day, the moon by night, from where they really
+ * are (sky.ts), shining in only where the house lets it (houselight.ts).
+ * It's the one shadow-caster.
+ */
+const FLASH = new THREE.Color(0.8, 0.85, 1)
+
+function KeyLight({ q }: { q: (typeof QUALITY)[Graphics] }) {
+  const ref = useRef<THREE.DirectionalLight>(null)
+  useFrame(() => {
+    const l = ref.current
+    if (!l) return
+    const k = SKY_STATE.key
+    l.position.copy(k.dir).multiplyScalar(40)
+    l.color.copy(k.color)
+    l.intensity = k.intensity
+    // Lightning lights everything for an instant.
+    if (SKY.uFlash.value > 0) {
+      l.color.lerp(FLASH, Math.min(1, SKY.uFlash.value))
+      l.intensity += SKY.uFlash.value * 2.5
+    }
+  })
+  return (
+    <directionalLight
+      ref={ref}
+      castShadow={q.shadows}
+      shadow-mapSize={[q.map || 512, q.map || 512]}
+      shadow-bias={-0.0002}
+      shadow-normalBias={0.03}
+      shadow-radius={q.soft ? 4 : 2}
+      shadow-camera-left={-11}
+      shadow-camera-right={11}
+      shadow-camera-top={11}
+      shadow-camera-bottom={-11}
+      shadow-camera-near={5}
+      shadow-camera-far={80}
+    />
+  )
 }
 
 /**
- * Live light for the live things, matched to the baked room: moonlight in
- * through the window (the one shadow-caster), a cool sky fill, and the warm
- * glow of the vault's coves from above.
+ * Keeps the sky on the clock: works out the sun and moon every few seconds,
+ * and how the house's lights and the sky's light share the room — the warm
+ * lights carry the house at night and soften by day.
  */
-function Lights({ q }: { q: (typeof QUALITY)[Graphics] }) {
-  const moon = MOON_DIR.clone().multiplyScalar(30)
-  return (
-    <>
-      <hemisphereLight args={['#2c3a66', '#07070b', 0.35]} />
-      <directionalLight
-        position={[moon.x, moon.y, moon.z]}
-        intensity={0.3}
-        color="#b9c9ff"
-        castShadow={q.shadows}
-        shadow-mapSize={[q.map || 512, q.map || 512]}
-        shadow-bias={-0.0002}
-        shadow-normalBias={0.03}
-        shadow-radius={q.soft ? 4 : 2}
-        shadow-camera-left={-11}
-        shadow-camera-right={11}
-        shadow-camera-top={11}
-        shadow-camera-bottom={-11}
-        shadow-camera-near={5}
-        shadow-camera-far={60}
-      />
-      <pointLight position={[0, 8.2, 0]} intensity={60} distance={22} decay={2} color="#ffb877" />
-      <pointLight position={[0, 1.4, 7]} intensity={8} distance={12} decay={2} color="#ff9a5a" />
-    </>
-  )
+function applySky() {
+  updateSky()
+  // Indoors the eye adjusts too: daylight through the glass fills the room.
+  ROOM.roomSky.value.copy(SKY_STATE.ambient).multiplyScalar(3.5)
+  const day = Math.min(1, Math.max(0, (SKY_STATE.sunAlt + 4) / 14))
+  ROOM.roomWarm.value.setRGB(1, 0.74, 0.5).multiplyScalar(0.85 - 0.35 * day)
+}
+
+function SkyDriver() {
+  const last = useRef(-1e9)
+  // The real weather where Markus is (and his real location for the sun).
+  useEffect(() => startWeather(() => (last.current = -1e9)), [])
+  useFrame((st, dt) => {
+    easeWeather(dt, st.clock.elapsedTime)
+    if (st.clock.elapsedTime - last.current < 5) return
+    last.current = st.clock.elapsedTime
+    applySky()
+  })
+  return null
+}
+
+if (import.meta.env.DEV) {
+  // Look at another time of day: __sky.at('2026-10-23T18:05'), __sky.at(null) for now.
+  ;(window as unknown as { __sky: object }).__sky = {
+    at: (t: string | null) => {
+      setSkyTime(t)
+      applySky()
+      return { sunAlt: SKY_STATE.sunAlt, moonAlt: SKY_STATE.moonAlt }
+    },
+    // Try weather: __sky.weather({ rain: 0.8, cloud: 1, storm: true }), and it eases in.
+    weather: (w: Partial<typeof WEATHER>, now = false) => {
+      tryWeather(w)
+      if (now) {
+        SKY.uCloud.value = WEATHER.cloud
+        SKY.uRain.value = WEATHER.rain
+        SKY.uSnow.value = WEATHER.snow
+        SKY.uWet.value = WEATHER.rain > 0 ? 1 : 0
+        SKY.uFog.value = Math.max(WEATHER.fog, WEATHER.rain * 0.5)
+      }
+      applySky()
+      return { ...WEATHER }
+    },
+  }
 }
 
 const LOWER = { ultra: 'high', high: 'low', low: null } as const
@@ -141,15 +208,15 @@ class ConsoleGuard extends Component<{ what: string; children: ReactNode }, { fa
 
 /**
  * Finishing: ambient occlusion (Ultra), bloom on the lights, and in Talk
- * mode on High and Ultra a shallow depth of field — the desk and its
- * monitors sharp, the room beyond them softening away.
+ * mode on High and Ultra a gentle depth of field — the desk, the room and
+ * the view sharp, only the far horizon softening.
  */
 function Post({ q, dof }: { q: (typeof QUALITY)[Graphics]; dof: boolean }) {
   return (
     <EffectComposer multisampling={q.msaa} enableNormalPass={false}>
       <>{q.ao && <N8AO aoRadius={1.2} distanceFalloff={1} intensity={2.4} quality="medium" halfRes />}</>
-      <>{dof && <DepthOfField worldFocusDistance={5.6} worldFocusRange={4.5} bokehScale={2.5} resolutionScale={0.5} />}</>
-      <Bloom intensity={q.ao ? 1.15 : 0.95} luminanceThreshold={0.62} luminanceSmoothing={0.25} mipmapBlur radius={0.78} />
+      <>{dof && <DepthOfField worldFocusDistance={6} worldFocusRange={14} bokehScale={1.2} resolutionScale={0.5} />}</>
+      <Bloom intensity={q.ao ? 0.85 : 0.7} luminanceThreshold={1.3} luminanceSmoothing={0.3} mipmapBlur radius={0.62} />
       <>{q.lens && <ChromaticAberration offset={new THREE.Vector2(0.00045, 0.0006)} radialModulation modulationOffset={0.35} />}</>
       <Vignette eskil={false} offset={0.22} darkness={0.72} />
       <>{q.lens && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={0.35} />}</>
@@ -198,17 +265,12 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
         onFallback={() => setDpr(1)}
       />
       <color attach="background" args={['#04060c']} />
-      {/* What metal and glass reflect: the moonlit window wall, the warm vault coves, dark rock. */}
-      <Environment resolution={q.env} frames={1}>
-        <color attach="background" args={['#05060a']} />
-        <Lightformer form="rect" intensity={0.7} color="#5f78c8" position={[0, 4, -14]} scale={[26, 7, 1]} />
-        <Lightformer form="circle" intensity={2} color="#dfe8ff" position={[MOON_DIR.x * 40, MOON_DIR.y * 40, MOON_DIR.z * 40]} scale={1.5} target={[0, 0, 0]} />
-        <Lightformer form="ring" intensity={3} color="#ffb877" position={[0, 9, 0]} rotation-x={Math.PI / 2} scale={6} />
-        <Lightformer form="rect" intensity={0.8} color="#ff9a5a" position={[0, 0.5, 13]} scale={[18, 1, 1]} target={[0, 1, 0]} />
-      </Environment>
+      <SkyDriver />
+      {/* What metal, stone and glass reflect: the room, and the sky through the glass. */}
+      <HouseEnvironment size={q.env} />
       {import.meta.env.DEV && <FrameProbe />}
       <BlankGuard graphics={graphics} />
-      <Lights q={q} />
+      <KeyLight q={q} />
       <Outside />
       {/* The room and the console stream in their models and textures; what's ready draws meanwhile. */}
       <ConsoleGuard what="room">
@@ -224,8 +286,10 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       </ConsoleGuard>
       <Links />
       <Clusters />
-      {/* Dust hanging in the moonlight. */}
-      {q.dust > 0 && <Sparkles count={q.dust} scale={[16, 6, 14]} position={[0, 3.2, -3]} size={1.2} speed={0.08} opacity={0.18} color="#cdd8ff" noise={1} />}
+      <Foundry />
+      {/* Dust hanging in the light. */}
+      {q.dust > 0 && <Sparkles count={q.dust} scale={[18, 4, 16]} position={[0, 2.3, -2]} size={1.2} speed={0.08} opacity={0.18} color="#cdd8ff" noise={1} />}
+      <Rain count={q.rain} />
       {mode === 'walk' && <WalkControls />}
       <Controls />
       <CameraRig />
