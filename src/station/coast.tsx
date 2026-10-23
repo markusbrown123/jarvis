@@ -5,6 +5,7 @@ import type { Graphics } from '../hub/client'
 import { HOUSE } from './layout'
 import { SKY } from './sky'
 import { BAY, blob, cliffEdge, fbm, ground, landMaterial, coastMaterial, lawnNorm, shore } from './coastland'
+import { broadleaf, grove, leafMaterial, shrub, woodMaterial, type Plant } from './trees'
 
 /**
  * The coast round the house: the house's headland sits at the back of a
@@ -96,9 +97,7 @@ function slopeAt(x: number, z: number) {
 /** Brush, scrub oaks and the odd tall tree, on the gentler ground. */
 function shrubs(count: number) {
   const r = rng(11)
-  const m = new THREE.Matrix4()
-  const q = new THREE.Quaternion()
-  const out: { m: THREE.Matrix4; c: THREE.Color }[] = []
+  const out: (Plant & { tree: boolean })[] = []
   for (let tries = 0; out.length < count && tries < count * 12; tries++) {
     // Denser near the house, thinning out with distance.
     const d = 30 + Math.pow(r(), 1.8) * 720
@@ -112,12 +111,10 @@ function shrubs(count: number) {
     if (fbm(x * 0.03 + 4, z * 0.03, 3) < 0.42 + r() * 0.15) continue
     const tree = r() < 0.07
     const w = tree ? 2.2 + r() * 2 : 0.8 + r() * 1.5
-    const h = tree ? w * (0.8 + r() * 0.5) : w * (0.5 + r() * 0.35)
-    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * Math.PI * 2)
-    m.compose(new THREE.Vector3(x, g.h + h * 0.35 + (tree ? h * 0.4 : 0), z), q, new THREE.Vector3(w, h, w * (0.8 + r() * 0.4)))
-    const c = new THREE.Color().setRGB(0.03 + r() * 0.03, 0.045 + r() * 0.035, 0.022 + r() * 0.015)
-    if (r() < 0.18) c.setRGB(0.09, 0.09, 0.055)
-    out.push({ m: m.clone(), c })
+    // Dusty grey-green, a few dried out to tan.
+    const k = 0.6 + r() * 0.35
+    const tint = r() < 0.18 ? new THREE.Color(1.5, 1.05, 1.1) : new THREE.Color(k * (0.85 + r() * 0.2), k, k * (0.85 + r() * 0.2))
+    out.push({ x, y: g.h - 0.15, z, s: tree ? w / 3.2 : w, yaw: r() * Math.PI * 2, tint, tree })
   }
   return out
 }
@@ -297,7 +294,9 @@ export function Coast({ graphics }: { graphics: Graphics }) {
   const mats = useMemo(
     () => ({
       land: landMaterial(),
-      brush: coastMaterial(new THREE.MeshStandardMaterial({ roughness: 0.9 })),
+      brush: leafMaterial('scrub.png', 1.2, 0.03),
+      oak: leafMaterial('leaves.png', 6.5, 0.04),
+      bark: woodMaterial('bark.jpg', 6.5),
       wall: coastMaterial(new THREE.MeshStandardMaterial({ roughness: 0.8 })),
       rock: coastMaterial(new THREE.MeshStandardMaterial({ roughness: 0.92, flatShading: true })),
       glass: coastMaterial(new THREE.MeshStandardMaterial({ color: '#0b0e12', roughness: 0.06, envMapIntensity: 1.4, emissive: new THREE.Color('#ffb070'), emissiveIntensity: 0 })),
@@ -308,15 +307,13 @@ export function Coast({ graphics }: { graphics: Graphics }) {
     [],
   )
 
+  // Chaparral as game foliage (trees.ts): crossed cards of scrub, and scrub
+  // oaks with real branches, all moving in the wind.
   const brush = useMemo(() => {
-    const mesh = new THREE.InstancedMesh(blob(), mats.brush, built.brush.length)
-    built.brush.forEach((b, i) => {
-      mesh.setMatrixAt(i, b.m)
-      mesh.setColorAt(i, b.c)
-    })
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    return mesh
+    const g = new THREE.Group()
+    g.add(grove(shrub(6), built.brush.filter((b) => !b.tree), null, mats.brush))
+    g.add(grove(broadleaf(21), built.brush.filter((b) => b.tree), mats.bark, mats.oak))
+    return g
   }, [built, mats])
 
   // Each house: a box, an upper storey set back on most, flat roofs

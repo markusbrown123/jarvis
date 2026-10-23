@@ -6,7 +6,9 @@ import type { Graphics } from '../hub/client'
 import { OUTDOOR } from './environment'
 import { ESTATE } from './layout'
 import { SKY } from './sky'
-import { blob, cliffEdge, coastMaterial, ground, lawnNorm } from './coastland'
+import { cliffEdge, coastMaterial, ground, lawnNorm } from './coastland'
+import { GARDEN } from './garden'
+import { broadleaf, cypress as cypressTree, grove, leafMaterial, palm, shrub, woodMaterial, type Plant } from './trees'
 
 /**
  * The rest of the estate round the house, after Tony Stark's: more white
@@ -21,8 +23,10 @@ import { blob, cliffEdge, coastMaterial, ground, lawnNorm } from './coastland'
  *
  * Round them, the grounds: the lawn (levelled and mown in coastland.ts),
  * palms along the drive and round the pavilions, Italian cypresses by the
- * walls, broad trees along the lawn's edge, and the drive itself winding in
- * from the coast road to a turning circle under the helipad's ramp.
+ * walls, broad trees along the lawn's edge, shrubs round the pavilions' feet
+ * (trees.ts: built the way games build them, swaying in the live wind), and
+ * the drive itself winding in from the coast road to a turning circle under
+ * the helipad's ramp.
  */
 
 const MODEL = '/station/estate.glb'
@@ -86,101 +90,6 @@ function rng(seed: number): Rand {
 
 /** Ground level for something standing on the estate (the house's island top is at −0.2). */
 const standY = (x: number, z: number) => Math.max(ground(x, z).h, -0.2)
-
-/**
- * A palm, 10 m tall: a ringed trunk leaning and curving a little, flared at
- * the foot; a crown of fronds — each a folded, serrated blade drooping
- * under its own weight — round a fibrous boot.
- */
-function palmGeometry() {
-  const H = 10
-  const trunk = new THREE.BufferGeometry()
-  {
-    const along = 28
-    const around = 10
-    const pos: number[] = []
-    const col: number[] = []
-    const idx: number[] = []
-    for (let i = 0; i <= along; i++) {
-      const t = i / along
-      const cx = 1.1 * Math.pow(t, 1.7)
-      const r = 0.2 - 0.06 * t + 0.16 * Math.pow(1 - t, 8)
-      const ring = 0.72 + 0.28 * (Math.sin(t * H * 3.4 * Math.PI) > 0.6 ? 0 : 1)
-      for (let k = 0; k <= around; k++) {
-        const a = (k / around) * Math.PI * 2
-        pos.push(cx + Math.cos(a) * r, t * H, Math.sin(a) * r)
-        col.push(0.42 * ring, 0.36 * ring, 0.29 * ring)
-      }
-    }
-    for (let i = 0; i < along; i++)
-      for (let k = 0; k < around; k++) {
-        const a = i * (around + 1) + k
-        const b = a + around + 1
-        idx.push(a, b, a + 1, a + 1, b, b + 1)
-      }
-    trunk.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-    trunk.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
-    trunk.setIndex(idx)
-    trunk.computeVertexNormals()
-  }
-  const crown = new THREE.BufferGeometry()
-  {
-    const top = new THREE.Vector3(1.1, H, 0)
-    const pos: number[] = []
-    const col: number[] = []
-    const idx: number[] = []
-    const r = rng(5)
-    const fronds = 17
-    for (let f = 0; f < fronds; f++) {
-      const az = (f / fronds) * Math.PI * 2 + r() * 0.3
-      const inner = f % 3 === 0
-      const el = inner ? 0.75 + r() * 0.3 : 0.15 + r() * 0.35
-      const L = (inner ? 2.6 : 3.4) * (0.85 + r() * 0.3)
-      const droop = inner ? 0.5 : 1.6 + r() * 0.8
-      const dir = new THREE.Vector3(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el))
-      const side = new THREE.Vector3(-Math.sin(az), 0, Math.cos(az))
-      const n = 16
-      const base = pos.length / 3
-      for (let i = 0; i <= n; i++) {
-        const s = i / n
-        const spine = top.clone().addScaledVector(dir, s * L)
-        spine.y -= droop * s * s * L * 0.45
-        // Serrated: leaflets alternate long and short along the blade.
-        const w = 0.62 * Math.sin(Math.PI * Math.pow(s, 0.75)) * (i % 2 ? 1 : 0.45)
-        // Folded down either side of the spine.
-        for (const sd of [-1, 0, 1]) {
-          const p = spine.clone().addScaledVector(side, sd * w)
-          if (sd) p.y -= w * 0.45
-          pos.push(p.x, p.y, p.z)
-          const g = 0.75 + 0.35 * s + (sd ? 0 : 0.1)
-          col.push(0.09 * g + 0.04 * s, 0.17 * g, 0.045 * g)
-        }
-      }
-      for (let i = 0; i < n; i++) {
-        const a = base + i * 3
-        const b = a + 3
-        idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2)
-      }
-    }
-    // The boot: old frond bases round the top of the trunk.
-    const boot = new THREE.SphereGeometry(0.42, 10, 8)
-    boot.scale(1, 1.3, 1)
-    boot.translate(top.x, top.y - 0.35, top.z)
-    const bp = boot.attributes.position as THREE.BufferAttribute
-    const base = pos.length / 3
-    for (let i = 0; i < bp.count; i++) {
-      pos.push(bp.getX(i), bp.getY(i), bp.getZ(i))
-      col.push(0.3, 0.24, 0.15)
-    }
-    const bi = boot.index!.array
-    for (let i = 0; i < bi.length; i++) idx.push(base + bi[i])
-    crown.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-    crown.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
-    crown.setIndex(idx)
-    crown.computeVertexNormals()
-  }
-  return { trunk, crown }
-}
 
 /** The drive: in from the coast road, winding across the lawn to the turning circle. */
 function drivePath() {
@@ -282,71 +191,65 @@ function planting(drive: THREE.Vector3[]) {
     if (broad.some((b) => Math.hypot(b.x - x, b.z - z) < 6) || palms.some((p) => Math.hypot(p.x - x, p.z - z) < 4)) continue
     broad.push({ x, z, s: 0.8 + r() * 0.6, yaw: r() * 6.28 })
   }
-  return { palms, cypress, broad }
+  // Garden shrubs in drifts round the foot of each pavilion.
+  const shrubs: Tree[] = []
+  for (let tries = 0; shrubs.length < 160 && tries < 6000; tries++) {
+    const [wx, wz, wr] = ESTATE.wings[Math.floor(r() * ESTATE.wings.length)]
+    const a = r() * Math.PI * 2
+    const d = wr + 1.4 + r() * 2.6
+    const x = wx + Math.cos(a) * d
+    const z = wz + Math.sin(a) * d
+    if (!clear(x, z, 0) || shrubs.some((b) => Math.hypot(b.x - x, b.z - z) < 1.3) || palms.some((p) => Math.hypot(p.x - x, p.z - z) < 1.2)) continue
+    shrubs.push({ x, z, s: 0.6 + r() * 0.5, yaw: r() * 6.28 })
+  }
+  // And the house's own garden (lair.glb's), less any under the pavilions.
+  const free = (x: number, z: number) => !ESTATE.wings.some(([wx, wz, wr]) => Math.hypot(x - wx, z - wz) < wr + 1) && Math.hypot(x - 1, z - 17) > 3.5
+  const garden = GARDEN.trees.filter(([x, z]) => free(x, z)).map(([x, z, top]) => ({ x, z, s: top / 6.5, yaw: r() * 6.28 }))
+  for (const [x, z, w] of GARDEN.shrubs) if (free(x, z)) shrubs.push({ x, z, s: w / 2, yaw: r() * 6.28 })
+  return { palms, cypress, broad: [...broad, ...garden], shrubs }
 }
 
 export function Grounds() {
   const built = useMemo(() => {
     const drive = drivePath()
-    const plants = planting(drive)
-    return { drive, plants, road: ribbon(drive, 6, 0.06), palm: palmGeometry(), foliage: blob() }
+    return { drive, plants: planting(drive), road: ribbon(drive, 6, 0.06) }
   }, [])
   const mats = useMemo(
     () => ({
       paving: coastMaterial(new THREE.MeshStandardMaterial({ color: '#c8c2b6', roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })),
       bed: coastMaterial(new THREE.MeshStandardMaterial({ color: '#2b4a1c', roughness: 0.9 })),
-      trunk: coastMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })),
-      frond: coastMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide })),
-      leaves: coastMaterial(new THREE.MeshStandardMaterial({ roughness: 0.85 })),
-      bark: coastMaterial(new THREE.MeshStandardMaterial({ color: '#3a2e24', roughness: 0.95 })),
+      palmBark: woodMaterial('palmbark.jpg', 10),
+      fronds: leafMaterial('frond.png', 10, 0.08),
+      bark: woodMaterial('bark.jpg', 6.5),
+      leaves: leafMaterial('leaves.png', 6.5, 0.05),
+      cypress: leafMaterial('cypress.png', 10, 0.02),
+      shrubs: leafMaterial('leaves.png', 1.2, 0.03),
     }),
     [],
   )
-  const meshes = useMemo(() => {
-    const { palms, cypress, broad } = built.plants
-    const m = new THREE.Matrix4()
-    const q = new THREE.Quaternion()
-    const up = new THREE.Vector3(0, 1, 0)
-    const v = new THREE.Vector3()
-    const sc = new THREE.Vector3()
-    const trunks = new THREE.InstancedMesh(built.palm.trunk, mats.trunk, palms.length)
-    const crowns = new THREE.InstancedMesh(built.palm.crown, mats.frond, palms.length)
-    palms.forEach((p, i) => {
-      m.compose(v.set(p.x, standY(p.x, p.z) - 0.1, p.z), q.setFromAxisAngle(up, p.yaw), sc.setScalar(p.s))
-      trunks.setMatrixAt(i, m)
-      crowns.setMatrixAt(i, m)
-    })
-    // Cypresses: tall dark spindles. Broad trees: a short trunk under a few heads of leaves.
-    const heads = 4
-    const leaves = new THREE.InstancedMesh(built.foliage, mats.leaves, cypress.length + broad.length * heads)
-    const stems = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.26, 1, 7).translate(0, 0.5, 0), mats.bark, broad.length)
+  // Palms, cypresses, three shapes of broad tree and the shrubs: two draw
+  // calls a kind, every tree a little different in size, turn and green.
+  const groves = useMemo(() => {
+    const { palms, cypress, broad, shrubs } = built.plants
     const r = rng(17)
-    const c = new THREE.Color()
-    let n = 0
-    for (const t of cypress) {
-      const y = standY(t.x, t.z)
-      m.compose(v.set(t.x, y + 4.6 * t.s, t.z), q.setFromAxisAngle(up, t.yaw), sc.set(1.05 * t.s, 5.2 * t.s, 1.05 * t.s))
-      leaves.setMatrixAt(n, m)
-      leaves.setColorAt(n++, c.setRGB(0.025, 0.05, 0.025))
+    const at = (t: { x: number; z: number; s: number; yaw: number }, dy: number, green: number): Plant => {
+      const k = 1 - green / 2 + r() * green
+      return { x: t.x, y: standY(t.x, t.z) + dy, z: t.z, s: t.s, yaw: t.yaw, tint: new THREE.Color(k * (0.92 + r() * 0.16), k, k * (0.9 + r() * 0.2)) }
     }
-    broad.forEach((t, i) => {
-      const y = standY(t.x, t.z)
-      const h = 3.2 * t.s
-      stems.setMatrixAt(i, m.compose(v.set(t.x, y, t.z), q.setFromAxisAngle(up, t.yaw), sc.set(t.s, h, t.s)))
-      for (let k = 0; k < heads; k++) {
-        const a = t.yaw + (k / heads) * Math.PI * 2
-        const d = k ? 1.6 * t.s : 0
-        const w = (k ? 2.2 : 2.8) * t.s * (0.85 + r() * 0.3)
-        m.compose(v.set(t.x + Math.cos(a) * d, y + h + (k ? 0.6 : 1.5) * t.s, t.z + Math.sin(a) * d), q.setFromAxisAngle(up, r() * 6.28), sc.set(w, w * 0.8, w))
-        leaves.setMatrixAt(n, m)
-        leaves.setColorAt(n++, c.setRGB(0.04 + r() * 0.03, 0.075 + r() * 0.04, 0.03 + r() * 0.015))
-      }
-    })
-    for (const mesh of [trunks, crowns, leaves, stems]) {
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-    }
-    return { trunks, crowns, leaves, stems }
+    const kinds = [broadleaf(3), broadleaf(8), broadleaf(13)]
+    return [
+      grove(palm(), palms.map((t) => at(t, -0.1, 0.2)), mats.palmBark, mats.fronds),
+      grove(cypressTree(), cypress.map((t) => at(t, -0.05, 0.15)), mats.bark, mats.cypress),
+      ...kinds.map((k, i) =>
+        grove(
+          k,
+          broad.filter((_, j) => j % kinds.length === i).map((t) => at(t, -0.05, 0.3)),
+          mats.bark,
+          mats.leaves,
+        ),
+      ),
+      grove(shrub(4), shrubs.map((t) => at(t, -0.1, 0.3)), null, mats.shrubs),
+    ]
   }, [built, mats])
   const t = ESTATE.turn
   return (
@@ -358,10 +261,9 @@ export function Grounds() {
       <mesh position={[t.x, ESTATE.lawn.y + 0.15, t.z]} material={mats.bed} receiveShadow>
         <cylinderGeometry args={[3.2, 3.3, 0.3, 48]} />
       </mesh>
-      <primitive object={meshes.trunks} />
-      <primitive object={meshes.crowns} />
-      <primitive object={meshes.stems} />
-      <primitive object={meshes.leaves} />
+      {groves.map((g, i) => (
+        <primitive key={i} object={g} />
+      ))}
     </group>
   )
 }

@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import type { Graphics } from '../hub/client'
 import { reactorState } from './shared'
 import { useStation } from './stationStore'
-import { ESTATE, HOUSE } from './layout'
+import { HOUSE } from './layout'
 import { ROOM, roomify } from './houselight'
 
 // The terrace's downlights, softer on its pale stone than indoors.
@@ -38,15 +38,14 @@ const MODEL = '/station/lair.glb'
 // Matches LM_SCALE in lair.py; π because three divides baked light by π.
 const LIGHT_SCALE = 6 * Math.PI
 const BAKED = ['floor', 'stage', 'deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars'] as const
-// (The ground and the cliffs are shaded like the rest of the coast, coast.tsx.)
-const DETAIL = ['plants'] as const
+// (The ground and the cliffs are shaded like the rest of the coast, coast.tsx;
+// the garden is planted with game foliage, estate.tsx.)
 const NORMALS = ['floor', 'stage', 'deck', 'wall_left', 'wall_front', 'wall_right'] as const
-type Name = (typeof BAKED)[number] | (typeof DETAIL)[number]
+type Name = (typeof BAKED)[number]
 
 function useMaps(graphics: Graphics) {
   const urls = [
     ...BAKED.flatMap((n) => [`/station/${n}_detail_${graphics}.jpg`, `/station/${n}_light_${graphics}.jpg`]),
-    ...DETAIL.map((n) => `/station/${n}_detail_${graphics}.jpg`),
     ...NORMALS.map((n) => `/station/${n}_normal_${graphics}.jpg`),
   ]
   const tex = useLoader(THREE.TextureLoader, urls)
@@ -54,14 +53,13 @@ function useMaps(graphics: Graphics) {
     const out = {} as Record<Name, { detail: THREE.Texture; light?: THREE.Texture; normal?: THREE.Texture }>
     let i = 0
     for (const n of BAKED) out[n] = { detail: tex[i++], light: tex[i++] }
-    for (const n of DETAIL) out[n] = { detail: tex[i++] }
     for (const n of NORMALS) out[n].normal = tex[i++]
     for (const t of tex) {
       t.flipY = false // glTF's UVs run top-down
       t.anisotropy = 8
       t.needsUpdate = true
     }
-    for (const n of [...BAKED, ...DETAIL]) {
+    for (const n of BAKED) {
       out[n].detail.colorSpace = THREE.SRGBColorSpace
       if (out[n].light) out[n].light.colorSpace = THREE.SRGBColorSpace
     }
@@ -152,29 +150,6 @@ function unfold(src: THREE.BufferGeometry) {
     nrm.setXYZ(i, va.x, va.y, va.z)
   }
   return g
-}
-
-/** The garden's plants, less any standing where the estate's pavilions now are (estate.tsx). */
-function clearPlants(src: THREE.BufferGeometry) {
-  const g = src.index ? src.toNonIndexed() : src.clone()
-  const p = g.attributes.position as THREE.BufferAttribute
-  const keep: number[] = []
-  const v = new THREE.Vector3()
-  for (let i = 0; i < p.count; i += 3) {
-    v.fromBufferAttribute(p, i).add(new THREE.Vector3().fromBufferAttribute(p, i + 1)).add(new THREE.Vector3().fromBufferAttribute(p, i + 2)).divideScalar(3)
-    const under = ESTATE.wings.some(([x, z, r]) => Math.hypot(v.x - x, v.z - z) < r + 1) || Math.hypot(v.x - 1, v.z - 17) < 3.5
-    if (!under) keep.push(i)
-  }
-  const out = new THREE.BufferGeometry()
-  for (const [name, attr] of Object.entries(g.attributes)) {
-    const a = attr as THREE.BufferAttribute
-    const arr = new Float32Array(keep.length * 3 * a.itemSize)
-    keep.forEach((i, k) => {
-      for (let j = 0; j < 3; j++) for (let c = 0; c < a.itemSize; c++) arr[(k * 3 + j) * a.itemSize + c] = a.getComponent(i + j, c)
-    })
-    out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize))
-  }
-  return out
 }
 
 /** The light strips, split into the ones up in the ceiling and the rest. */
@@ -317,7 +292,6 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
       pillars: baked('pillars', { roughness: 0.32, metalness: 0.7, envMapIntensity: 1.2 }),
       terrain: landMaterial(),
       cliff: landMaterial(),
-      plants: outdoor(new THREE.MeshStandardMaterial({ map: maps.plants.detail, roughness: 0.8 })),
       frames: new THREE.MeshStandardMaterial({ color: '#0a0a0c', metalness: 0.85, roughness: 0.3 }),
       rail: outdoor(new THREE.MeshStandardMaterial({ color: '#c4c8cf', metalness: 1, roughness: 0.18 })),
       led: new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffc890').multiplyScalar(2.4), toneMapped: false }),
@@ -340,7 +314,6 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
   const led = useMemo(() => (nodes.led_warm ? splitByHeight(nodes.led_warm.geometry, 2.5) : null), [nodes])
   const floors = useMemo(() => (['floor', 'stage'] as const).filter((n) => nodes[n]).map((n) => ({ n, ...mirrorFloor(nodes[n]) })), [nodes])
   const cliff = useMemo(() => (nodes.cliff ? unfold(nodes.cliff.geometry) : null), [nodes])
-  const plants = useMemo(() => (nodes.plants ? clearPlants(nodes.plants.geometry) : null), [nodes])
   const pool = HOUSE.pool
 
   useFrame(() => {
@@ -354,12 +327,10 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
     const dusk = Math.min(1, Math.max(0, (SKY.uExposure.value - 1.4) / 6))
     mats.glass.uniforms.uInterior.value.copy(ROOM.roomWarm.value).multiplyScalar(0.05 + 0.2 * dusk)
     mats.water.uniforms.uGlow.value.setRGB(0.05, 0.42, 0.5).multiplyScalar(0.06 + 0.5 * dusk)
-    // After rain the terrace and the garden go dark and glossy, puddled.
+    // After rain the terrace goes dark and glossy, puddled.
     const wet = SKY.uWet.value
     mats.deck.roughness = 0.45 - 0.33 * wet
     mats.deck.color.setScalar(1 - 0.3 * wet)
-    mats.plants.color.setScalar(1 - 0.35 * wet)
-    mats.plants.roughness = 0.92 - 0.4 * wet
   })
 
   const stone = (n: 'floor' | 'stage') => {
@@ -392,8 +363,8 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
           {stone(n)}
         </mesh>
       ))}
-      {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'cliff', 'plants', 'frames', 'rail'] as const).map((n) =>
-        nodes[n] && show(n) ? <mesh key={n} geometry={n === 'cliff' && cliff ? cliff : n === 'plants' && plants ? plants : nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
+      {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'cliff', 'frames', 'rail'] as const).map((n) =>
+        nodes[n] && show(n) ? <mesh key={n} geometry={n === 'cliff' && cliff ? cliff : nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
       )}
       {nodes.glass && <mesh geometry={nodes.glass.geometry} {...at(nodes.glass)} material={mats.glass} renderOrder={5} />}
       {led && nodes.led_warm && <mesh geometry={led.low} {...at(nodes.led_warm)} material={mats.led} />}
