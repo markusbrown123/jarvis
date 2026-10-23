@@ -17,7 +17,7 @@ comparing one hub snapshot with the next — never from a timer.
 | **Walk** mode (`F`) | On foot, first person. `W A S D` / arrows to move, `Shift` to run, the mouse to look (click the room to capture it, `Esc` lets go — or just drag). You can't walk through the console, pads, build bay or walls; the open glass panel straight ahead leads out onto the terrace, round the pool to the balustrade. `E` sits you at the console when you're facing it, or opens the zone you're facing. Talking works as usual. While walking, W A S D and E are taken for walking before the app's own shortcuts (D diagnostics, E panels). |
 | **Talk** mode (`J`, the default) | Sat at the centre console, camera just behind the chair, looking out over the desk and its monitors to the room — with a gentle depth of field on High and Ultra: the full conversation on the left with a line to type to him, his current state (and the tool he's using), and what's waiting on you, if anything. The room stays quiet: names only, no panels. |
 | **Command** mode | Panels, zone labels, tooltips, detail panel. For working. |
-| **Cinematic** mode (`C`) | Panels away; camera pulls back and drifts round the station; names only on the zones; a caption strip with every system's live state and each event as it lands. Same data, so it never becomes a screensaver. |
+| **Cinematic** mode (`C`) | Panels away; camera pulls back and drifts round the station (scroll right out to see the house from over the sea); names only on the zones; a caption strip with every system's live state and each event as it lands. Same data, so it never becomes a screensaver. |
 | Camera presets | Overview, Roblox, Automaton, Finance, Jobs, Needs Markus, Jarvis Core. Smooth flights; grabbing the view mid-flight hands control back. |
 | Reset (`R`) | Clears the selection and flies back to the overview. |
 | Connections (`L`) | Brightens every link and labels it with its state and what it carries. |
@@ -42,6 +42,9 @@ comparing one hub snapshot with the next — never from a timer.
 | Platform completion wave | `complete` events | A job finishes | A ring of light leaves the platform | — | — |
 | Platform red segment | Voice error or bridge down | Error appears/clears | Localised on the platform ring only, so the rest stays readable | — | — |
 | **Build bay** (holo-table straight back from the console) | Job feed (`state.jobs`): running, waiting on you, failed and done (last hour), queued — up to nine | Hub update | One tower per job in its project's colour. Running: one floor per step the job reports (`done` of `total`), the rest scaffolding, a laser sweeping the floor being printed; a job that doesn't report steps shows only scaffolding with the laser hunting up and down — never an invented figure. Waiting on you: paused, amber beacon. Queued: an empty plot. Done: the finished tower, lit. Failed: red, its top fallen in. A new floor flashes as it lands; a finished job sends a ring across the table. The crane swings to the job being built. The table's front reads the counts and that job's step | Click a tower: its job card | Nothing on the table; "Nothing being built right now" |
+| **Drones** (six, docked in the floor behind the build bay) | Station events and zone states | An event lands; a zone is busy, needs you or errors | Each live event is a delivery, a glowing crate in the colour of what's carried: work handed out goes from the console to the zone; a finished job from its zone to the build bay; a new item from its project to Needs Markus; new leads come in from outside, out through the open glass and back over the terrace, to Automaton; a Roblox queue move goes from the build bay to Roblox; a voice turn from the console to Jarvis Core; a failure brings a drone to hold a red scan over the zone. Between deliveries, zones that are busy, need you or are in error get a drone hovering over them, scanning in the zone's colour (amber, red). Nothing happening: docked | — | Docked |
+| Drone docks (in the floor) | The drones | A drone launches or lands | Its pedestal rises out of the floor and its vents slide open; it waits raised while the drone is out and sinks back with it; ring amber while out, green while charging | — | — |
+| **Floor plates** round the console | JARVIS's voice phase and level, `complete` events | Every frame | Machined plates between the pathways, his colour in the seams: flush at rest; lifting and settling in a wave round the ring while he listens or speaks (higher the louder); a slow ripple while he thinks; all kick up once when a job finishes | — | Flush |
 | Holo keyboard | Typing in the Talk box | Each keystroke | Lights up while you type to JARVIS, fades after a second | — | — |
 | Desk monitor: **Systems** | Voice phase, `caps` (bridge, brain, voice, mic, phone, allowance) | State change | What JARVIS is doing, and each of his systems with its real detail | — | Each row says unavailable / not set up |
 | Desk monitor: **Zones** | Each zone's state and headline | Hub update | All six systems at a glance | — | "reading…" |
@@ -102,6 +105,9 @@ selected or hovered.
 | `rain.tsx` | Rain and snow |
 | `environment.tsx` | Reflections and ambient light: the room and the sky, re-rendered as the sky moves |
 | `foundry.tsx` | The build bay |
+| `drones.tsx` | The drones, their docks and their flight plans |
+| `floorworks.tsx` | The moving floor plates round the console |
+| `metal.ts`, `tools/textures/metal.py` | Machined metal plating textures for the hardware |
 | `holo.ts` | Shared hologram look, hover and click |
 | `floor.tsx` | Zone light on the stage; contact shadows |
 | `console.tsx` | The centre console: Blender model and baked textures, live lights, the four monitors |

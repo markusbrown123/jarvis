@@ -129,6 +129,15 @@ export function roomify<M extends THREE.Material>(m: M, own: Partial<typeof ROOM
   m.onBeforeCompile = (shader, renderer) => {
     before(shader, renderer)
     Object.assign(shader.uniforms, ROOM, own)
+    // The mirror's reflection can pick up the odd bad pixel (not a number)
+    // from the reflected view; one would bloom across the whole frame, so
+    // they're dropped here.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      'float depthFactor = 0.0001;',
+      `merge = (any(isnan(merge)) || any(isinf(merge))) ? vec4(0.0) : clamp(merge, 0.0, 64.0);
+      blur = (any(isnan(blur)) || any(isinf(blur))) ? vec4(0.0) : clamp(blur, 0.0, 64.0);
+      float depthFactor = 0.0001;`,
+    )
   }
   m.customProgramCacheKey = () => key
   m.needsUpdate = true

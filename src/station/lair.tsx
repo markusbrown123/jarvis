@@ -71,6 +71,23 @@ function useMaps(graphics: Graphics) {
 /** A node's own placement, for drawing its geometry with our materials. */
 const at = (o: THREE.Object3D) => ({ position: o.position, quaternion: o.quaternion, scale: o.scale })
 
+/**
+ * A floor for the mirror: drei's reflector takes the mesh's own +Z as the
+ * mirror's normal and its origin as a point on it, so the slab is laid in
+ * that frame — its top surface through the origin, facing +Z — and the mesh
+ * turned back to lie flat at the top surface's height.
+ */
+function mirrorFloor(node: THREE.Mesh) {
+  const g = node.geometry.clone()
+  node.updateMatrixWorld()
+  g.applyMatrix4(node.matrixWorld)
+  g.computeBoundingBox()
+  const top = g.boundingBox!.max.y
+  g.translate(0, -top, 0)
+  g.rotateX(Math.PI / 2)
+  return { geometry: g, top }
+}
+
 /** The light strips, split into the ones up in the ceiling and the rest. */
 function splitByHeight(g: THREE.BufferGeometry, y: number) {
   const src = g.index ? g.toNonIndexed() : g
@@ -232,6 +249,7 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
     }
   }, [maps])
   const led = useMemo(() => (nodes.led_warm ? splitByHeight(nodes.led_warm.geometry, 2.5) : null), [nodes])
+  const floors = useMemo(() => (['floor', 'stage'] as const).filter((n) => nodes[n]).map((n) => ({ n, ...mirrorFloor(nodes[n]) })), [nodes])
   const pool = HOUSE.pool
 
   useFrame(() => {
@@ -280,13 +298,11 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
   const show = (n: string) => inside || (n !== 'roof' && n !== 'wall_front')
   return (
     <group>
-      {(['floor', 'stage'] as const).map((n) =>
-        nodes[n] ? (
-          <mesh key={`${n}-${reflector}`} geometry={nodes[n].geometry} {...at(nodes[n])} receiveShadow>
-            {stone(n)}
-          </mesh>
-        ) : null,
-      )}
+      {floors.map(({ n, geometry, top }) => (
+        <mesh key={`${n}-${reflector}`} geometry={geometry} position-y={top} rotation-x={-Math.PI / 2} receiveShadow>
+          {stone(n)}
+        </mesh>
+      ))}
       {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'cliff', 'plants', 'frames', 'rail'] as const).map((n) =>
         nodes[n] && show(n) ? <mesh key={n} geometry={nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
       )}

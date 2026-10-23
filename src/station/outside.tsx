@@ -153,7 +153,7 @@ void main() {
   float shade = 1.0 - 0.75 * cloudShadow(vWorld);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   vec4 cr = clouds(R, 3);
-  vec3 refl = mix(skyLut(R), cr.rgb, cr.a);
+  vec3 refl = mix(skyLut(R), cr.rgb, cr.a * 0.65);
   // The water itself: dark blue-green, lit by the sky; greener in the
   // shallows by the rocks, and through the backs of waves facing the sun.
   vec3 skyUp = skyLut(vec3(0.0, 1.0, 0.0));

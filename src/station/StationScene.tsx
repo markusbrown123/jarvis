@@ -9,6 +9,8 @@ import { useStore } from '../store'
 import { ZoneLight } from './floor'
 import { Clusters } from './clusters'
 import { Foundry } from './foundry'
+import { Drones } from './drones'
+import { FloorWorks } from './floorworks'
 import { Console } from './console'
 import { Lair } from './lair'
 import { Outside } from './outside'
@@ -28,7 +30,9 @@ import { useStation } from './stationStore'
  * for this moment — sun, moon, stars and clouds — over a live sea with boats
  * on it (outside.tsx, sky.ts, boats.tsx). On its black marble stage: the
  * command console (console.tsx), the six systems on their pads, the
- * pathways between them and the build bay (foundry.tsx). The house's own
+ * pathways between them, the build bay (foundry.tsx), the drones that fly
+ * its deliveries from docks in the floor (drones.tsx) and the plates round
+ * the console that move with his voice (floorworks.tsx). The house's own
  * light is baked in Blender with Cycles and coloured live; the sun or moon
  * shines in through the glass (houselight.ts); everything live is lit for
  * real (PBR, reflections of the room and sky, a shadow map, mirror
@@ -287,6 +291,8 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <Links />
       <Clusters />
       <Foundry />
+      <Drones />
+      <FloorWorks />
       {/* Dust hanging in the light. */}
       {q.dust > 0 && <Sparkles count={q.dust} scale={[18, 4, 16]} position={[0, 2.3, -2]} size={1.2} speed={0.08} opacity={0.18} color="#cdd8ff" noise={1} />}
       <Rain count={q.rain} />

@@ -54,6 +54,11 @@ code — no downloaded models — where every light and moving part is live stat
   is a tower rising floor by floor as it reports its steps, with a crane
   lowering the next floor; queued jobs are empty plots, finished ones stand
   lit, failed ones fall in.
+- **Drones** fly the station's real deliveries — work out to a zone, a
+  finished job to the build bay, new leads in from outside through the open
+  glass — and hover over zones that are busy or need you; their docks rise
+  out of the floor to launch them. The floor plates round the console lift
+  in a wave while JARVIS listens or speaks.
 - **The house** is a round glass pavilion on a sea cliff, Malibu-style:
   travertine floors round a black marble stage, concrete behind, a curved
   glass wall opening onto a terrace with an infinity pool — modelled in

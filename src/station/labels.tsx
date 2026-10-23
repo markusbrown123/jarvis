@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { CONSOLE_R, linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
+import { CONSOLE_R, HOUSE, linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
 import { useStation } from './stationStore'
 import { describe } from './describe'
 
@@ -163,6 +163,9 @@ export function LabelProjector() {
       if (b[0] < b[2]) placed.push(b)
     }
     const list = [...anchors.values()].sort((a, b) => b.pri() - a.pri())
+    // Looking at the house from outside (the roof's on, outside Command):
+    // the names would float over the roof, so they wait till you're back in.
+    const outside = useStation.getState().mode !== 'command' && (Math.hypot(camera.position.x, camera.position.z) > HOUSE.r + 0.5 || camera.position.y > HOUSE.ceiling)
     for (const a of list) {
       // Sizes only change with content; re-measure now and then.
       if (!a.w || frame.current - a.seen > 30) {
@@ -174,7 +177,7 @@ export function LabelProjector() {
       const behind = v.z > 1
       let x = (v.x * 0.5 + 0.5) * size.width - a.w / 2
       let y = (-v.y * 0.5 + 0.5) * size.height - a.h
-      let ok = !behind && x > -a.w && x < size.width && y > -a.h && y < size.height
+      let ok = !behind && !outside && x > -a.w && x < size.width && y > -a.h && y < size.height
       if (ok) {
         // Where it would go; failing that, nudged up or down, or slid
         // sideways clear of whatever it hits; failing all that, hidden.

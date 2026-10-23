@@ -1,11 +1,12 @@
 import { type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStation, type Sel } from './stationStore'
+import { plated } from './metal'
 
 /** What the station's holograms share: their look, and hovering and clicking them. */
 
-/** Brushed steel for the hardware on the pads. */
-export const steel = new THREE.MeshStandardMaterial({ color: '#4a5162', metalness: 0.75, roughness: 0.3, envMapIntensity: 1.2 })
+/** Machined steel plating for the hardware on the pads. */
+export const steel = plated({ color: '#7c8596', repeat: 1.2, roughness: 0.95, metalness: 0.85, envMapIntensity: 1.2 })
 
 /**
  * The data itself is projected light, not objects: translucent, additive,

@@ -11,7 +11,8 @@ import { useStation } from './stationStore'
  * to the overview) whenever the station's view changes — a click on a
  * system, a toolbar button, Reset. Grabbing the view mid-flight hands
  * control straight back. Talk mode sits behind the chair at the desk, facing
- * the reactor; Cinematic pulls back and drifts round the whole station.
+ * the reactor; Cinematic pulls back and drifts round the whole station (zoom
+ * right out to see the house from over the sea).
  */
 
 type Orbit = { target: THREE.Vector3; update: () => void; addEventListener: (t: 'start', f: () => void) => void; removeEventListener: (t: 'start', f: () => void) => void }
@@ -48,6 +49,14 @@ export function CameraRig() {
       controls.update()
     }
   }, [view, nonce, mode, size.width, size.height, camera, controls])
+
+  // Development: point the camera anywhere (render tests and screenshots).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    ;(window as unknown as { __cam?: unknown }).__cam = (pos: [number, number, number], target: [number, number, number]) => {
+      goal.current = { pos: new THREE.Vector3(...pos), target: new THREE.Vector3(...target) }
+    }
+  }, [])
 
   // Taking hold of the view cancels the flight.
   useEffect(() => {
@@ -103,7 +112,7 @@ export function Controls() {
       enableDamping
       dampingFactor={0.07}
       minDistance={3.5}
-      maxDistance={32}
+      maxDistance={cinematic ? 75 : 32}
       minPolarAngle={0.45}
       maxPolarAngle={1.42}
       minAzimuthAngle={limits.min}
