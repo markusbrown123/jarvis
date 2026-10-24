@@ -3,7 +3,8 @@ import { Dashboard } from './dash/Dashboard'
 import { useHub, hubActions, markPresent, type View } from './hub/client'
 import { useStore } from './store'
 import { startVoice, diag as voiceDiag, type Voice, type VoiceHandlers, type VoiceMode } from './lib/voice'
-import { createSpeaker, cycleVoice, currentVoiceName } from './lib/tts'
+import { createSpeaker, cycleVoice, currentVoiceName, speakingNow } from './lib/tts'
+import { startAnnouncer } from './hub/announce'
 import * as sfx from './lib/sfx'
 import * as music from './lib/music'
 import * as hands from './lib/hands'
@@ -88,6 +89,7 @@ export default function App() {
   const phase = useStore((s) => s.phase)
   const history = useRef<Msg[]>([])
   const speaker = useRef<ReturnType<typeof createSpeaker> | null>(null)
+  const announcer = useRef<(() => void) | null>(null)
   const voice = useRef<Voice | null>(null)
 
   /**
@@ -750,6 +752,17 @@ export default function App() {
         if (store.getState().phase === 'dormant') greet()
       })
     }
+
+    // Important things, said out loud as they land — only while he's idle.
+    announcer.current ??= startAnnouncer({
+      idle: () => store.getState().phase === 'dormant' && !store.getState().soundLocked && !speakingNow(),
+      say: (text) => {
+        const line = createSpeaker()
+        speaker.current = line
+        line.say(text)
+        void line.end()
+      },
+    })
   }
 
   // -- clap to start --------------------------------------------------------

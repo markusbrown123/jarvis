@@ -286,6 +286,14 @@ says how.
 
 ## Voice behaviour
 
+- **He speaks up** when something important lands while you're at the station:
+  a new P1 on Needs Markus ("Sir, something needs you: …"), and a background
+  job you gave him finishing or failing. Once each (remembered across
+  reloads), only while he's idle — never over a conversation — only with the
+  window in view, and never in the phone's quiet hours (away, the phone has
+  it). What was already there when he started is in the briefing, not
+  repeated. Settings → *Say important things out loud* turns it off.
+
 - Speech starts as soon as a text block ends (no wait for the turn's result).
 - Resuming speech extends a held endpoint; continuing while he prepares an
   answer is joined to the request (never after a tool has run).
@@ -316,5 +324,4 @@ rm -rf ~/.jarvis             # forget hub state (optional)
   committed renders instead.
 - **Claude artifacts registry**, TradingView alert webhooks and broker
   monitoring aren't built; no broker or webhook source exists yet.
-- **Spoken announcements / quiet hours** for important blockers.
 - **Real-hardware voice timing** has to be measured on the Mac.

@@ -30,6 +30,8 @@ type Prefs = {
   chartSymbol: string | null
   graphics: Graphics
   autoStart: boolean
+  /** Say important things out loud when they land (hub/announce.ts). */
+  announce: boolean
   layoutVersion: number
 }
 
@@ -47,6 +49,7 @@ const DEFAULT_PREFS: Prefs = {
   chartSymbol: null,
   graphics: 'ultra',
   autoStart: true,
+  announce: true,
   layoutVersion: 2,
 }
 
@@ -213,6 +216,9 @@ export function trackPresence() {
 export const markPresent = () => {
   lastInput = Date.now()
 }
+
+// Development only: lets the render and behaviour tests drive hub state.
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __hub?: typeof useHub }).__hub = useHub
 
 /** A bridge-served file (renders on disk) as an <img> URL. */
 export const fileUrl = (path: string) => `${BRIDGE_HTTP_URL}/file?path=${encodeURIComponent(path)}`

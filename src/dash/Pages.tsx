@@ -185,6 +185,10 @@ export function Settings() {
             Start by himself when the window opens (when Chrome allows sound without a click)
           </label>
           <label className="check">
+            <input type="checkbox" checked={prefs.announce} onChange={(e) => setPrefs({ announce: e.target.checked })} />
+            Say important things out loud when they land — a new P1 for you, a job you gave him finishing or failing (not mid-conversation, not in quiet hours)
+          </label>
+          <label className="check">
             <input type="checkbox" checked={prefs.reducedMotion} onChange={(e) => setPrefs({ reducedMotion: e.target.checked })} />
             Reduced motion
           </label>
