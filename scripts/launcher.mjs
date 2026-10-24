@@ -5,7 +5,7 @@
  *
  *   node scripts/launcher.mjs phone   telegram|paired|bot|chat|pushover (1/0 flags)
  *   node scripts/launcher.mjs pair    a fresh pairing code (valid 15 minutes)
- *   node scripts/launcher.mjs board   what's running: brain, write mode, voice, phone, iPhone voice, Claude Code
+ *   node scripts/launcher.mjs board   what's running: brain, write mode, voice, phone, iPhone voice, Claude Code, awake
  *   tailscale status --json | node scripts/launcher.mjs remote-save
  *                                     record this Mac's tailnet name and your login (~/.jarvis/remote.json)
  *
@@ -13,6 +13,7 @@
  * No secret is printed: the phone's tokens stay in the Keychain.
  */
 
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -46,6 +47,15 @@ function claudeForwarded() {
   try {
     const s = JSON.parse(readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8'))
     return String(s.statusLine?.command ?? '').includes('jarvis-statusline')
+  } catch {
+    return false
+  }
+}
+
+/** Whether `caffeinate` is holding the Mac awake (bin/jarvis starts it beside him). */
+function keptAwake() {
+  try {
+    return execFileSync('pgrep', ['-x', 'caffeinate'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().length > 0
   } catch {
     return false
   }
@@ -102,6 +112,8 @@ try {
     const r = remote()
     row('iPhone voice', Boolean(r), r ? `https://${r.host}:5173 (Tailscale, ${r.login})` : 'not set up — jarvis remote (needs Tailscale)')
     row('Claude Code', claudeForwarded(), claudeForwarded() ? 'usage + activity forwarded' : 'not forwarded — jarvis setup-claude')
+    const awake = keptAwake()
+    row('Awake', awake, awake ? 'kept awake while he runs (closing the lid still sleeps it)' : "may sleep when idle — the phone can't reach a sleeping Mac")
     if (!existsSync(join(DATA, 'token'))) row('API token', false, 'missing (the bridge makes it on first start)')
     console.log('')
   } else {

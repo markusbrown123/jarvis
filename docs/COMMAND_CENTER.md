@@ -306,6 +306,11 @@ the station is a tap away, with the conversation in the lower half and the
 room above. Walk mode isn't offered on a touch screen. The page server listens
 on 127.0.0.1 only, which is where `tailscale serve` sends the phone.
 
+The phone can't reach a sleeping Mac, so `jarvis` keeps it awake while JARVIS
+runs (`caffeinate`: no idle sleep, and none on the charger; the display still
+sleeps, and closing the lid still sleeps the Mac). The status board's Awake row
+says whether it's held.
+
 ## Security
 
 - The bridge listens on `127.0.0.1` only (`JARVIS_BIND` to change, on purpose).

@@ -63,6 +63,10 @@ start_servers() {
   [ "$WRITES" = 1 ] && mode=(--writes)
   nohup node scripts/start.mjs "${mode[@]}" >>"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
+  # Awake while he runs: the phone (Telegram, iPhone voice) can't reach a
+  # sleeping Mac. No idle sleep, and none at all on the charger; the display
+  # still sleeps, closing the lid still sleeps it, and it ends when he does.
+  command -v caffeinate >/dev/null && nohup caffeinate -i -s -w "$(cat "$PIDFILE")" >/dev/null 2>&1 &
 
   for _ in $(seq 60); do
     ready && return 0
