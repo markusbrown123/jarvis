@@ -177,6 +177,28 @@ project's folder, behind the same read-only/write gate. Talking over him,
 "stop" and "cancel reply" never touch them; "cancel that task" or the job's
 cancel shows *cancellation requested* until the session has really stopped.
 
+## The desk: Claude Code and ideas
+
+Sat at the desk in the station (Talk), two tabs sit beside the conversation
+(details in STATION.md):
+
+- **Claude Code** — real sessions (the Agent SDK's Claude Code: same agent,
+  same tools) in a project folder: JARVIS's own repo, Automaton, the Roblox
+  studio, the finance services or home. They stream to the desk as they work,
+  replies resume the same session, Stop aborts the turn. The bridge's one gate
+  decides what runs: with write mode on it edits and runs commands; read-only
+  (`jarvis --safe`), whatever would change something waits at the desk for
+  Allow once / Deny. The project's CLAUDE.md goes into the prompt; its settings
+  files are not loaded, so their allow rules can't get round the gate. Like
+  background jobs, it never sends, deploys, publishes or pays unless asked in
+  that session. API: `POST /api/code/start {project, prompt}`,
+  `/api/code/:id/send|stop|approve|close`; updates on `/api/stream` as `code`.
+- **Ideas** — `~/.jarvis/ideas.json`. Typed at the desk or said to JARVIS
+  (`idea_save`); he develops them on request (`idea_develop`: notes, state) and
+  can hand one to Claude Code (`desk_code`). API: `GET/POST /api/ideas`,
+  `POST /api/ideas/:id` (update), `/api/ideas/:id/delete`; updates on
+  `/api/stream` as `ideas`.
+
 ## Memory and learning
 
 JARVIS remembers across restarts, reloads and `jarvis stop` — in read-only mode too
