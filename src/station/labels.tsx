@@ -95,7 +95,16 @@ function Tooltip() {
     window.addEventListener('pointermove', move, { passive: true })
     return () => window.removeEventListener('pointermove', move)
   }, [])
-  useLayoutEffect(() => void place(el.current), [hovered])
+  const desk = useStation((s) => s.deskHover)
+  useLayoutEffect(() => void place(el.current), [hovered, desk])
+  if (desk)
+    return (
+      <div ref={el} className="st-tip">
+        <b>The desk</b>
+        <span className="st-tip-state t-live">click to sit down</span>
+        <span>Talk to JARVIS, run Claude Code, work on ideas</span>
+      </div>
+    )
   // Zones already carry a label; the tooltip is for the things on them.
   const d = hovered && model && hovered.kind !== 'zone' ? describe(hovered, model) : null
   if (!d) return null

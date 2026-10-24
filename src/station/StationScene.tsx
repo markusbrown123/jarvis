@@ -191,10 +191,11 @@ function BlankGuard({ graphics }: { graphics: Graphics }) {
 function FrameProbe() {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
   useEffect(() => {
     gl.info.autoReset = false
-    ;(window as unknown as { __three?: object }).__three = { gl, scene, THREE }
-  }, [gl, scene])
+    ;(window as unknown as { __three?: object }).__three = { gl, scene, camera, THREE }
+  }, [gl, scene, camera])
   useFrame(() => {
     const w = window as unknown as { __stationFrames?: number; __gl?: { calls: number; triangles: number } }
     w.__stationFrames = (w.__stationFrames ?? 0) + 1

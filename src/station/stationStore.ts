@@ -23,6 +23,8 @@ export type StationEvent = { id: number; at: number; kind: 'assign' | 'complete'
 type StationStore = {
   selected: Sel | null
   hovered: Sel | null
+  /** The pointer is over the desk (Command / Cinematic): a click sits you down at it. */
+  deskHover: boolean
   /**
    * Talk: sat at the desk facing JARVIS, the conversation in front of you.
    * Command: panels and labels, built for working. Cinematic: the same live
@@ -70,6 +72,7 @@ function savedMode(): Mode {
 export const useStation = create<StationStore>((set, get) => ({
   selected: null,
   hovered: null,
+  deskHover: false,
   mode: savedMode(),
   walk: { hint: null, locked: false },
   setWalk: (w) => {

@@ -1,12 +1,12 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import { useFrame, useLoader } from '@react-three/fiber'
+import { useFrame, useLoader, type ThreeEvent } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { useStore } from '../store'
 import { useHub, type Graphics } from '../hub/client'
 import { COL, motion, reactorState, typing, useCanvasTex } from './shared'
 import { useStation } from './stationStore'
-import { BASE, DECK_TOP, ZONES } from './layout'
+import { BASE, CONSOLE_R, DECK_TOP, ZONES } from './layout'
 import { Blob } from './floor'
 
 /**
@@ -100,7 +100,31 @@ export function Console({ graphics }: { graphics: Graphics }) {
   const light = useRef<THREE.PointLight>(null)
   const wave = useRef<THREE.Mesh>(null)
   const col = useMemo(() => new THREE.Color('#7c8bff'), [])
-  const s = useRef({ level: 0, t: 0, typed: 0 })
+  const s = useRef({ level: 0, t: 0, typed: 0, hot: 0 })
+  const away = () => {
+    const m = useStation.getState().mode
+    return m === 'command' || m === 'cinematic'
+  }
+  const sit = (e: ThreeEvent<MouseEvent>) => {
+    if (!away()) return
+    e.stopPropagation()
+    const st = useStation.getState()
+    st.select(null, false)
+    st.setMode('talk')
+    useStation.setState({ deskHover: false })
+    document.body.style.cursor = ''
+  }
+  const over = (e: ThreeEvent<PointerEvent>) => {
+    if (!away()) return
+    e.stopPropagation()
+    useStation.setState({ deskHover: true })
+    document.body.style.cursor = 'pointer'
+  }
+  const out = () => {
+    if (!useStation.getState().deskHover) return
+    useStation.setState({ deskHover: false })
+    document.body.style.cursor = ''
+  }
 
   // Dress the model: baked surfaces, live light, glass.
   useLayoutEffect(() => {
@@ -132,8 +156,10 @@ export function Console({ graphics }: { graphics: Graphics }) {
     v.level += (st.level - v.level) * Math.min(1, dt * 12)
     v.t += dt * motion()
     const lift = v.level * 1.6
-    strip.color.copy(col).multiplyScalar(1.5 + lift)
-    ring.color.copy(col).multiplyScalar(1.9 + lift)
+    // Pointed at from across the room: the desk's light comes up to say "here".
+    v.hot += ((useStation.getState().deskHover ? 1 : 0) - v.hot) * Math.min(1, dt * 8)
+    strip.color.copy(col).multiplyScalar(1.5 + lift + v.hot * 1.2)
+    ring.color.copy(col).multiplyScalar(1.9 + lift + v.hot * 1.6)
     glass.emissive.copy(col)
     glass.emissiveIntensity = 0.04 + v.level * 0.1
     if (light.current) {
@@ -174,6 +200,14 @@ export function Console({ graphics }: { graphics: Graphics }) {
       </mesh>
       <mesh position={kbd} rotation-x={-Math.PI / 2} material={keys}>
         <planeGeometry args={[0.5, 0.16]} />
+      </mesh>
+      {/* The desk is a place to go: from Command or Cinematic, click it to
+          sit down. A plain cylinder catches the pointer, which is cheaper
+          than testing every face of the model on each move; from the chair
+          (inside it) its faces point away, so it never gets in the way. */}
+      <mesh position-y={0.7} onClick={sit} onPointerOver={over} onPointerOut={out}>
+        <cylinderGeometry args={[CONSOLE_R - 0.25, CONSOLE_R - 0.25, 1.4, 24]} />
+        <meshBasicMaterial visible={false} />
       </mesh>
       {mounts[3] && <SystemsMonitor mount={mounts[3]} />}
       {mounts[2] && <ZonesMonitor mount={mounts[2]} />}
