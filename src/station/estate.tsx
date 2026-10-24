@@ -9,7 +9,7 @@ import { SKY } from './sky'
 import { cliffEdge, coastMaterial, ground, lawnNorm } from './coastland'
 import { GARDEN } from './garden'
 import { splitByPlace } from './split'
-import { broadleaf, cypress as cypressTree, grove, leafMaterial, palm, shrub, woodMaterial, type Plant } from './trees'
+import { broadleaf, cypress as cypressTree, grove, leafMaterial, palm, shrub, woodMaterial, type Plant, type TreeParts } from './trees'
 
 /**
  * The rest of the estate round the house, after Tony Stark's: more white
@@ -162,6 +162,29 @@ function ribbon(path: THREE.Vector3[], width: number, lift: number) {
 
 type Tree = { x: number; z: number; s: number; yaw: number }
 
+/**
+ * Out of the house: the garden's trees stood close enough that their crowns
+ * reached in through the wall and showed in the room, under the ceiling.
+ * Each one whose widest branch reaches within `room` of the house's middle
+ * is moved straight out until it clears; if that puts it under a pavilion
+ * it's left out.
+ */
+function clearOfHouse(at: Tree[], parts: TreeParts, room: number) {
+  let reach = 0
+  for (const g of [parts.wood, parts.leaves]) {
+    const p = g.attributes.position
+    if (p) for (let i = 0; i < p.count; i++) reach = Math.max(reach, Math.hypot(p.getX(i), p.getZ(i)))
+  }
+  return at.flatMap((t) => {
+    const d = Math.hypot(t.x, t.z)
+    const need = room + reach * t.s
+    if (d >= need) return [t]
+    const x = (t.x * need) / d
+    const z = (t.z * need) / d
+    return ESTATE.wings.some(([wx, wz, wr]) => Math.hypot(x - wx, z - wz) < wr + 1) ? [] : [{ ...t, x, z }]
+  })
+}
+
 /** Where the trees go: along the drive, round the pavilions and the lawn's edge, never on a roof. */
 function planting(drive: THREE.Vector3[]) {
   const r = rng(71)
@@ -274,18 +297,22 @@ export function Grounds() {
       return { x: t.x, y: standY(t.x, t.z) + dy, z: t.z, s: t.s, yaw: t.yaw, tint: new THREE.Color(k * (0.92 + r() * 0.16), k, k * (0.9 + r() * 0.2)) }
     }
     const kinds = [broadleaf(3), broadleaf(8), broadleaf(13)]
+    const shrubby = shrub(4)
+    // Trees clear the roof's overhang as well as the wall; shrubs only the wall.
+    const tree = HOUSE.roofBack + 0.6
+    const wall = HOUSE.r + 0.6
     return [
       grove(palm(), palms.map((t) => at(t, -0.1, 0.2)), mats.palmBark, mats.fronds),
       grove(cypressTree(), cypress.map((t) => at(t, -0.05, 0.15)), mats.bark, mats.cypress),
       ...kinds.map((k, i) =>
         grove(
           k,
-          broad.filter((_, j) => j % kinds.length === i).map((t) => at(t, -0.05, 0.3)),
+          clearOfHouse(broad.filter((_, j) => j % kinds.length === i), k, tree).map((t) => at(t, -0.05, 0.3)),
           mats.bark,
           mats.leaves,
         ),
       ),
-      grove(shrub(4), shrubs.map((t) => at(t, -0.1, 0.3)), null, mats.shrubs),
+      grove(shrubby, clearOfHouse(shrubs, shrubby, wall).map((t) => at(t, -0.1, 0.3)), null, mats.shrubs),
     ]
   }, [built, mats])
   const t = ESTATE.turn

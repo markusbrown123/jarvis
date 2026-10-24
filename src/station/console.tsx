@@ -204,10 +204,11 @@ export function Console({ graphics }: { graphics: Graphics }) {
         <planeGeometry args={[0.5, 0.16]} />
       </mesh>
       {/* The desk is a place to go: from Command or Cinematic, click it to
-          sit down. A plain cylinder catches the pointer, which is cheaper
-          than testing every face of the model on each move; from the chair
-          (inside it) its faces point away, so it never gets in the way. */}
-      <mesh position-y={0.7} onClick={sit} onPointerOver={over} onPointerOut={out}>
+          sit down (walking, look at it: walk.tsx). A plain cylinder catches
+          the pointer, which is cheaper than testing every face of the model
+          on each move; from the chair (inside it) its faces point away, so
+          it never gets in the way. */}
+      <mesh name="desk_hit" position-y={0.7} onClick={sit} onPointerOver={over} onPointerOut={out}>
         <cylinderGeometry args={[CONSOLE_R - 0.25, CONSOLE_R - 0.25, 1.4, 24]} />
         <meshBasicMaterial visible={false} />
       </mesh>
@@ -221,48 +222,63 @@ export function Console({ graphics }: { graphics: Graphics }) {
 
 // ---------------------------------------------------------------- monitors
 
-const W = 640
-const H = 400
-const SCREEN_W = 0.95
+// Drawn at 1024 across for crisp type; a little wider than the mounts were
+// made for (as wide as the arc allows without the outer pair touching) and
+// raised to match, so it reads from the chair.
+const W = 1024
+const H = 640
+const SCREEN_W = 1.08
+const RAISE = 0.08
 
 type Draw = (g: CanvasRenderingContext2D) => void
 
-/** Frame, header and the right colours; the body is the monitor's own. */
+/**
+ * Frame, header and the right colours; the body is the monitor's own. Solid:
+ * even a little see-through let the room behind show among the words.
+ */
 function screen(title: string, accent: string, body: Draw): Draw {
   return (g) => {
-    g.fillStyle = 'rgba(4, 18, 30, 0.7)'
+    const bg = g.createLinearGradient(0, 0, 0, H)
+    bg.addColorStop(0, '#08192a')
+    bg.addColorStop(1, '#030b14')
+    g.fillStyle = bg
     g.fillRect(0, 0, W, H)
     g.strokeStyle = accent
-    g.globalAlpha = 0.8
-    g.lineWidth = 3
-    g.strokeRect(3, 3, W - 6, H - 6)
+    g.globalAlpha = 0.85
+    g.lineWidth = 5
+    g.strokeRect(4, 4, W - 8, H - 8)
     g.globalAlpha = 1
     g.fillStyle = accent
-    g.font = '600 34px "Barlow Condensed", sans-serif'
+    g.font = '600 58px "Barlow Condensed", sans-serif'
     g.textBaseline = 'alphabetic'
-    g.fillText(title.toUpperCase().split('').join(String.fromCharCode(8202)), 24, 50)
-    g.fillRect(24, 64, W - 48, 2)
+    g.fillText(title.toUpperCase().split('').join(String.fromCharCode(8202)), 40, 80)
+    g.fillRect(40, 100, W - 80, 3)
     body(g)
   }
 }
 
 const DOT: Record<string, string> = { ok: '#4ade80', live: '#a9d8ff', warn: '#f5a524', error: '#ef4444', bad: '#ef4444', off: '#5b5874' }
 
-/** One status row: dot, label, value — clipped to the width. */
+/** Text cut to a width, with an ellipsis if it had to be. */
+function fit(g: CanvasRenderingContext2D, text: string, width: number) {
+  let v = text
+  while (v.length > 3 && g.measureText(v).width > width) v = v.slice(0, -2)
+  return v === text ? v : `${v}…`
+}
+
+/** One status row: dot, label, value — each clipped to its column. */
 function row(g: CanvasRenderingContext2D, y: number, state: string, label: string, value: string) {
   g.fillStyle = DOT[state] ?? DOT.off
   g.beginPath()
-  g.arc(36, y - 9, 8, 0, Math.PI * 2)
+  g.arc(56, y - 14, 13, 0, Math.PI * 2)
   g.fill()
   g.fillStyle = '#c9d6e8'
-  g.font = '500 26px "Barlow", sans-serif'
-  g.fillText(label, 56, y)
-  g.fillStyle = state === 'off' ? '#7d86a0' : '#eef4ff'
-  g.font = '500 24px "IBM Plex Mono", monospace'
-  const x = 250
-  let v = value
-  while (v.length > 3 && g.measureText(v).width > W - x - 24) v = v.slice(0, -2)
-  g.fillText(v === value ? v : `${v}…`, x, y)
+  g.font = '500 44px "Barlow", sans-serif'
+  const x = 400
+  g.fillText(fit(g, label, x - 110), 86, y)
+  g.fillStyle = state === 'off' ? '#8a93ad' : '#eef4ff'
+  g.font = '500 38px "IBM Plex Mono", monospace'
+  g.fillText(fit(g, value, W - x - 40), x, y)
 }
 
 /**
@@ -282,7 +298,7 @@ function Monitor({ mount, tex }: { mount: THREE.Object3D; tex: THREE.Texture }) 
   }
   const sh = (SCREEN_W * H) / W
   return (
-    <group position={mount.position} quaternion={mount.quaternion}>
+    <group position={[mount.position.x, mount.position.y + RAISE, mount.position.z]} quaternion={mount.quaternion}>
       <mesh
         name={`screen_${index}`}
         userData={{ screen: index }}
@@ -328,10 +344,10 @@ function SystemsMonitor({ mount }: { mount: THREE.Object3D }) {
     H,
     screen('Jarvis · systems', '#7cc8ff', (g) => {
       g.fillStyle = reactorState().color.getStyle()
-      g.font = '600 46px "Barlow Condensed", sans-serif'
-      g.fillText((PHASE_WORD[phase] ?? phase).toUpperCase(), 24, 118)
-      ;(caps ?? []).slice(0, 6).forEach((c, i) => row(g, 168 + i * 38, c.state, c.label, c.detail))
-      if (!caps) row(g, 168, 'off', 'Status', 'reading…')
+      g.font = '600 76px "Barlow Condensed", sans-serif'
+      g.fillText((PHASE_WORD[phase] ?? phase).toUpperCase(), 40, 186)
+      ;(caps ?? []).slice(0, 5).forEach((c, i) => row(g, 270 + i * 84, c.state, c.label, c.detail))
+      if (!caps) row(g, 270, 'off', 'Status', 'reading…')
     }),
     [key],
   )
@@ -349,18 +365,16 @@ function WorkMonitor({ mount }: { mount: THREE.Object3D }) {
     H,
     screen('Work', '#a5b4fc', (g) => {
       g.fillStyle = '#eef4ff'
-      g.font = '600 40px "Barlow Condensed", sans-serif'
-      g.fillText(jobs ? `${jobs.running.length} RUNNING · ${jobs.queued.length} QUEUED` : 'CONNECTING…', 24, 112)
-      live.slice(0, 4).forEach((j, i) => row(g, 160 + i * 36, j.stale ? 'warn' : j.state === 'needs_markus' ? 'warn' : j.state === 'queued' ? 'off' : 'live', j.stale ? 'no heartbeat' : j.state.replace('_', ' '), j.title))
-      g.fillStyle = items?.length ? '#f5a524' : '#7d86a0'
-      g.font = '600 32px "Barlow Condensed", sans-serif'
-      g.fillText(items?.length ? `${items.length} WAITING ON YOU` : 'NOTHING WAITING ON YOU', 24, 330)
+      g.font = '600 64px "Barlow Condensed", sans-serif'
+      g.fillText(jobs ? `${jobs.running.length} RUNNING · ${jobs.queued.length} QUEUED` : 'CONNECTING…', 40, 180)
+      live.slice(0, 2).forEach((j, i) => row(g, 262 + i * 80, j.stale ? 'warn' : j.state === 'needs_markus' ? 'warn' : j.state === 'queued' ? 'off' : 'live', j.stale ? 'no heartbeat' : j.state.replace('_', ' '), j.title))
+      g.fillStyle = items?.length ? '#f5a524' : '#8a93ad'
+      g.font = '600 54px "Barlow Condensed", sans-serif'
+      g.fillText(items?.length ? `${items.length} WAITING ON YOU` : 'NOTHING WAITING ON YOU', 40, 500)
       if (items?.length) {
         g.fillStyle = '#f3e3c8'
-        g.font = '500 24px "Barlow", sans-serif'
-        let t = items[0].title
-        while (t.length > 3 && g.measureText(t).width > W - 48) t = t.slice(0, -2)
-        g.fillText(t === items[0].title ? t : `${t}…`, 24, 368)
+        g.font = '500 40px "Barlow", sans-serif'
+        g.fillText(fit(g, items[0].title, W - 80), 40, 572)
       }
     }),
     [key],
@@ -380,7 +394,7 @@ function BusinessMonitor({ mount }: { mount: THREE.Object3D }) {
         [model.stagesReason ? 'off' : 'ok', 'Site pipeline', model.stagesReason ? `unavailable — ${model.stagesReason}` : `${model.stages.reduce((n, s) => n + (s.count ?? 0), 0)} sites`],
         [model.leads.total === null ? 'off' : 'ok', 'Leads', model.leads.total === null ? `unavailable — ${model.leads.reason ?? 'no access'}` : `${model.leads.total}`],
         [up ? 'ok' : 'off', 'Finance', `${up}/${model.services.length} services · monitoring only`],
-        [spent === undefined ? 'off' : 'ok', 'Spent this month', spent === undefined ? 'ledger not loaded' : `$${spent.toFixed(2)}`],
+        [spent === undefined ? 'off' : 'ok', 'Spent', spent === undefined ? 'ledger not loaded' : `$${spent.toFixed(2)} this month`],
         [allowance?.state ?? 'off', 'Claude 5h', allowance?.detail ?? 'unavailable'],
       ]
     : []
@@ -389,11 +403,11 @@ function BusinessMonitor({ mount }: { mount: THREE.Object3D }) {
     W,
     H,
     screen('Business', '#5eead4', (g) => {
-      lines.forEach((l, i) => row(g, 112 + i * 44, l[0], l[1], l[2]))
-      if (!lines.length) row(g, 112, 'off', 'Status', 'reading…')
-      g.fillStyle = '#7d86a0'
-      g.font = '400 20px "IBM Plex Mono", monospace'
-      g.fillText('No broker connected — no positions or P&L', 24, 382)
+      lines.forEach((l, i) => row(g, 174 + i * 72, l[0], l[1], l[2]))
+      if (!lines.length) row(g, 174, 'off', 'Status', 'reading…')
+      g.fillStyle = '#8a93ad'
+      g.font = '400 28px "IBM Plex Mono", monospace'
+      g.fillText('No broker connected — no positions or P&L', 40, 614)
     }),
     [key],
   )
@@ -411,7 +425,7 @@ function ZonesMonitor({ mount }: { mount: THREE.Object3D }) {
       ZONES.forEach((z, i) => {
         const zm = zones?.[z.id]
         const state = !zm ? 'off' : zm.state === 'error' ? 'error' : zm.state === 'attention' ? 'warn' : zm.state === 'active' ? 'live' : zm.state === 'idle' ? 'ok' : 'off'
-        row(g, 112 + i * 46, state, z.label, zm?.headline ?? 'reading…')
+        row(g, 174 + i * 80, state, z.label, zm?.headline ?? 'reading…')
       })
     }),
     [key],

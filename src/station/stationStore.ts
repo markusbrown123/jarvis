@@ -103,7 +103,9 @@ export const useStation = create<StationStore>((set, get) => ({
   screenHover: null,
   enterScreen: (mon) => {
     const st = get()
-    if (st.screen || !SCREENS[mon] || st.intro !== 'done' || st.mode === 'walk') return
+    if (st.screen || !SCREENS[mon] || st.intro !== 'done') return
+    // On foot: stop walking (which lets the mouse go); the flight starts from where you stood.
+    if (st.mode === 'walk') st.setMode('talk')
     document.body.style.cursor = ''
     set({ screen: { mon, phase: 'in', at: performance.now() }, screenHover: null, deskHover: false, selected: null })
   },

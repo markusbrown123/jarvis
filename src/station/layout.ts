@@ -73,8 +73,9 @@ export const CONSOLE_R = 2.45
 export function seatCamera(aspect: number): { pos: [number, number, number]; target: [number, number, number] } {
   const k = Math.max(1, 1.6 / aspect)
   // Over the chair's shoulder, like the workshop shots: the chair, the desk
-  // and its monitors across the lower half, the room beyond.
-  return { pos: [0, 2.45 + 0.35 * k, CHAIR[2] + 4.5 * k], target: [0, 1.0, -2.2] }
+  // and its monitors across the lower half, the room beyond — close enough
+  // that the monitors read.
+  return { pos: [0, 2.3 + 0.35 * k, CHAIR[2] + 3.7 * k], target: [0, 1.1, -2.2] }
 }
 
 /** Camera presets: where the camera sits and what it looks at. */

@@ -3,15 +3,16 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
 import { CONSOLE_R, FOUNDRY, OBSTACLES, onIsland, walkable, ZONES } from './layout'
-import { useStation } from './stationStore'
+import { SCREENS, useStation } from './stationStore'
 
 /**
  * Walk mode: the station on foot, first person. W A S D (or the arrows) to
  * move, Shift to run, the mouse to look — click to capture it, or drag.
- * You stand up behind the console; E sits you back down at it, or opens
- * the zone you're facing. The open glass panel straight ahead leads out
- * onto the terrace, round the pool to the balustrade. Talking to JARVIS
- * works as everywhere else.
+ * You stand up behind the console. Look at the desk and E (or a click)
+ * sits you back down at it; look at one of its monitors and it takes you
+ * into that screen; facing a zone, it opens it. The open glass panel
+ * straight ahead leads out onto the terrace, round the pool to the
+ * balustrade. Talking to JARVIS works as everywhere else.
  *
  * While walking these keys belong to walking: they're taken before the
  * app's own shortcuts (D is diagnostics, E expands panels) see them.
@@ -23,6 +24,9 @@ const RUN = 5.2
 const BODY = 0.3
 const TURN = 0.0022
 const KEYS = new Set(['w', 'a', 's', 'd', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'])
+/** How far off the desk and its monitors answer to what you look at. */
+const SCREEN_REACH = 5
+const DESK_REACH = 7
 
 const typingIn = (e: Event) => {
   const el = e.target as HTMLElement | null
@@ -32,6 +36,8 @@ const typingIn = (e: Event) => {
 export function WalkControls() {
   const camera = useThree((s) => s.camera)
   const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const aim = useMemo(() => ({ ray: new THREE.Raycaster(), centre: new THREE.Vector2(0, 0), hits: [] as THREE.Intersection[], targets: [] as THREE.Object3D[] }), [])
   const setEvents = useThree((s) => s.setEvents)
   const keys = useRef(new Set<string>())
   const look = useRef({ yaw: 0, pitch: -0.06 })
@@ -40,6 +46,15 @@ export function WalkControls() {
   const ground = useRef(0.16)
   const bob = useRef(0)
   const act = useRef<(() => void) | null>(null)
+
+  // Development: stand anywhere, facing any way (render tests and screenshots).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    ;(window as unknown as { __walk?: unknown }).__walk = (x: number, z: number, yaw: number, pitch = -0.06) => {
+      pos.set(x, 0, z)
+      look.current = { yaw, pitch }
+    }
+  }, [pos])
 
   // Clicking things in the room is for the other modes; here E does it.
   useEffect(() => {
@@ -77,8 +92,10 @@ export function WalkControls() {
   useEffect(() => {
     const el = gl.domElement
     const { setWalk } = useStation.getState()
+    // The first click takes the mouse; with it taken, a click does what E does.
     const capture = () => {
-      if (document.pointerLockElement !== el) void Promise.resolve(el.requestPointerLock()).catch(() => {})
+      if (document.pointerLockElement === el) act.current?.()
+      else void Promise.resolve(el.requestPointerLock()).catch(() => {})
     }
     const changed = () => setWalk({ locked: document.pointerLockElement === el })
     const move = (e: MouseEvent) => {
@@ -98,6 +115,22 @@ export function WalkControls() {
       setWalk({ hint: null, locked: false })
     }
   }, [gl])
+
+  // Only the desk and its four monitors are tested, not the whole room;
+  // found once, and again if the console is rebuilt (a graphics change).
+  const lookingAt = () => {
+    if (aim.targets.length < 5 || aim.targets.some((t) => !t.parent))
+      aim.targets = ['screen_0', 'screen_1', 'screen_2', 'screen_3', 'desk_hit'].map((n) => scene.getObjectByName(n)).filter((t) => t !== undefined)
+    aim.ray.setFromCamera(aim.centre, camera)
+    aim.hits.length = 0
+    for (const t of aim.targets) t.raycast(aim.ray, aim.hits)
+    aim.hits.sort((a, b) => a.distance - b.distance)
+    for (const h of aim.hits) {
+      const screen = h.object.userData.screen as number | undefined
+      if (screen !== undefined && h.distance < SCREEN_REACH) return { screen }
+    }
+    return aim.hits.some((h) => h.object.name === 'desk_hit' && h.distance < DESK_REACH) ? { desk: true } : null
+  }
 
   useFrame((_, dt) => {
     const d = Math.min(dt, 0.05)
@@ -143,12 +176,19 @@ export function WalkControls() {
     camera.position.set(pos.x, ground.current + EYE + sway, pos.z)
     camera.rotation.set(look.current.pitch, yaw, 0, 'YXZ')
 
-    // What E does from here: sit at the desk, or open the zone in front.
+    // What E does from here: whatever's in the middle of the view — one of
+    // the desk's monitors, or the desk — or, near it and facing it, sit;
+    // or open the zone in front.
     const st = useStation.getState()
     let hint: string | null = null
     act.current = null
-    if (fromCentre < CONSOLE_R + 1.1 && (-pos.x * fx - pos.z * fz) / fromCentre > 0.5) {
-      hint = 'E  ·  sit at the terminal'
+    const looked = lookingAt()
+    if (looked?.screen !== undefined) {
+      const mon = looked.screen
+      hint = `E  ·  use the ${SCREENS[mon].name} screen`
+      act.current = () => st.enterScreen(mon)
+    } else if (looked?.desk || (fromCentre < CONSOLE_R + 1.1 && (-pos.x * fx - pos.z * fz) / fromCentre > 0.5)) {
+      hint = 'E  ·  sit at the desk'
       act.current = () => st.setMode('talk')
     } else {
       let best = Infinity

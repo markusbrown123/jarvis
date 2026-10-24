@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useFrame, useLoader } from '@react-three/fiber'
 import { MeshReflectorMaterial, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import type { Graphics } from '../hub/client'
+import { TOUCH, type Graphics } from '../hub/client'
 import { reactorState } from './shared'
 import { useStation } from './stationStore'
 import { HOUSE } from './layout'
@@ -274,9 +274,62 @@ void main() {
   gl_FragColor = vec4(c, 1.0);
 }`
 
+/**
+ * lair.py lays two thin black trims across the ceiling, well in from the
+ * glass; from the floor they read as cracks in it: the frames are drawn
+ * without them. And the mullions at either end of the glass stand straight
+ * where the pillars lean back towards the top, so the upper half of each
+ * stood out from its pillar's face (its shadow baked on it): they're bent
+ * to follow the face instead, a dark strip down the pillar from floor to
+ * ceiling over their own shadow.
+ */
+// The pillar's face (lair.py: centred R + 0.25 out, 0.55 deep, its top leaning 0.45 back).
+const pillarFace = (y: number) => HOUSE.r - 0.3 + (0.45 * y) / (HOUSE.ceiling + 0.3)
+const MULLION_OUT = HOUSE.r + 0.07
+
+function cleanFrames(node: THREE.Mesh) {
+  const g = node.geometry.index ? node.geometry.toNonIndexed() : node.geometry
+  node.updateMatrix()
+  const back = node.matrix.clone().invert()
+  const p = g.attributes.position
+  const v = new THREE.Vector3()
+  const c = new THREE.Vector3()
+  const keep: number[] = []
+  const bend = new Set<number>()
+  for (let t = 0; t < p.count; t += 3) {
+    c.set(0, 0, 0)
+    for (let k = 0; k < 3; k++) c.addScaledVector(v.fromBufferAttribute(p, t + k).applyMatrix4(node.matrix), 1 / 3)
+    const r = Math.hypot(c.x, c.z)
+    if (c.y > HOUSE.ceiling - 0.05 && r < HOUSE.r - 1) continue
+    if (Math.abs(c.z) < 0.15 && Math.abs(c.x) > HOUSE.r - 0.5 && c.y > 0.06 && c.y < HOUSE.ceiling - 0.08) bend.add(keep.length)
+    keep.push(t)
+  }
+  const out = new THREE.BufferGeometry()
+  for (const [name, a] of Object.entries(g.attributes)) {
+    const arr = new Float32Array(keep.length * 3 * a.itemSize)
+    keep.forEach((t, i) => {
+      for (let k = 0; k < 3 * a.itemSize; k++) arr[i * 3 * a.itemSize + k] = a.array[t * a.itemSize + k]
+    })
+    out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize, a.normalized))
+  }
+  const pos = out.attributes.position
+  for (const i of bend)
+    for (let k = i * 3; k < i * 3 + 3; k++) {
+      v.fromBufferAttribute(pos, k).applyMatrix4(node.matrix)
+      // Out along the glass's end line (+x at one end, −x at the other), in to the face.
+      const side = Math.sign(v.x)
+      v.x = side * (side * v.x - MULLION_OUT + pillarFace(v.y) - 0.005)
+      v.applyMatrix4(back)
+      pos.setXYZ(k, v.x, v.y, v.z)
+    }
+  return out
+}
+
 export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: number }) {
   const { nodes } = useGLTF(MODEL, false) as unknown as { nodes: Record<string, THREE.Mesh> }
-  const maps = useMaps(graphics)
+  // Walking up to a wall shows Low's own maps soft and their seams wide; on
+  // a computer the next size up costs little. Phones keep Low's.
+  const maps = useMaps(graphics === 'low' && !TOUCH ? 'high' : graphics)
   const mode = useStation((s) => s.mode)
   const inside = mode !== 'command'
   const mats = useMemo(() => {
@@ -315,6 +368,7 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
     }
   }, [maps])
   const led = useMemo(() => (nodes.led_warm ? splitByHeight(nodes.led_warm.geometry, 2.5) : null), [nodes])
+  const frames = useMemo(() => (nodes.frames ? cleanFrames(nodes.frames) : null), [nodes])
   const floors = useMemo(() => (['floor', 'stage'] as const).filter((n) => nodes[n]).map((n) => ({ n, ...mirrorFloor(nodes[n]) })), [nodes])
   // The cliff all round the island, in slices: only those in view are drawn.
   const cliff = useMemo(() => (nodes.cliff ? splitByPlace(unfold(nodes.cliff.geometry), sector(8)) : null), [nodes])
@@ -368,7 +422,7 @@ export function Lair({ graphics, reflector }: { graphics: Graphics; reflector: n
         </mesh>
       ))}
       {(['deck', 'pool', 'wall_left', 'wall_front', 'wall_right', 'roof', 'pillars', 'terrain', 'frames', 'rail'] as const).map((n) =>
-        nodes[n] && show(n) ? <mesh key={n} geometry={nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
+        nodes[n] && show(n) ? <mesh key={n} geometry={n === 'frames' && frames ? frames : nodes[n].geometry} {...at(nodes[n])} material={mats[n]} receiveShadow={n === 'deck' || n === 'pool'} /> : null,
       )}
       {cliff && nodes.cliff && show('cliff') && cliff.map((g, i) => <mesh key={`cliff${i}`} geometry={g} {...at(nodes.cliff)} material={mats.cliff} />)}
       {nodes.glass && <mesh geometry={nodes.glass.geometry} {...at(nodes.glass)} material={mats.glass} renderOrder={5} />}
