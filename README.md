@@ -9,7 +9,9 @@ run headless as a library.
 **This build** (Markus's) adds, on top of the voice assistant:
 
 - **One command, `jarvis`** — starts everything in write mode, links your
-  phone the first time, prints a status board, opens the window.
+  phone the first time, prints a status board, opens the window, and says when
+  a newer version is waiting. `jarvis update` pulls it, installs what changed
+  and restarts him (never over changes that aren't committed).
 - **The Station** — a 3D Tony Stark house on a Malibu cliff under the real sky
   and weather: a GTA-style loading screen and fly-in from the sea, the estate,
   FPV drones and Dum-E doing the real work, your desk looking out to sea with

@@ -13,6 +13,7 @@
 #   jarvis setup-phone telegram|pushover|remove   phone tokens → Keychain
 #   jarvis watch                     live terminal feed in this window
 #   jarvis remote [off]              talk to him from your iPhone over Tailscale
+#   jarvis update                    pull the newest version, install, restart
 #
 # Settings come from the environment, with defaults below. The ElevenLabs key
 # is read from the macOS Keychain (service "elevenlabs") so it never sits in a
@@ -259,8 +260,47 @@ remote() {
   printf '%s' "$status" | node "$DIR/scripts/launcher.mjs" remote-save
 }
 
+# How far behind GitHub this checkout is (fetches quietly; empty if unknown).
+behind() {
+  local branch
+  branch="$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)" || return
+  git -C "$DIR" fetch -q origin "$branch" 2>/dev/null || return
+  git -C "$DIR" rev-list --count "HEAD..origin/$branch" 2>/dev/null
+}
+
+# The newest version of this branch: pull it, install what changed, restart.
+# Never over local changes (JARVIS's or yours) — those are shown, not lost.
+update() {
+  cd "$DIR" || return 1
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "There are changes here that aren't committed (JARVIS's or yours):"
+    git status --short | head -20
+    echo "Keep them with git stash (or commit them), then run jarvis update again."
+    return 1
+  fi
+  local branch n
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  n="$(behind)"
+  if [ -z "$n" ]; then echo "Couldn't reach GitHub to check for updates."; return 1; fi
+  if [ "$n" = 0 ]; then echo "Already up to date ($branch)."; return 0; fi
+  echo "$n new change(s) on $branch:"
+  git log --format='  %s' "HEAD..origin/$branch" | head -20
+  if ! git merge -q --ff-only "origin/$branch"; then
+    echo "Couldn't move forward cleanly (git says why above). Sort that out, or run: git pull"
+    return 1
+  fi
+  if ready; then
+    echo "Restarting JARVIS on the new version..."
+    stop_all >/dev/null
+    start_servers || return 1
+    echo "Reload his window if it doesn't by itself."
+  fi
+  echo "Updated."
+}
+
 case "${1:-}" in
   stop) stop_all ;;
+  update) update ;;
   remote) shift; remote "$@" ;;
   setup-phone) shift; setup_phone "$@" ;;
   watch) exec node "$DIR/scripts/watch.mjs" ;;
@@ -276,9 +316,12 @@ case "${1:-}" in
     phone_link
     node "$DIR/scripts/launcher.mjs" board
     open_window
+    # Said last, once the window's open: is there a newer version waiting?
+    n="$(behind)"
+    [ -n "$n" ] && [ "$n" != 0 ] && echo "An update is waiting: $n new change(s). Run: jarvis update"
     ;;
   *)
-    echo "usage: jarvis [--safe] [stop|logs|watch|remote [off]|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
+    echo "usage: jarvis [--safe] [stop|update|logs|watch|remote [off]|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
     exit 1
     ;;
 esac
