@@ -317,6 +317,17 @@ export function startHub({ runner, phone } = {}) {
         return json(res, cors, 200, { ok: true, job: hub.getJob(id) })
       }
 
+      // Start or stop a finance research service (its own venv, its own log).
+      m = path.match(/^\/api\/finance\/services\/([a-z0-9-]+)\/(start|stop)$/)
+      if (req.method === 'POST' && m) {
+        try {
+          const r = await sources.finance[m[2]](m[1])
+          return json(res, cors, 200, { ok: true, ...(r ?? {}) })
+        } catch (err) {
+          return json(res, cors, 409, { error: err.message })
+        }
+      }
+
       m = path.match(/^\/api\/refresh\/(roblox|automaton|finance)$/)
       if (req.method === 'POST' && m) {
         await sources[m[1]].refresh()

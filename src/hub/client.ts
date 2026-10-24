@@ -169,6 +169,7 @@ export const hubActions = {
   cancelJob: (id: string) => post(`/api/jobs/${encodeURIComponent(id)}/cancel`),
   startJob: (title: string, project: string, instructions: string) => post('/api/jobs/start', { title, project, instructions }),
   refresh: (project: 'roblox' | 'automaton' | 'finance') => post(`/api/refresh/${project}`),
+  financeService: (id: string, action: 'start' | 'stop') => post(`/api/finance/services/${encodeURIComponent(id)}/${action}`),
   setQuantView: (name: string, url: string) => post('/api/config/quant-view', { name, url }),
   addExpense: (e: Record<string, unknown>) => post('/api/expenses', e),
   deleteExpense: (id: string) => post(`/api/expenses/${encodeURIComponent(id)}/delete`),

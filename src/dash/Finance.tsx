@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useHub, hubActions } from '../hub/client'
+import type { FinanceProject, MasterHubData, ScoutData, Service } from '../hub/types'
 import { ago } from '../hub/format'
 import { Chip, Empty } from './shared'
 import { useTick } from './state'
@@ -29,6 +30,186 @@ function chartSrc(symbol: string) {
     locale: 'en',
   })
   return `https://s.tradingview.com/widgetembed/?${q}`
+}
+
+const fmt = (v: number | null | undefined, d = 2) => (v == null ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: d }))
+const money = (v: number | null | undefined) => (v == null ? '—' : `${v < 0 ? '−' : ''}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`)
+
+/** Start / stop a research service, with its own venv. */
+function ServiceControl({ sv }: { sv: Service }) {
+  const [busy, setBusy] = useState(false)
+  const c = sv.control
+  if (!c) return null
+  const act = async (a: 'start' | 'stop') => {
+    setBusy(true)
+    try {
+      await hubActions.financeService(sv.id, a)
+      useHub.getState().say(`${sv.name} ${a === 'start' ? 'starting' : 'stopped'}`)
+    } catch (err) {
+      useHub.getState().say((err as Error).message)
+    }
+    setBusy(false)
+  }
+  if (sv.up && !c.managed) return <span className="muted small" title="Started outside JARVIS: stop it where it was started">running outside JARVIS</span>
+  if (c.managed)
+    return (
+      <button className="btn" disabled={busy} onClick={() => act('stop')} title={`Log: ${c.log}`}>
+        {busy ? 'Stopping…' : 'Stop'}
+      </button>
+    )
+  if (!c.ready)
+    return (
+      <button className="btn btn-quiet" title={c.setup} onClick={() => navigator.clipboard?.writeText(c.setup).then(() => useHub.getState().say('Setup command copied'))}>
+        Copy setup
+      </button>
+    )
+  return (
+    <button className="btn" disabled={busy} onClick={() => act('start')} title={`Runs from its own .venv · log ${c.log}`}>
+      {busy ? 'Starting…' : 'Start'}
+    </button>
+  )
+}
+
+/** A strategy's paper equity curve, from its real resolved trades. */
+function Spark({ points }: { points: [number | null, number | null][] }) {
+  const ys = points.map((p) => p[1]).filter((y): y is number => y != null)
+  if (ys.length < 2) return <span className="muted small">one trade</span>
+  const lo = Math.min(...ys)
+  const hi = Math.max(...ys)
+  const d = ys.map((y, i) => `${i ? 'L' : 'M'}${((i / (ys.length - 1)) * 100).toFixed(1)},${(28 - ((y - lo) / (hi - lo || 1)) * 26).toFixed(1)}`).join(' ')
+  const up = ys[ys.length - 1] >= ys[0]
+  return (
+    <svg className={`spark ${up ? 'up' : 'down'}`} viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label={`Paper equity from ${fmt(ys[0])} to ${fmt(ys[ys.length - 1])}`}>
+      <path d={d} />
+    </svg>
+  )
+}
+
+function MasterHubCard({ d }: { d?: MasterHubData }) {
+  return (
+    <section className="card research-card">
+      <header className="card-head">
+        <h3>master-hub findings</h3>
+        <span className="muted small">{d?.updatedAt ? `saved ${ago(d.updatedAt)}` : ''}</span>
+      </header>
+      <p className="fine">Review-only research from its own database, read-only. Not signals, not an account; realized and unrealized P&amp;L are kept apart.</p>
+      {!d || d.error ? (
+        <p className="muted">{d?.error ?? 'Not read yet.'}</p>
+      ) : !d.findings?.length ? (
+        <p className="muted">No findings stored yet.</p>
+      ) : (
+        <div className="findings">
+          {d.findings.slice(0, 12).map((f, i) => (
+            <div key={`${f.engine}${f.subject}${i}`} className="finding">
+              <div className="finding-top">
+                <Chip tone="idle">{f.kind.replace(/_/g, ' ')}</Chip>
+                <b>{f.title ?? f.subject}</b>
+                {f.rank != null && <span className="mono muted small">rank {fmt(f.rank)}</span>}
+              </div>
+              <div className="svc-sub">
+                {f.engine} · {f.subject}
+                {f.confidence != null && ` · confidence ${fmt(f.confidence * (f.confidence <= 1 ? 100 : 1), 0)}%`}
+                {f.sampleSize != null && ` · n=${f.sampleSize}`}
+                {f.paper && ` · paper: ${f.paper}`}
+                {f.forward && ` · forward test: ${f.forward}`}
+                {f.realizedPnl != null && ` · realized ${money(f.realizedPnl)}`}
+                {f.unrealizedPnl != null && ` · unrealized ${money(f.unrealizedPnl)}`}
+                {f.riskFlags.length > 0 && ` · ${f.riskFlags.length} risk flag${f.riskFlags.length > 1 ? 's' : ''}`}
+                {f.url && (
+                  <>
+                    {' · '}
+                    <a href={f.url} target="_blank" rel="noreferrer">
+                      source ↗
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {d && !d.error && (
+        <>
+          <h4 className="research-sub">Strategy lab · paper forward test</h4>
+          <p className="fine">Each curve is real resolved paper trades, realized only — never backfilled. Not money in an account.</p>
+          {d.strategies?.length ? (
+            d.strategies.slice(0, 8).map((s) => (
+              <div key={s.engine + s.strategy} className="strategy">
+                <div className="svc-main">
+                  <div className="svc-name">{s.strategy}</div>
+                  <div className="svc-sub">
+                    {s.engine} · {s.trades} paper trades · paper equity {fmt(s.equity)} · last {ago(s.lastAt ?? undefined)}
+                  </div>
+                </div>
+                <Spark points={s.points} />
+              </div>
+            ))
+          ) : (
+            <p className="muted">{d.equityError ?? 'No strategy-lab paper trades recorded yet.'}</p>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+function ScoutCard({ d }: { d?: ScoutData }) {
+  return (
+    <section className="card research-card">
+      <header className="card-head">
+        <h3>Futures Trader Scout</h3>
+        <span className="muted small">{d?.sources?.lastChecked ? `sources checked ${ago(d.sources.lastChecked)}${d.sources.errors ? ` · ${d.sources.errors} erroring` : ''}` : ''}</span>
+      </header>
+      <p className="fine">Public traders ranked from public payout posts and streams, read-only from the Scout's database. Their results, not yours; not advice.</p>
+      {!d || d.error ? (
+        <p className="muted">{d?.error ?? 'Not read yet.'}</p>
+      ) : !d.traders?.length ? (
+        <p className="muted">No traders ranked yet — run a scan in the Scout.</p>
+      ) : (
+        <ol className="ranking">
+          {d.traders.slice(0, 10).map((t) => (
+            <li key={t.name + (t.url ?? '')}>
+              <div className="finding-top">
+                <b>{t.url ? <a href={t.url} target="_blank" rel="noreferrer">{t.name} ↗</a> : t.name}</b>
+                <span className="mono">{fmt(t.score, 1)}</span>
+              </div>
+              <div className="svc-sub" title={t.why ?? undefined}>
+                {[t.platform, t.propFirm, t.products].filter(Boolean).join(' · ')}
+                {t.payouts90d != null && ` · ${t.payouts90d} verified payouts in 90 days`}
+                {t.paid90d ? ` (${money(t.paid90d)})` : ''}
+                {t.consistency != null && ` · consistency ${fmt(t.consistency, 1)}`}
+                {t.redFlags ? ` · red flags ${fmt(t.redFlags, 1)}` : ''}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {d?.live && d.live.length > 0 && (
+        <>
+          <h4 className="research-sub">Live now</h4>
+          {d.live.map((l) => (
+            <div key={l.url} className="svc-sub">
+              <a href={l.url} target="_blank" rel="noreferrer">
+                {l.channel} ↗
+              </a>{' '}
+              · {l.platform} · {l.title.slice(0, 70)}
+              {l.viewers != null && ` · ${l.viewers.toLocaleString()} watching`}
+              {l.products && ` · ${l.products}`}
+            </div>
+          ))}
+        </>
+      )}
+    </section>
+  )
+}
+
+function Research({ f }: { f: FinanceProject }) {
+  return (
+    <div className="research-grid">
+      <MasterHubCard d={f.data?.masterHub} />
+      <ScoutCard d={f.data?.scout} />
+    </div>
+  )
 }
 
 /** Finance: business expenses first, then market monitoring. */
@@ -104,10 +285,12 @@ function Markets() {
                 <div className="svc-main">
                   <div className="svc-name">{sv.name}</div>
                   <div className="svc-sub">
-                    {sv.up ? `running · ${sv.ms} ms` : 'not running on this Mac'} · {sv.url}
+                    {sv.up ? `running · ${sv.ms} ms` : sv.control?.managed ? 'starting…' : 'not running on this Mac'}
+                    {sv.control?.managed && sv.control.startedAt ? ` · started by JARVIS ${ago(sv.control.startedAt)}` : ''} · {sv.url}
                     {sv.commit ? ` · ${sv.commit.short} ${ago(sv.commit.committedAt)}` : sv.repo ? '' : ' · repo not found locally'}
                   </div>
                 </div>
+                <ServiceControl sv={sv} />
                 {sv.up && (
                   <a className="btn" href={sv.url} target="_blank" rel="noreferrer">
                     Open ↗
@@ -178,6 +361,7 @@ function Markets() {
           </section>
         </div>
       </div>
+      <Research f={f} />
     </>
   )
 }

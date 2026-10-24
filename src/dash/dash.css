@@ -2425,3 +2425,66 @@ body.dash-mode .bl {
 .mem-clear {
   margin-top: 12px;
 }
+
+/* --------------------------------------------------------------- research */
+.research-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.research-card .fine {
+  margin: 0 0 10px;
+}
+.research-sub {
+  margin: 14px 0 4px;
+  font: 600 14px var(--head);
+  letter-spacing: 0.02em;
+}
+.findings,
+.ranking {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ranking {
+  margin: 0;
+  padding-left: 22px;
+}
+.finding,
+.ranking li {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.finding-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.finding-top > .mono:last-child {
+  margin-left: auto;
+}
+.strategy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.spark {
+  width: 120px;
+  height: 30px;
+  flex: none;
+}
+.spark path {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.spark.up path {
+  stroke: var(--green);
+}
+.spark.down path {
+  stroke: var(--red);
+}

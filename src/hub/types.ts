@@ -173,6 +173,46 @@ export type Service = {
   repo: string | null
   commit: Commit | null
   checkedAt: number
+  /** What JARVIS can do with it: started by him (managed), ready to start (its venv exists). */
+  control: { managed: boolean; startedAt: number | null; log: string; ready: boolean; setup: string } | null
+}
+
+/** master-hub's review-only findings and its strategy lab's paper-trade curves, read from its own SQLite. */
+export type MasterHubData = {
+  db?: string
+  error: string | null
+  updatedAt?: number | null
+  kinds?: Record<string, number>
+  findings?: {
+    engine: string
+    kind: string
+    subject: string
+    title: string | null
+    summary: string | null
+    confidence: number | null
+    sampleSize: number | null
+    realizedPnl: number | null
+    unrealizedPnl: number | null
+    riskFlags: unknown[]
+    paper: string | null
+    forward: string | null
+    reviewOnly: boolean
+    url: string | null
+    rank: number | null
+    at: number | null
+    savedAt: number | null
+  }[]
+  strategies?: { engine: string; strategy: string; trades: number; equity: number | null; lastAt: number | null; points: [number | null, number | null][] }[]
+  equityError?: string
+}
+
+/** Futures Trader Scout's rankings of public traders and live streams, read from its own SQLite. */
+export type ScoutData = {
+  db?: string
+  error: string | null
+  traders?: { name: string; platform: string | null; url: string | null; propFirm: string | null; products: string | null; payouts30d: number | null; payouts90d: number | null; paid90d: number | null; consistency: number | null; redFlags: number | null; score: number | null; why: string | null }[]
+  live?: { platform: string; channel: string; title: string; url: string; viewers: number | null; products: string | null; at: number | null }[]
+  sources?: { count: number; errors: number; lastChecked: number | null } | null
 }
 
 export type FinanceProject = {
@@ -182,6 +222,7 @@ export type FinanceProject = {
   broker: null
   services: Service[]
   research: { id: string; name: string; repo: string | null; commit: Commit | null }[]
+  data?: { masterHub: MasterHubData; scout: ScoutData }
   charts: { symbol: string; label: string }[]
   quantView: { name: string | null; url: string | null }
   note: string
