@@ -299,7 +299,23 @@ export function Intro({ onStart }: { onStart: () => void }) {
     if (count === 0) onStart()
   }, [count, onStart])
 
-  if (gone) return null
+  // On the Mac he starts by himself, straight into the station's opening
+  // (its loading screen, then the flight in from the sea): no start screen,
+  // no clap. Chrome may hold his voice until the first key or click, and the
+  // sound hint says so. This screen shows only if the bridge doesn't answer
+  // or a start fails. A phone keeps it: Safari needs a tap first. Not waiting
+  // for the bridge: the power-up reports it if it's down and the brain link
+  // reconnects by itself when it's back.
+  const direct = !TOUCH && autoStart
+  const [tried, setTried] = useState(false)
+  useEffect(() => {
+    if (!direct || !offline || tried) return
+    setTried(true)
+    onStart()
+  }, [direct, offline, tried, onStart])
+  const hidden = direct && !(offline && error)
+
+  if (gone || hidden) return null
 
   const done = checks.filter((c) => c.status !== 'pending').length
   const stageIdx = STEPS.findIndex((s) => s.id === stage)

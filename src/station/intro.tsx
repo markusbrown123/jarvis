@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useProgress } from '@react-three/drei'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
+import { useStore } from '../store'
 import { seatCamera } from './layout'
 import { SKY_STATE, WEATHER } from './sky'
 import { useStation } from './stationStore'
@@ -183,10 +184,26 @@ const TIPS = [
 ]
 
 /** The letterbox, title and loading read-out over the opening (in the page). */
+const BOOT_WORD: Record<string, string> = {
+  offline: 'starting',
+  idle: 'starting',
+  audio: 'warming up',
+  bridge: 'linking the brain',
+  microphone: 'opening the microphone',
+  voice: 'starting the voice loop',
+  ready: 'online',
+}
+
 export function IntroOverlay() {
   const phase = useStation((s) => s.intro)
+  // The phase while he's off, the boot stage while he powers up, then online.
+  const jarvis = useStore((s) => (s.phase === 'offline' ? 'offline' : s.phase === 'boot' ? s.bootStage : 'ready'))
   const setIntro = useStation((s) => s.setIntro)
   const { progress, active } = useProgress()
+  // The loader recounts as each new batch of files starts (60% → 0%); the
+  // bar only ever moves forward.
+  const most = useRef(0)
+  if (active) most.current = Math.max(most.current, Math.round(progress))
   const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)])
   const [, tick] = useState(0)
   // Stays a moment after landing, so the letterbox can slide away.
@@ -239,10 +256,12 @@ export function IntroOverlay() {
         <div className="cine-load">
           <p className="cine-tip">{tip}</p>
           <div className="cine-progress">
-            <span style={{ width: `${Math.round(active ? progress : 100)}%` }} />
+            <span style={{ width: `${most.current}%` }} />
           </div>
           <p className="cine-status">
-            <i className="cine-spin" /> Loading the house {Math.round(active ? progress : 100)}%
+            <i className="cine-spin" /> Loading the house {most.current}%
+            {/* He powers up meanwhile (no start screen on the Mac): say how far. */}
+            <span className="cine-jarvis"> · JARVIS {BOOT_WORD[jarvis] ?? 'starting'}</span>
           </p>
         </div>
       ) : (

@@ -65,6 +65,9 @@ function loadPrefs(): Prefs {
     // The station arrived after people had a saved view; open there once.
     // Not on a phone: there he's mostly for talking, and the overview is quick.
     if ((saved.layoutVersion ?? 1) < 2) Object.assign(prefs, { view: TOUCH ? 'overview' : 'station', layoutVersion: 2 })
+    // On the Mac every launch opens with the station's flight in (unless
+    // auto-start is off, which brings back the start screen and the last view).
+    if (!TOUCH && prefs.autoStart) prefs.view = 'station'
     return prefs
   } catch {
     return DEFAULT_PREFS
