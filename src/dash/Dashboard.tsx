@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useHub, connectHub, type View } from '../hub/client'
 import { ago, JOB_LABEL, tone } from '../hub/format'
@@ -20,7 +20,7 @@ import { Station } from '../station/Station'
 import { UsageChip } from './Usage'
 import { VoiceWave } from './VoiceWave'
 import { ItemCard } from './shared'
-import { inputState, openItems, useTick } from './state'
+import { inputState, openItems, useMedia, useTick } from './state'
 import './dash.css'
 
 const NAV: { id: View; label: string; key: string }[] = [
@@ -53,7 +53,7 @@ function TopBar() {
         <span className="brand-mark">JARVIS</span>
         <span className={`state-pill state-${st.tone}`}>
           <span className="state-dot" />
-          {st.label}
+          <span className="state-label">{st.label}</span>
         </span>
       </div>
       <div className="topbar-mid">
@@ -88,8 +88,13 @@ function NavRail() {
     .filter((j) => j.state === 'running' || j.state === 'needs_markus' || j.state === 'cancel_requested')
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 6)
+  // On a phone the sections are a strip that scrolls sideways: keep the open one in sight.
+  const nav = useRef<HTMLElement>(null)
+  useEffect(() => {
+    nav.current?.querySelector('.nav-item.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [prefs.view])
   return (
-    <nav className={`nav ${prefs.navCollapsed ? 'collapsed' : ''}`} aria-label="Sections">
+    <nav ref={nav} className={`nav ${prefs.navCollapsed ? 'collapsed' : ''}`} aria-label="Sections">
       {NAV.map((n) => (
         <button key={n.id} className={`nav-item ${prefs.view === n.id ? 'on' : ''}`} onClick={() => go(n.id)} title={`${n.label} (${n.key})`}>
           <span className="nav-key mono">{n.key}</span>
@@ -127,15 +132,21 @@ function NavRail() {
 
 function NeedsPanel() {
   useTick(10000)
-  const collapsed = useHub((s) => s.prefs.needsCollapsed)
+  const saved = useHub((s) => s.prefs.needsCollapsed)
   const setPrefs = useHub((s) => s.setPrefs)
+  // On a narrow screen the panel is a drawer over the page: closed until
+  // asked for, and opening it there doesn't change the desktop's setting.
+  const narrow = useMedia('(max-width: 1050px)')
+  const [drawer, setDrawer] = useState(false)
+  const collapsed = narrow ? !drawer : saved
+  const open = (on: boolean) => (narrow ? setDrawer(on) : setPrefs({ needsCollapsed: !on }))
   const s = useHub((x) => x.state)
   const items = openItems(s?.items)
   const critical = (s?.activity ?? []).filter((a) => a.level === 'error' && Date.now() - a.ts < 6 * 3600000).slice(-4).reverse()
   if (collapsed) {
     return (
       <aside className="needs collapsed">
-        <button className="needs-open" onClick={() => setPrefs({ needsCollapsed: false })} title="Show Needs Markus ( ] )">
+        <button className="needs-open" onClick={() => open(true)} title="Show Needs Markus ( ] )">
           <span className="badge">{items.length}</span>
           <span className="vertical">Needs Markus</span>
         </button>
@@ -147,7 +158,7 @@ function NeedsPanel() {
       <header className="needs-head">
         <h2>Needs Markus</h2>
         <span className="badge">{items.length}</span>
-        <button className="btn btn-quiet" onClick={() => setPrefs({ needsCollapsed: true })} title="Collapse ( ] )">
+        <button className="btn btn-quiet" onClick={() => open(false)} title="Collapse ( ] )">
           ›
         </button>
       </header>

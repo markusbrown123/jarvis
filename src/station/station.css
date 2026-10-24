@@ -1108,6 +1108,82 @@
     grid-template-columns: auto 1fr;
   }
 }
+/* A phone: the name, then the sections as a strip that scrolls sideways,
+   then the modes; the conversation takes the lower half so the room shows
+   above it. */
+@media (max-width: 640px) {
+  .st-top {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 10px 12px 14px;
+  }
+  .st-mark {
+    font-size: 17px;
+  }
+  .st-nav {
+    order: 2;
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    pointer-events: auto;
+  }
+  .st-nav button,
+  .st-quality {
+    flex: none;
+  }
+  .st-viewbar {
+    top: 84px;
+    max-width: calc(100vw - 24px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .st-viewbar button {
+    flex: none;
+  }
+  /* The modes first, so Talk is always in reach; the camera presets scroll after. */
+  .st-mode {
+    order: -1;
+    flex: none;
+    margin: 0 6px 0 0;
+    padding: 0 6px 0 0;
+    border-left: 0;
+    border-right: 1px solid rgba(169, 216, 255, 0.16);
+  }
+  .st-cine {
+    left: 14px;
+    right: 14px;
+    bottom: 170px;
+  }
+  .st-waiting {
+    top: 124px;
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+  .st-talk {
+    top: 44%;
+    left: 12px;
+    right: 12px;
+    bottom: 168px;
+    width: auto;
+  }
+  .st-talk-input input {
+    font-size: 16px;
+  }
+  .st-panels,
+  .st-hint {
+    display: none;
+  }
+}
+/* Walking is keys and a mouse: a touch screen has neither. */
+@media (hover: none) and (pointer: coarse) {
+  .st-mode .m-walk {
+    display: none;
+  }
+}
 
 /* ------------------------------------------------------------ the opening flight (intro.tsx) */
 

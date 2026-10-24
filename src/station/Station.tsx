@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { useHub, type Graphics, type View } from '../hub/client'
+import { TOUCH, useHub, type Graphics, type View } from '../hub/client'
 import { useStore } from '../store'
 import { ago, clock, elapsed, JOB_LABEL, tone, until } from '../hub/format'
 import { TerminalFeed, type TermFocus } from '../dash/Terminal'
@@ -217,7 +217,7 @@ function ViewBar() {
             ['cinematic', 'Cinematic', 'The whole station, live, camera drifting (C)'],
           ] as [Mode, string, string][]
         ).map(([m, label, title]) => (
-          <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)} title={title}>
+          <button key={m} className={`m-${m}${mode === m ? ' on' : ''}`} onClick={() => setMode(m)} title={title}>
             {label}
           </button>
         ))}
@@ -398,9 +398,15 @@ function TalkPanel() {
         )}
         {!shown.length && !live && (
           <p className="st-talk-empty">
-            Say “Hey Jarvis”, hold Space, or type below.
-            <br />
-            <span>F to get up and walk the station.</span>
+            {TOUCH ? (
+              'Say “Hey Jarvis”, tap below, or type.'
+            ) : (
+              <>
+                Say “Hey Jarvis”, hold Space, or type below.
+                <br />
+                <span>F to get up and walk the station.</span>
+              </>
+            )}
           </p>
         )}
       </div>

@@ -36,6 +36,8 @@ type Prefs = {
 }
 
 const PREFS_KEY = 'jarvis.dashboard'
+/** A phone or tablet (JARVIS over Tailscale): a touch screen, no mouse. */
+export const TOUCH = window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false
 const DEFAULT_PREFS: Prefs = {
   view: 'overview',
   navCollapsed: false,
@@ -47,7 +49,9 @@ const DEFAULT_PREFS: Prefs = {
   selectedSite: null,
   sitePreviewMode: 'desktop',
   chartSymbol: null,
-  graphics: 'ultra',
+  // A phone has a fraction of the Mac's GPU and memory, and Safari drops a
+  // page that asks for too much: it starts light (switch up in the station).
+  graphics: TOUCH ? 'low' : 'ultra',
   autoStart: true,
   announce: true,
   layoutVersion: 2,
@@ -59,7 +63,8 @@ function loadPrefs(): Prefs {
     const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
     const prefs = { ...DEFAULT_PREFS, reducedMotion: prefersReduced, ...saved, immersive: false }
     // The station arrived after people had a saved view; open there once.
-    if ((saved.layoutVersion ?? 1) < 2) Object.assign(prefs, { view: 'station', layoutVersion: 2 })
+    // Not on a phone: there he's mostly for talking, and the overview is quick.
+    if ((saved.layoutVersion ?? 1) < 2) Object.assign(prefs, { view: TOUCH ? 'overview' : 'station', layoutVersion: 2 })
     return prefs
   } catch {
     return DEFAULT_PREFS

@@ -1793,6 +1793,95 @@ kbd {
     z-index: 25;
   }
 }
+/* A phone (JARVIS over Tailscale): one column. The sections are a strip
+   that scrolls sideways under the top bar; Needs Markus is its own section
+   (badge on the strip) rather than a drawer over the page; the bottom bar
+   is what he last said, a line to type to him, and Talk. */
+@media (max-width: 640px) {
+  .dash {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 52px auto minmax(0, 1fr) auto;
+    grid-template-areas: 'top' 'nav' 'main' 'convo';
+  }
+  .topbar {
+    gap: 10px;
+    padding: 0 12px;
+  }
+  .brand {
+    flex: 1;
+    min-width: 0;
+    gap: 10px;
+  }
+  .brand .state-pill {
+    min-width: 0;
+    padding: 4px 10px;
+    font-size: 12.5px;
+  }
+  .state-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar-mid,
+  .topbar-right > :not(.link-dot):not(.btn-voice) {
+    display: none;
+  }
+  .nav {
+    flex-direction: row;
+    gap: 4px;
+    padding: 6px 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .nav-item {
+    flex: none;
+    padding: 8px 12px;
+  }
+  .nav .nav-label,
+  .nav.collapsed .nav-label {
+    display: inline;
+  }
+  .nav-key,
+  .nav-jobs,
+  .nav-collapse,
+  .needs {
+    display: none;
+  }
+  .nav-item.on {
+    box-shadow: inset 0 -2px 0 var(--violet);
+  }
+  .view {
+    padding: 14px 14px 24px;
+  }
+  .view-head h1 {
+    font-size: 22px;
+  }
+  .convo {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 12px;
+    min-height: 0;
+  }
+  .convo-center {
+    display: none;
+  }
+  .convo-right .convo-input {
+    display: block;
+    flex: 1;
+    max-width: none;
+    min-width: 0;
+  }
+  .convo-transcript:empty {
+    display: none;
+  }
+  /* Under 16px Safari zooms the page into a field when it's tapped. */
+  .input,
+  .input-small {
+    font-size: 16px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .link-work,
   .tone-work .node-dot,

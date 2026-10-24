@@ -13,6 +13,19 @@ export function useTick(ms: number) {
   }, [ms])
 }
 
+/** Whether a CSS media query matches, kept up to date (a window resized, a tablet turned). */
+export function useMedia(query: string) {
+  const [on, set] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const m = window.matchMedia(query)
+    const change = () => set(m.matches)
+    change()
+    m.addEventListener('change', change)
+    return () => m.removeEventListener('change', change)
+  }, [query])
+  return on
+}
+
 export type InputState = { label: string; tone: 'off' | 'idle' | 'live' | 'held' | 'busy' | 'speak' | 'fail' }
 
 /**
