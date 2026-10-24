@@ -199,6 +199,29 @@ Sat at the desk in the station (Talk), two tabs sit beside the conversation
   `POST /api/ideas/:id` (update), `/api/ideas/:id/delete`; updates on
   `/api/stream` as `ideas`.
 
+## Building JARVIS himself
+
+Ask him to add to or change himself — a gesture, a project, a page — and it
+gets built, two ways (he picks; say "here" or "the cloud" to choose):
+
+- **Here, at his desk** (`self_build`): Claude Code in his own repo builds it
+  while you watch in the desk's Claude Code tab, checks it (tsc, oxlint,
+  build), commits, and pushes to his branch so the cloud has it too. Page
+  changes reload by themselves; for anything in the bridge, "restart yourself"
+  (`jarvis restart`).
+- **In the cloud** (`cloud_build`): he files a GitHub issue on his repo,
+  labelled `jarvis-build`, with the brief. A scheduled Claude Code session in
+  the cloud (the "JARVIS cloud builds" scheduled task, hourly) picks up open
+  ones you opened, builds and tests them — screenshots included — pushes to
+  his branch, comments and closes the issue; if something's unclear or risky
+  it asks on the issue instead (label `jarvis-question`; answer there and it
+  carries on). Each request shows in Jobs: queued, working, needs you, done —
+  done reaches your phone. Then "update yourself" (`jarvis update`) brings it
+  in.
+
+Needs the GitHub CLI signed in on this Mac, once: `brew install gh` and
+`gh auth login`. Nothing is ever pushed to main.
+
 ## Memory and learning
 
 JARVIS remembers across restarts, reloads and `jarvis stop` — in read-only mode too
