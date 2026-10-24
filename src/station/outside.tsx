@@ -155,7 +155,11 @@ void main() {
 
   vec3 N = normalize(vec3(-s.x, 1.0, -s.y));
   vec3 R = reflect(-V, N);
-  R.y = abs(R.y) + 0.002;
+  // A facet tipped away from the camera reflects the next waves, not the
+  // sky: it goes dark below (folding it back up drew a rim of the hazy
+  // horizon round every wave, sand-coloured speckle all over the sea).
+  float upward = R.y;
+  R.y = max(R.y, 0.0) + 0.002;
   // Clouds' shadows drift across the water.
   float shade = 1.0 - 0.75 * cloudShadow(vWorld);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
@@ -170,6 +174,7 @@ void main() {
   body += vec3(0.02, 0.09, 0.08) * exp(-max(shore, 0.0) / 14.0) * (skyUp + uSunColor * 0.2 * shade);
   // Sunlight through the backs of the waves: turquoise in the crests.
   body += vec3(0.0, 0.09, 0.075) * uSunColor * 0.22 * shade * smoothstep(0.05, 0.3, steep) * max(dot(normalize(vec3(-V.x, 0.0, -V.z)), -uSun), 0.2) * detail;
+  refl = mix(body * 1.4, refl, smoothstep(-0.04, 0.07, upward));
   vec3 c = mix(body, refl, fres);
   // The sun's glitter path by day, the moon's by night.
   float g = max(dot(R, uSun), 0.0);
