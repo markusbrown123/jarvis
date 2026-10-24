@@ -12,8 +12,14 @@ run headless as a library.
   phone the first time, prints a status board, opens the window.
 - **The Station** — a 3D Tony Stark house on a Malibu cliff under the real sky
   and weather: a GTA-style loading screen and fly-in from the sea, the estate,
-  FPV drones and Dum-E doing the real work, your desk looking out to sea.
+  FPV drones and Dum-E doing the real work, your desk looking out to sea with
+  JARVIS himself as a hologram over it. Opens straight into the flight on the
+  Mac. Click the desk to sit down; click one of its monitors to go into it and
+  use the page (Esc comes back out).
   [docs/STATION.md](docs/STATION.md)
+- **The desk** — beside talking to JARVIS: a real Claude Code terminal in any of
+  your project folders, and an Ideas board he develops with you and can hand
+  to Claude Code to build.
 - **The command center** — Roblox studio (queue, galleries), Automaton (site
   pipeline, public checks), Finance (research data, services, expenses), jobs,
   Needs Markus, usage, memory. [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md)

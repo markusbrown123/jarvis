@@ -22,6 +22,7 @@ comparing one hub snapshot with the next — never from a timer.
 | Reset (`R`) | Clears the selection and flies back to the overview. |
 | Connections (`L`) | Brightens every link and labels it with its state and what it carries. |
 | Click | (In Talk or Cinematic, clicking something switches to Command.) Anything in the room, a zone label, a job or a Needs item in the panels: selects it, flies to its zone, opens the detail panel and narrows the terminal to lines about it. Click empty space to deselect. |
+| Go into a screen | Click one of the desk's four monitors (from the chair, Command or Cinematic): the camera flies in until it fills the view, it powers on as the real page — Business → Automaton, Work → Jobs, Zones → the overview, Systems → the live terminal — and you use it as normal, its nav and all. **Esc**, the **◂ Room** button in its top bar, or its Station tab powers it off (to a line, to a point, like a monitor) and the camera eases back to the chair. Pointing at a monitor lights its frame and says what it opens. The room stays loaded under the page but stops drawing. (`camera.tsx` ScreenFlight; `stationStore.ts` SCREENS) |
 | Click the desk | From Command or Cinematic: the desk lights up under the pointer ("The desk — click to sit down") and a click flies you to the chair in Talk. |
 | Hover | A tooltip with the thing's status and its source. |
 | Quality | Low / High / Ultra on the top bar (or Settings). A blank-frame guard steps down automatically if a setting renders nothing on this machine. |
