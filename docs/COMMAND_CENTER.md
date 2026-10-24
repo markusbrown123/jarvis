@@ -16,6 +16,7 @@ jarvis setup-claude # forward Claude Code's status line + hooks (usage %, sessio
 jarvis setup-claude --remove   # undo exactly that
 jarvis watch        # the live terminal feed, in colour, in this Terminal window
 jarvis setup-phone telegram|pushover|remove   # phone tokens into the Keychain
+jarvis remote       # talk to him live from your iPhone over Tailscale (jarvis remote off to undo)
 ```
 
 **Start-up.** The intro runs a real systems check the moment the window opens —
@@ -252,6 +253,28 @@ Telegram is the two-way line; Pushover is the urgent line. Both are optional.
   60 s for up to 30 min until acknowledged). Allow Critical Alerts in the Pushover
   app so it rings through Do Not Disturb / silent.
 - The bot long-polls from the Mac; no port is opened. State: `~/.jarvis/phone.json`.
+
+## iPhone (live voice)
+
+Talk to him from the iPhone the way you do at the desk, over your own Tailscale
+network. Set up once:
+
+1. Install Tailscale on the Mac and the iPhone, signed in to the same account;
+   in the Tailscale admin console turn on **MagicDNS** and **HTTPS certificates**.
+2. `jarvis remote` — runs `tailscale serve` for the page (`:5173`) and the bridge
+   (`:8788`) on the Mac's tailnet name over HTTPS, records the name and your
+   login in `~/.jarvis/remote.json`, and prints the address
+   (`https://<mac>.<tailnet>.ts.net:5173`). The serve setting persists, so every
+   `jarvis` start after that works from the phone too.
+3. Open it in Safari on the iPhone, tap to start, allow the microphone.
+   Share → Add to Home Screen keeps it one tap away.
+
+Tailnet only — never Funnel, never the internet. The page finds the bridge on
+the same name; the bridge accepts a request that came through Tailscale's
+proxy only if it carries your own login (`Tailscale-User-Login`, which the
+proxy sets) and, when it has an origin, that it's the Mac's own tailnet name.
+`jarvis remote off` turns it off. Until it's set up, a P3 Needs Markus item
+says how.
 
 ## Security
 

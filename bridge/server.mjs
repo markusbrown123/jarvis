@@ -80,7 +80,46 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 const isDevPort = (port) =>
   (port >= 5173 && port <= 5199) || (port >= 4173 && port <= 4199)
 
-function originAllowed(origin) {
+/**
+ * Your iPhone over Tailscale (`jarvis remote`): `tailscale serve` puts the
+ * page and this bridge on https://<this-mac>.<tailnet>.ts.net (:5173 and
+ * :8788), proxied to these loopback ports, and says which tailnet user is
+ * asking (Tailscale-User-Login, which the proxy sets and strips from
+ * clients). Anything arriving that way must be from the login `jarvis
+ * remote` recorded in ~/.jarvis/remote.json, and its origin, if any, must be
+ * this Mac's tailnet name. Without that file, nothing remote is accepted.
+ */
+let remoteCache = { at: 0, cfg: null }
+function remoteConfig() {
+  if (Date.now() - remoteCache.at < 5000) return remoteCache.cfg
+  let cfg = null
+  try {
+    cfg = JSON.parse(readFileSync(join(hub.DATA_DIR, 'remote.json'), 'utf8'))
+  } catch {
+    cfg = null
+  }
+  remoteCache = { at: Date.now(), cfg }
+  return cfg
+}
+const viaTailnet = (req) => req.headers['tailscale-user-login'] !== undefined || /\.ts\.net(:\d+)?$/i.test(req.headers.host ?? '')
+function tailnetAllowed(req, origin) {
+  const r = remoteConfig()
+  if (!r?.host || !r?.login) return false
+  const addr = req.socket?.remoteAddress ?? ''
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr)) return false
+  if (req.headers['tailscale-user-login'] !== r.login) return false
+  if (!origin) return true
+  try {
+    const url = new URL(origin)
+    return url.protocol === 'https:' && url.hostname === r.host
+  } catch {
+    return false
+  }
+}
+
+function originAllowed(origin, req) {
+  // Through Tailscale: only your own login, from your own Mac's name.
+  if (req && viaTailnet(req)) return tailnetAllowed(req, origin)
   if (!origin) return ALLOW_NO_ORIGIN
   if (EXTRA_ORIGINS.has(origin.replace(/\/+$/, ''))) return true
   let url
@@ -930,7 +969,7 @@ const hubApi = startHub({ runner, phone })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
-  if (origin && !originAllowed(origin)) {
+  if ((origin || viaTailnet(req)) && !originAllowed(origin, req)) {
     console.warn(`[jarvis] refused http request from origin ${origin}`)
     res.writeHead(403, { vary: 'origin' })
     return res.end('forbidden')
@@ -1258,7 +1297,7 @@ const wss = new WebSocketServer({
       console.warn(`[jarvis] rejected websocket on path ${path}`)
       return done(false, 403, 'Forbidden')
     }
-    if (!originAllowed(origin)) {
+    if (!originAllowed(origin, req)) {
       console.warn(
         `[jarvis] rejected websocket from origin ${origin ?? '(none)'}` +
           ' — set JARVIS_ALLOWED_ORIGINS to permit it',

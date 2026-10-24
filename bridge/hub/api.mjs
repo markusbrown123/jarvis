@@ -11,6 +11,8 @@
  */
 
 import { timingSafeEqual } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import * as hub from './store.mjs'
 import { CONFIG_FILE, loadConfig, saveConfig } from './config.mjs'
 import { gallery, galleryImages, startRoblox } from './roblox.mjs'
@@ -187,6 +189,28 @@ export function startHub({ runner, phone } = {}) {
     })
   if (!hub.snapshot().usage.statusLine) setupItem()
 
+  // Live voice from the iPhone: Tailscale, set up once with `jarvis remote`.
+  const REMOTE = join(hub.DATA_DIR, 'remote.json')
+  if (!existsSync(REMOTE))
+    hub.upsertItem({
+      id: 'jarvis:iphone-voice',
+      source: 'jarvis',
+      project: 'jarvis',
+      title: 'Talk to JARVIS live from your iPhone',
+      why: 'Live voice from the phone needs the page and the bridge on your private Tailscale network over HTTPS — Safari only allows the microphone on a secure page. (Texting and voice notes over Telegram work without this.)',
+      instructions:
+        'Install Tailscale on this Mac and on your iPhone and sign in to both with the same account; in the Tailscale admin console turn on MagicDNS and HTTPS certificates. Then in Terminal: jarvis remote — it prints the address to open in Safari on the iPhone (Share → Add to Home Screen keeps it one tap away).',
+      destination: { label: 'Get Tailscale', url: 'https://tailscale.com/download' },
+      prepared: 'The page and bridge already know how to run over Tailscale. Only your own Tailscale login, through Tailscale’s proxy, is accepted; nothing is opened to the internet.',
+      verify: { kind: 'remote', note: 'Resolves once jarvis remote has run on this Mac.' },
+      resumes: 'Open the address on the iPhone, tap to start, and talk.',
+      priority: 'P3',
+      actions: [
+        { kind: 'copy', label: 'Copy command', value: 'jarvis remote' },
+        { kind: 'check', label: 'Check again' },
+      ],
+    })
+
   const verify = async (item) => {
     const v = item.verify ?? {}
     const now = Date.now()
@@ -198,6 +222,9 @@ export function startHub({ runner, phone } = {}) {
       cfg = loadConfig()
       const val = v.key.split('.').reduce((o, k) => o?.[k], cfg)
       return val ? { ok: true, detail: `Found ${v.key}.` } : { ok: false, detail: `${v.key} is still empty in ${CONFIG_FILE}.` }
+    }
+    if (v.kind === 'remote') {
+      return existsSync(join(hub.DATA_DIR, 'remote.json')) ? { ok: true, detail: 'Remote access is set up.' } : { ok: false, detail: 'Run jarvis remote in Terminal first.' }
     }
     if (v.kind === 'roblox-fetch') {
       await sources.roblox.refresh()

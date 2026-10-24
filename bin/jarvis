@@ -12,6 +12,7 @@
 #   jarvis setup-claude [--remove]   forward Claude Code usage + activity
 #   jarvis setup-phone telegram|pushover|remove   phone tokens → Keychain
 #   jarvis watch                     live terminal feed in this window
+#   jarvis remote [off]              talk to him from your iPhone over Tailscale
 #
 # Settings come from the environment, with defaults below. The ElevenLabs key
 # is read from the macOS Keychain (service "elevenlabs") so it never sits in a
@@ -213,8 +214,48 @@ setup_phone() {
   echo "JARVIS picks this up within a few seconds."
 }
 
+# The tailscale command: on the PATH, or inside the Mac app.
+tailscale_bin() {
+  command -v tailscale 2>/dev/null && return
+  local app="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+  [ -x "$app" ] && echo "$app"
+}
+
+# Your iPhone, over Tailscale: the page and the bridge on this Mac's tailnet
+# name over HTTPS (its own tailnet certificate), tailnet only — never the
+# internet. The bridge lets in only the Tailscale login recorded here.
+remote() {
+  local ts
+  ts="$(tailscale_bin)"
+  if [ -z "$ts" ]; then
+    echo "Tailscale isn't installed. Get it on this Mac and your iPhone (https://tailscale.com/download),"
+    echo "sign in to both with the same account, then run: jarvis remote"
+    return 1
+  fi
+  if [ "${1:-}" = "off" ]; then
+    "$ts" serve --https=5173 off >/dev/null 2>&1
+    "$ts" serve --https=8788 off >/dev/null 2>&1
+    rm -f "$HOME/.jarvis/remote.json"
+    echo "Remote access is off."
+    return 0
+  fi
+  local status
+  status="$("$ts" status --json 2>/dev/null)"
+  if [ -z "$status" ] || ! printf '%s' "$status" | grep -q '"BackendState": *"Running"'; then
+    echo "Tailscale isn't connected on this Mac: open the Tailscale app and sign in, then run jarvis remote again."
+    return 1
+  fi
+  ready || start_servers || return 1
+  if ! "$ts" serve --bg --https=5173 http://127.0.0.1:5173 >/dev/null || ! "$ts" serve --bg --https=8788 http://127.0.0.1:8788 >/dev/null; then
+    echo "tailscale serve didn't start. Turn on HTTPS certificates for your tailnet (admin console → DNS), then try again."
+    return 1
+  fi
+  printf '%s' "$status" | node "$DIR/scripts/launcher.mjs" remote-save
+}
+
 case "${1:-}" in
   stop) stop_all ;;
+  remote) shift; remote "$@" ;;
   setup-phone) shift; setup_phone "$@" ;;
   watch) exec node "$DIR/scripts/watch.mjs" ;;
   setup-claude) shift; node "$DIR/scripts/setup-claude.mjs" "$@" ;;
@@ -231,7 +272,7 @@ case "${1:-}" in
     open_window
     ;;
   *)
-    echo "usage: jarvis [--safe] [stop|logs|watch|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
+    echo "usage: jarvis [--safe] [stop|logs|watch|remote [off]|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
     exit 1
     ;;
 esac

@@ -71,7 +71,11 @@ export const BACKEND: 'bridge' | 'direct' = choice(
  * `wss://` maps to `https://` on its own, which is why this is a prefix swap
  * rather than a hardcoded scheme.
  */
-export const BRIDGE_WS_URL = str(import.meta.env.VITE_BRIDGE_URL) ?? 'ws://localhost:8788'
+// From the iPhone over Tailscale (`jarvis remote`), the page is at
+// https://<mac>.<tailnet>.ts.net:5173 and the bridge is the same name on its
+// own port, over TLS.
+const onTailnet = typeof location !== 'undefined' && location.hostname.endsWith('.ts.net')
+export const BRIDGE_WS_URL = str(import.meta.env.VITE_BRIDGE_URL) ?? (onTailnet ? `wss://${location.hostname}:8788` : 'ws://localhost:8788')
 export const BRIDGE_HTTP_URL = BRIDGE_WS_URL.replace(/^ws/, 'http')
 
 /**

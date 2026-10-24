@@ -49,6 +49,7 @@ echo 'alias jarvis="$HOME/jarvis/bin/jarvis"' >> ~/.zshrc && source ~/.zshrc
 jarvis          # starts in the background in write mode, links your phone the first time,
                 # says what's running, and opens him in Chrome; he starts himself (or press any key)
 jarvis --safe   # the same, read-only
+jarvis remote   # once: talk to him from your iPhone over Tailscale
 jarvis stop     # shuts him down
 jarvis logs     # shows what he's doing
 ```

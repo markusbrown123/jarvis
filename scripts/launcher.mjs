@@ -5,13 +5,15 @@
  *
  *   node scripts/launcher.mjs phone   telegram|paired|bot|chat|pushover (1/0 flags)
  *   node scripts/launcher.mjs pair    a fresh pairing code (valid 15 minutes)
- *   node scripts/launcher.mjs board   what's running: brain, write mode, voice, phone, Claude Code
+ *   node scripts/launcher.mjs board   what's running: brain, write mode, voice, phone, iPhone voice, Claude Code
+ *   tailscale status --json | node scripts/launcher.mjs remote-save
+ *                                     record this Mac's tailnet name and your login (~/.jarvis/remote.json)
  *
  * It reads the bridge on localhost with the local API token (~/.jarvis/token).
  * No secret is printed: the phone's tokens stay in the Keychain.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -49,7 +51,34 @@ function claudeForwarded() {
   }
 }
 
+/** `jarvis remote`'s record: this Mac's tailnet name and the login allowed in. */
+function remote() {
+  try {
+    return JSON.parse(readFileSync(join(DATA, 'remote.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
 const what = process.argv[2]
+if (what === 'remote-save') {
+  let s = ''
+  for await (const c of process.stdin) s += c
+  try {
+    const st = JSON.parse(s)
+    const host = String(st.Self?.DNSName ?? '').replace(/\.$/, '')
+    const login = st.User?.[String(st.Self?.UserID)]?.LoginName
+    if (!host.endsWith('.ts.net')) throw new Error('This Mac has no ts.net name: turn on MagicDNS for your tailnet (Tailscale admin console → DNS).')
+    if (!login) throw new Error("Couldn't tell which Tailscale account this Mac is signed in to.")
+    mkdirSync(DATA, { recursive: true })
+    writeFileSync(join(DATA, 'remote.json'), JSON.stringify({ host, login, at: Date.now() }, null, 2) + '\n', { mode: 0o600 })
+    console.log(`\nOn your iPhone (Tailscale on, signed in as ${login}), open in Safari:\n\n    https://${host}:5173\n\nTap to start him, allow the microphone, and talk. Share → Add to Home Screen keeps it one tap away.\nOnly ${login} is let in, through Tailscale; nothing is open to the internet. Undo with: jarvis remote off\n`)
+  } catch (err) {
+    console.error(`  ${err.message}`)
+    process.exit(1)
+  }
+  process.exit(0)
+}
 try {
   if (what === 'phone') {
     const p = await phoneOf()
@@ -70,6 +99,8 @@ try {
     const phone = !t.configured ? 'not linked — jarvis setup-phone telegram' : !t.paired ? `bot ready${t.bot ? ` (@${t.bot})` : ''}, not paired yet` : `Telegram, paired with ${t.chatName ?? 'your chat'}${t.bot ? ` via @${t.bot}` : ''}${t.error ? ` — ${t.error}` : ''}`
     row('Phone', Boolean(t.configured && t.paired && !t.error), phone)
     row('Urgent', Boolean(p.pushover?.configured), p.pushover?.configured ? 'Pushover ready (rings through Do Not Disturb)' : 'Pushover not set up — jarvis setup-phone pushover')
+    const r = remote()
+    row('iPhone voice', Boolean(r), r ? `https://${r.host}:5173 (Tailscale, ${r.login})` : 'not set up — jarvis remote (needs Tailscale)')
     row('Claude Code', claudeForwarded(), claudeForwarded() ? 'usage + activity forwarded' : 'not forwarded — jarvis setup-claude')
     if (!existsSync(join(DATA, 'token'))) row('API token', false, 'missing (the bridge makes it on first start)')
     console.log('')
