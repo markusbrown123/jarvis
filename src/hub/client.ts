@@ -147,7 +147,20 @@ async function post(path: string, body?: unknown) {
   return data
 }
 
+async function get(path: string) {
+  const res = await fetch(`${BRIDGE_HTTP_URL}${path}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+  return data
+}
+
+export type GalleryItem = { sha: string; name: string; label: string; device: string | null; path: string }
+export type GallerySection = { id: string; title: string; note?: string; items: GalleryItem[] }
+export type Gallery = { game: string; revision: string | null; sections: GallerySection[]; counts: Record<string, number> }
+
 export const hubActions = {
+  robloxGallery: (game: string): Promise<Gallery> => get(`/api/roblox/gallery?game=${encodeURIComponent(game)}`),
+  robloxImages: (shas: string[]): Promise<{ files: Record<string, string | null> }> => post('/api/roblox/images', { shas }),
   checkItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/check`),
   snoozeItem: (id: string, hours = 4) => post(`/api/items/${encodeURIComponent(id)}/snooze?hours=${hours}`),
   startItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/start`),

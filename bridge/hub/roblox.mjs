@@ -8,6 +8,9 @@
  * queue — it does not invent a second one — and mirrors it into the hub:
  * tasks become jobs, human items become Needs Markus items, task history
  * becomes activity, and each game's renders become dated asset previews.
+ * Its evidence folders (world renders, UI previews by device and screen,
+ * 4K UI, characters, maps, props) become a gallery per game: listed from
+ * git, each image copied out of git into the cache only when it's looked at.
  *
  * Read-only throughout. Nothing here writes to the queue or the repo.
  */
@@ -31,6 +34,108 @@ const STATE_MAP = {
 
 let repo = null
 let last = { ok: false, error: null, at: 0 }
+
+// ---------------------------------------------------------------- galleries
+
+const IMAGE = /\.(jpe?g|png|webp)$/i
+/** The studio's evidence folders, in the order the gallery shows them. */
+const SECTIONS = [
+  { dir: 'world-renders-4k', title: 'World · 4K', note: 'Offline renders of the built place, not gameplay captures.' },
+  { dir: 'map-previews', title: 'Maps', note: 'Map previews rendered from the place file.' },
+  { dir: 'ui-previews', title: 'UI', note: 'Every screen of the UI, by device.', devices: true },
+  { dir: 'ui-previews-4k', title: 'UI · 4K', note: 'The main screens at 4K.', devices: true },
+  { dir: 'characters', title: 'Characters', note: 'Character lineups and studies.' },
+  { dir: 'dragon-art', title: 'Creatures', note: 'Blender renders of the creature roster, not Roblox screenshots.', game: 'dragon-egg-dash' },
+  { dir: 'blender-previews', title: 'Props', note: 'Props modelled in Blender, before import.' },
+  { dir: 'turf-blasters', title: 'Props', note: 'Blaster lineup.', game: 'turf-blasterz' },
+  { dir: 'style-bible', title: 'Logo & icon', note: 'Logo and icon mock-ups from the style bible.' },
+]
+// Studio-wide pictures (no one game's) are listed under this id.
+const STUDIO = '_studio'
+let galleries = { commit: null, byGame: new Map(), blobs: new Map() }
+
+/** Words from a file name: the game's prefix, the extension and separators gone. */
+const words = (s) => s.replace(IMAGE, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** Which game a picture belongs to, from its name (or folder), else the studio's. */
+function gameOf(entry, section, ids, aliases) {
+  if (section.game) return section.game
+  if (entry.path.includes('/dragons/')) return 'dragon-egg-dash'
+  const base = entry.name
+  const id = ids.find((g) => base.startsWith(`${g}__`) || base.startsWith(`${g}-`) || base.startsWith(`${g}_`))
+  return id ?? aliases.get(base.split('_')[0]) ?? STUDIO
+}
+
+/** A picture's caption and, for UI previews, its device: game__Device__screen.jpg. */
+function labelOf(entry, game, section, aliases) {
+  const short = entry.name.split('_')[0]
+  let base = entry.name.startsWith(game) ? entry.name.slice(game.length).replace(/^[-_]+/, '') : aliases.get(short) === game ? entry.name.slice(short.length + 1) : entry.name
+  const parts = base.replace(IMAGE, '').split('__')
+  let device = null
+  if (section.devices && parts.length >= 2) {
+    device = parts[0]
+    base = parts.slice(1).join(' · ')
+  } else base = parts.join(' · ')
+  // Folders under the section (a dragon's stage, poses…) say what it is too.
+  const sub = entry.rel.split('/').slice(0, -1).filter((d) => !/^(cells|part-built|pilot)$/.test(d))
+  return { label: [...sub, words(base)].filter(Boolean).join(' · '), device }
+}
+
+async function buildGalleries(dir, ref, studio, ids, commit) {
+  if (galleries.commit === commit.sha) return
+  // The studio's own build summary says which game each short prefix is.
+  const aliases = new Map()
+  try {
+    const summary = JSON.parse(await showText(dir, ref, `${studio}/evidence/blender-previews/build_summary.json`))
+    for (const a of summary.assets ?? []) if (a.asset && a.game) aliases.set(String(a.asset).split('_')[0], a.game)
+  } catch {
+    /* no summary: those files list as studio-wide */
+  }
+  const byGame = new Map()
+  const blobs = new Map()
+  const byLength = [...ids].sort((a, b) => b.length - a.length)
+  for (const section of SECTIONS) {
+    const root = `${studio}/evidence/${section.dir}`
+    const files = (await listTree(dir, ref, root, { recursive: true }).catch(() => [])).filter((e) => e.type === 'blob' && IMAGE.test(e.name))
+    for (const f of files) {
+      const entry = { ...f, rel: f.path.slice(root.length + 1) }
+      const game = gameOf(entry, section, byLength, aliases)
+      const { label, device } = labelOf(entry, game, section, aliases)
+      const sections = byGame.get(game) ?? new Map()
+      const key = `${section.title}`
+      const list = sections.get(key) ?? { id: section.dir, title: section.title, note: section.note, items: [] }
+      list.items.push({ sha: f.sha, name: f.name, label, device, path: f.path.slice(studio.length + 1) })
+      sections.set(key, list)
+      byGame.set(game, sections)
+      blobs.set(f.sha, f.name)
+    }
+  }
+  for (const sections of byGame.values()) for (const s of sections.values()) s.items.sort((a, b) => (a.device ?? '').localeCompare(b.device ?? '') || a.label.localeCompare(b.label, undefined, { numeric: true }))
+  galleries = { commit: commit.sha, short: commit.short, byGame, blobs }
+}
+
+/** One game's gallery: its sections and pictures (names only, nothing fetched yet). */
+export function gallery(game) {
+  const sections = galleries.byGame.get(game)
+  return {
+    game,
+    revision: galleries.short ?? null,
+    sections: sections ? [...sections.values()] : [],
+    counts: Object.fromEntries([...galleries.byGame].map(([g, s]) => [g, [...s.values()].reduce((n, x) => n + x.items.length, 0)])),
+  }
+}
+
+/** Copy the asked-for pictures out of git into the cache; only ones the gallery listed. */
+export async function galleryImages(shas) {
+  if (!repo) throw new Error('The studio repo has not been read yet.')
+  const out = {}
+  for (const sha of shas.slice(0, 80)) {
+    const name = galleries.blobs.get(sha)
+    if (!name) continue
+    out[sha] = await cacheBlob(repo.dir, sha, name).catch(() => null)
+  }
+  return out
+}
 
 function titleFromReadme(md, fallback) {
   const h = md.match(/^#\s+(.+)$/m)?.[1] ?? fallback
@@ -148,6 +253,7 @@ async function refresh(cfg) {
     }
   }
   hub.prunePreviews('roblox', keepPreviews)
+  await buildGalleries(repo.dir, ref, studio, games.map((g) => g.id), commit).catch((err) => console.warn('[hub] roblox gallery:', err.message))
 
   // Tasks → jobs. Everything still open, plus what finished in the last 3 days.
   const recent = Date.now() - 3 * 86400000

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useHub, hubActions, fileUrl } from '../hub/client'
+import { useEffect, useRef, useState } from 'react'
+import { useHub, hubActions, fileUrl, type Gallery, type GalleryItem } from '../hub/client'
 import type { Game, Job } from '../hub/types'
 import { ago, clock, elapsed, JOB_LABEL, until, tone } from '../hub/format'
 import { Chip, Empty } from './shared'
@@ -15,6 +15,144 @@ import { copy, useTick } from './state'
  */
 
 type Mode = 'LIVE' | 'LAST_PLAYTEST' | 'ASSET'
+
+const PAGE = 48
+
+/**
+ * Everything the studio has committed as evidence for a game — world renders,
+ * maps, every UI screen by device, 4K UI, characters, props — listed from git
+ * and fetched picture by picture as they come into view. Each is labelled
+ * with what it is: renders and previews, not gameplay.
+ */
+function GameGallery({ id, title }: { id: string; title: string }) {
+  const [data, setData] = useState<Gallery | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState(0)
+  const [device, setDevice] = useState<string | null>(null)
+  const [shown, setShown] = useState(PAGE)
+  const [files, setFiles] = useState<Record<string, string | null>>({})
+  const [open, setOpen] = useState<number | null>(null)
+  const asked = useRef(new Set<string>())
+  useEffect(() => {
+    let live = true
+    hubActions
+      .robloxGallery(id)
+      .then((g) => live && setData(g))
+      .catch((e: Error) => live && setError(e.message))
+    return () => {
+      live = false
+    }
+  }, [id])
+  const sections = data?.sections ?? []
+  const section = sections[Math.min(tab, sections.length - 1)]
+  const devices = section ? [...new Set(section.items.map((i) => i.device).filter((d): d is string => Boolean(d)))] : []
+  const dev = device && devices.includes(device) ? device : (devices[0] ?? null)
+  const items = section ? section.items.filter((i) => !dev || i.device === dev) : []
+  const visible = items.slice(0, shown)
+  const want = [...visible, ...(open !== null && items[open] ? [items[open]] : [])].map((i) => i.sha)
+  const wantKey = want.join(',')
+  // Copy the pictures in view out of git, once each.
+  useEffect(() => {
+    const fresh = wantKey.split(',').filter((sha) => sha && !asked.current.has(sha))
+    if (!fresh.length) return
+    for (const sha of fresh) asked.current.add(sha)
+    hubActions
+      .robloxImages(fresh)
+      .then((r) => setFiles((f) => ({ ...f, ...Object.fromEntries(fresh.map((sha) => [sha, r.files[sha] ?? null])) })))
+      .catch(() => fresh.forEach((sha) => asked.current.delete(sha)))
+  }, [wantKey])
+  // Arrow keys step through the open picture; Esc closes it.
+  useEffect(() => {
+    if (open === null) return
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(null)
+      else if (e.key === 'ArrowRight') setOpen((o) => (o === null ? o : Math.min(items.length - 1, o + 1)))
+      else if (e.key === 'ArrowLeft') setOpen((o) => (o === null ? o : Math.max(0, o - 1)))
+      else return
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    window.addEventListener('keydown', key, true)
+    return () => window.removeEventListener('keydown', key, true)
+  }, [open, items.length])
+  const total = sections.reduce((n, x) => n + x.items.length, 0)
+  const pick = (i: number) => {
+    setTab(i)
+    setShown(PAGE)
+    setOpen(null)
+  }
+  const big: GalleryItem | undefined = open !== null ? items[open] : undefined
+  return (
+    <section className="card gallery">
+      <header className="card-head">
+        <h3>{title}</h3>
+        <span className="muted">{data ? `${total} pictures · studio evidence @ ${data.revision ?? '—'}` : error ? `Couldn't list: ${error}` : 'Listing…'}</span>
+      </header>
+      {data && !sections.length && <p className="muted">Nothing committed for this one yet.</p>}
+      {sections.length > 0 && (
+        <>
+          <div className="preview-tabs" role="tablist">
+            {sections.map((x, i) => (
+              <button key={x.id + x.title} role="tab" aria-selected={x === section} className={`tab ${x === section ? 'on' : ''}`} onClick={() => pick(i)}>
+                {x.title} <span className="mono muted">{x.items.length}</span>
+              </button>
+            ))}
+          </div>
+          {devices.length > 1 && (
+            <div className="asset-pick">
+              {devices.map((d) => (
+                <button key={d} className={`tab ${d === dev ? 'on' : ''}`} onClick={() => (setDevice(d), setShown(PAGE))}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          )}
+          {section?.note && <p className="muted gallery-note">{section.note}</p>}
+          <div className="gallery-grid">
+            {visible.map((it, i) => (
+              <button key={it.sha + it.path} className="gallery-cell" onClick={() => setOpen(i)} title={it.path}>
+                {files[it.sha] ? <img src={fileUrl(files[it.sha]!)} alt={it.label} loading="lazy" /> : <span className="gallery-wait">{files[it.sha] === null ? 'unavailable' : ''}</span>}
+                <span className="gallery-cap">{it.label}</span>
+              </button>
+            ))}
+          </div>
+          {items.length > shown && (
+            <button className="btn gallery-more" onClick={() => setShown(shown + PAGE)}>
+              Show more ({items.length - shown})
+            </button>
+          )}
+        </>
+      )}
+      {big && (
+        <div className="lightbox" role="dialog" aria-label={big.label} onClick={() => setOpen(null)}>
+          <figure onClick={(e) => e.stopPropagation()}>
+            {files[big.sha] ? <img src={fileUrl(files[big.sha]!)} alt={big.label} /> : <div className="gallery-wait big" />}
+            <figcaption>
+              <span>
+                {section?.title}
+                {big.device ? ` · ${big.device}` : ''} · {big.label}
+              </span>
+              <span className="muted mono">
+                {open! + 1}/{items.length} · {big.path}
+              </span>
+            </figcaption>
+            <div className="lightbox-nav">
+              <button className="btn" disabled={open === 0} onClick={() => setOpen(open! - 1)}>
+                ← Prev
+              </button>
+              <button className="btn" onClick={() => setOpen(null)}>
+                Close
+              </button>
+              <button className="btn" disabled={open === items.length - 1} onClick={() => setOpen(open! + 1)}>
+                Next →
+              </button>
+            </div>
+          </figure>
+        </div>
+      )}
+    </section>
+  )
+}
 
 function JobRow({ job }: { job: Job }) {
   const t = tone(job.state, job.stale)
@@ -173,6 +311,8 @@ function GameDetail({ game, jobs }: { game: Game; jobs: Job[] }) {
         </div>
       </section>
 
+      <GameGallery id={game.id} title="Gallery" />
+
       <section className="card">
         <header className="card-head">
           <h3>Work on this game</h3>
@@ -204,6 +344,7 @@ export function Roblox() {
   const prefs = useHub((x) => x.prefs)
   const setPrefs = useHub((x) => x.setPrefs)
   const [refreshing, setRefreshing] = useState(false)
+  const [studioOpen, setStudioOpen] = useState(false)
   const p = s?.projects.roblox
   if (!p) return <Empty title="Reading the Roblox studio…">The first read fetches the studio queue from GitHub.</Empty>
   // Active and busy games first, then the most worked-on.
@@ -258,6 +399,10 @@ export function Roblox() {
         </div>
         {game ? <GameDetail key={game.id} game={game} jobs={jobs.filter((j) => j.game === game.id)} /> : <Empty title="No games found" />}
       </div>
+      <details className="studio-wide" onToggle={(e) => setStudioOpen((e.target as HTMLDetailsElement).open)}>
+        <summary>Studio-wide pictures (people, style bible, blind tests)</summary>
+        {studioOpen && <GameGallery id="_studio" title="Studio-wide" />}
+      </details>
     </div>
   )
 }

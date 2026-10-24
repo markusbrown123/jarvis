@@ -13,7 +13,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import * as hub from './store.mjs'
 import { CONFIG_FILE, loadConfig, saveConfig } from './config.mjs'
-import { startRoblox } from './roblox.mjs'
+import { gallery, galleryImages, startRoblox } from './roblox.mjs'
 import { startAutomaton } from './automaton.mjs'
 import { startFinance } from './finance.mjs'
 import * as ledger from './expenses.mjs'
@@ -221,6 +221,15 @@ export function startHub({ runner, phone } = {}) {
 
     try {
       if (req.method === 'GET' && path === '/api/state') return json(res, cors, 200, hub.snapshot())
+
+      // A Roblox game's gallery (names from git), and its pictures copied
+      // into the cache as they're looked at (only ones the gallery listed).
+      if (req.method === 'GET' && path === '/api/roblox/gallery') return json(res, cors, 200, gallery(String(url.searchParams.get('game') ?? '')))
+      if (req.method === 'POST' && path === '/api/roblox/images') {
+        const body = JSON.parse((await readBody(req)) || '{}')
+        const shas = Array.isArray(body.shas) ? body.shas.filter((x) => typeof x === 'string' && /^[0-9a-f]{40}$/.test(x)) : []
+        return json(res, cors, 200, { files: await galleryImages(shas) })
+      }
 
       if (req.method === 'GET' && path === '/api/stream') {
         res.writeHead(200, { ...cors, 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
