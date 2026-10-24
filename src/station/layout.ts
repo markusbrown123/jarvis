@@ -107,6 +107,8 @@ export const DECK_TOP = 0.16
 /** The build bay's holo-table (foundry.tsx): straight back from the console, between the back pads. */
 export const FOUNDRY: [number, number, number] = [0, DECK_TOP, -5.6]
 export const FOUNDRY_R = 1.1
+/** Dum-E (robot.tsx): beside the build bay, towards the Automaton pad, clear of the pads and the docks. */
+export const DUME: [number, number, number] = [1.55, DECK_TOP, -5.75]
 
 /** Where a zone's pathway starts and ends on the stage. */
 export function along(zone: ZoneId, f: number, out: THREE.Vector3, y = DECK_TOP + 0.08) {
@@ -181,6 +183,7 @@ export const OBSTACLES: [number, number, number][] = [
   [0, 0, CONSOLE_R],
   ...ZONES.map((z): [number, number, number] => [z.pos[0], z.pos[2], 1.35]),
   [FOUNDRY[0], FOUNDRY[2], FOUNDRY_R],
+  [DUME[0], DUME[2], 0.42],
 ]
 
 /** Can someone stand here? Inside, out through the open bay, and on the terrace. */

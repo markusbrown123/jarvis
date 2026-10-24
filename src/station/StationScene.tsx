@@ -10,6 +10,7 @@ import { ZoneLight } from './floor'
 import { Clusters } from './clusters'
 import { Foundry } from './foundry'
 import { Drones } from './drones'
+import { Robot } from './robot'
 import { FloorWorks } from './floorworks'
 import { Console } from './console'
 import { Lair } from './lair'
@@ -225,15 +226,17 @@ class ConsoleGuard extends Component<{ what: string; children: ReactNode }, { fa
  * mode on High and Ultra a gentle depth of field — the desk, the room and
  * the view sharp, only the far horizon softening.
  */
-function Post({ q, dof }: { q: (typeof QUALITY)[Graphics]; dof: boolean }) {
+function Post({ q, dof, inside }: { q: (typeof QUALITY)[Graphics]; dof: boolean; inside: boolean }) {
   return (
     <EffectComposer multisampling={q.msaa} enableNormalPass={false}>
-      <>{q.ao && <N8AO aoRadius={1.2} distanceFalloff={1} intensity={2.4} quality="medium" halfRes />}</>
+      <>{q.ao && inside && <N8AO aoRadius={1.2} distanceFalloff={1} intensity={2.4} quality="medium" halfRes />}</>
       <>{dof && <DepthOfField worldFocusDistance={6} worldFocusRange={14} bokehScale={1.2} resolutionScale={0.5} />}</>
       <Bloom intensity={q.ao ? 0.85 : 0.7} luminanceThreshold={1.3} luminanceSmoothing={0.3} mipmapBlur radius={0.62} />
       <>{q.lens && <ChromaticAberration offset={new THREE.Vector2(0.00045, 0.0006)} radialModulation modulationOffset={0.35} />}</>
       <Vignette eskil={false} offset={0.22} darkness={0.72} />
-      <>{q.lens && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={0.35} />}</>
+      {/* Film grain, faint: it scales with brightness, and any stronger
+          fizzes on white surfaces (the roof from the air was all sparkle). */}
+      <>{q.lens && inside && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={0.1} />}</>
       <ToneMapping mode={ToneMappingMode.AGX} />
       <>{q.msaa === 0 && <SMAA />}</>
     </EffectComposer>
@@ -313,6 +316,11 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
           <Drones />
         </Suspense>
       </ConsoleGuard>
+      <ConsoleGuard what="robot">
+        <Suspense fallback={null}>
+          <Robot />
+        </Suspense>
+      </ConsoleGuard>
       <FloorWorks />
       {/* Dust hanging in the light. */}
       {q.dust > 0 && <Sparkles count={q.dust} scale={[18, 4, 16]} position={[0, 2.3, -2]} size={1.2} speed={0.08} opacity={0.18} color="#cdd8ff" noise={1} />}
@@ -323,7 +331,10 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <TalkFraming />
       <IntroFlight />
       <LabelProjector />
-      <Post q={q} dof={mode === 'talk' && graphics !== 'low' && !intro} />
+      {/* Ambient occlusion and grain only once in the house: occlusion works
+          from the depth buffer, which is coarse at the fly-in's distances
+          (the view reaches 4 km) and adds nothing out there. */}
+      <Post q={q} dof={mode === 'talk' && graphics !== 'low' && !intro} inside={!intro} />
     </Canvas>
   )
 }
