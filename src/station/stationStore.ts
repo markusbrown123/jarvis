@@ -1,6 +1,19 @@
 import { create } from 'zustand'
+import { useHub, type View as Page } from '../hub/client'
 import type { View, ZoneId } from './layout'
 import type { StationModel } from './model'
+
+/**
+ * The desk's four monitors are screens you can go into: click one and the
+ * camera flies in until it fills your view, it powers on as that page, and
+ * Esc (or Back) powers it off and pulls back to the chair. By mount: mon_0..3.
+ */
+export const SCREENS: { name: string; page: Page; what: string }[] = [
+  { name: 'Business', page: 'automaton', what: 'Automaton: sites, leads, pipeline' },
+  { name: 'Work', page: 'jobs', what: 'every job, running and done' },
+  { name: 'Zones', page: 'overview', what: 'the overview of everything' },
+  { name: 'Systems', page: 'terminal', what: "the live terminal of what he's doing" },
+]
 
 /**
  * The station's own state: what is selected or hovered, where the camera is
@@ -25,6 +38,15 @@ type StationStore = {
   hovered: Sel | null
   /** The pointer is over the desk (Command / Cinematic): a click sits you down at it. */
   deskHover: boolean
+  /** A monitor you've gone into: flying in, in use (its page on screen), or flying back out. */
+  screen: { mon: number; phase: 'in' | 'on' | 'out'; at: number } | null
+  screenHover: number | null
+  enterScreen: (mon: number) => void
+  /** The camera has reached the monitor (camera.tsx): the page comes up. */
+  screenArrived: () => void
+  leaveScreen: () => void
+  /** Back at the chair (camera.tsx). */
+  screenLeft: () => void
   /** At the desk: talking to JARVIS, Claude Code (which session), or the Ideas board (which idea). */
   desk: { tab: DeskTab; session: string | null; idea: string | null; draft: { project: string; prompt: string } | null }
   setDesk: (d: Partial<StationStore['desk']>) => void
@@ -77,6 +99,29 @@ export const useStation = create<StationStore>((set, get) => ({
   selected: null,
   hovered: null,
   deskHover: false,
+  screen: null,
+  screenHover: null,
+  enterScreen: (mon) => {
+    const st = get()
+    if (st.screen || !SCREENS[mon] || st.intro !== 'done' || st.mode === 'walk') return
+    document.body.style.cursor = ''
+    set({ screen: { mon, phase: 'in', at: performance.now() }, screenHover: null, deskHover: false, selected: null })
+  },
+  screenArrived: () => {
+    const sc = get().screen
+    if (sc?.phase !== 'in') return
+    set({ screen: { ...sc, phase: 'on', at: performance.now() } })
+    useHub.getState().setPrefs({ view: SCREENS[sc.mon].page, immersive: false })
+  },
+  leaveScreen: () => {
+    const sc = get().screen
+    if (!sc || sc.phase === 'out') return
+    if (useHub.getState().prefs.view !== 'station') useHub.getState().setPrefs({ view: 'station' })
+    // Back to the chair, whichever mode you came in from.
+    if (get().mode !== 'talk') get().setMode('talk')
+    set({ screen: { ...sc, phase: 'out', at: performance.now() } })
+  },
+  screenLeft: () => set({ screen: null }),
   desk: { tab: 'talk', session: null, idea: null, draft: null },
   setDesk: (d) => set({ desk: { ...get().desk, ...d } }),
   mode: savedMode(),

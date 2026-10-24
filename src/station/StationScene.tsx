@@ -23,7 +23,7 @@ import { easeWeather, startWeather, tryWeather } from './weather'
 import { Rain } from './rain'
 import { WalkControls } from './walk'
 import { Links } from './links'
-import { CameraRig, Controls, TalkFraming } from './camera'
+import { CameraRig, Controls, ScreenFlight, TalkFraming } from './camera'
 import { LabelProjector } from './labels'
 import { IntroFlight } from './intro'
 import { Estate, Grounds } from './estate'
@@ -253,6 +253,9 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
   // Nothing to draw behind the power-up screen. (Rendering on demand there
   // instead breaks the first-frame environment and shadow setup.)
   const asleep = useStore((s) => s.phase === 'offline')
+  // While one of the desk's screens is up as your page, the room isn't
+  // seen: stop drawing it (it carries on the moment you come back out).
+  const paused = useStation((s) => s.screen?.phase === 'on')
   if (asleep) return null
   return (
     // Keyed on quality: shadow-map type and multisampling are fixed when
@@ -260,7 +263,9 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
     <Canvas
       key={graphics}
       className="station-canvas"
-      shadows={q.shadows}
+      // PCF by name: the "soft" default is deprecated and three.js falls back to it anyway.
+      shadows={q.shadows ? 'percentage' : false}
+      frameloop={paused ? 'never' : 'always'}
       dpr={dpr}
       gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
       camera={{ position: [0, 9.6, 15.2], fov: 38, near: 0.12, far: 4000 }}
@@ -335,6 +340,7 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       <Controls />
       <CameraRig />
       <TalkFraming />
+      <ScreenFlight />
       <IntroFlight />
       <LabelProjector />
       {/* Ambient occlusion and grain only once in the house: occlusion works

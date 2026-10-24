@@ -105,8 +105,10 @@ export function Console({ graphics }: { graphics: Graphics }) {
     const m = useStation.getState().mode
     return m === 'command' || m === 'cinematic'
   }
+  // A monitor under the pointer has it: the desk lets it through.
+  const onScreen = (e: ThreeEvent<PointerEvent | MouseEvent>) => e.intersections.some((h) => h.object.userData.screen !== undefined)
   const sit = (e: ThreeEvent<MouseEvent>) => {
-    if (!away()) return
+    if (!away() || onScreen(e)) return
     e.stopPropagation()
     const st = useStation.getState()
     st.select(null, false)
@@ -115,7 +117,7 @@ export function Console({ graphics }: { graphics: Graphics }) {
     document.body.style.cursor = ''
   }
   const over = (e: ThreeEvent<PointerEvent>) => {
-    if (!away()) return
+    if (!away() || onScreen(e)) return
     e.stopPropagation()
     useStation.setState({ deskHover: true })
     document.body.style.cursor = 'pointer'
@@ -263,15 +265,53 @@ function row(g: CanvasRenderingContext2D, y: number, state: string, label: strin
   g.fillText(v === value ? v : `${v}…`, x, y)
 }
 
-/** A screen hung on one of the console's mounts (mon_N in the model), facing the chair. */
+/**
+ * A screen hung on one of the console's mounts (mon_N in the model), facing
+ * the chair. Each is a screen you can go into (SCREENS in the store): point
+ * at it and its frame lights; click and the camera flies in (camera.tsx).
+ */
 function Monitor({ mount, tex }: { mount: THREE.Object3D; tex: THREE.Texture }) {
   // Writes depth so depth of field knows the screen is here, not the room behind it.
   const mat = useMemo(() => new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false, side: THREE.DoubleSide }), [tex])
+  const frame = useMemo(() => new THREE.MeshBasicMaterial({ color: '#8cdcff', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), [])
+  const index = Number(mount.name.match(/\d+/)?.[0] ?? -1)
+  const hot = useStation((s) => s.screenHover === index)
+  const usable = () => {
+    const st = useStation.getState()
+    return st.intro === 'done' && !st.screen && st.mode !== 'walk'
+  }
+  const sh = (SCREEN_W * H) / W
   return (
     <group position={mount.position} quaternion={mount.quaternion}>
-      <mesh material={mat} renderOrder={3}>
-        <planeGeometry args={[SCREEN_W, (SCREEN_W * H) / W]} />
+      <mesh
+        name={`screen_${index}`}
+        userData={{ screen: index }}
+        material={mat}
+        renderOrder={3}
+        onClick={(e) => {
+          if (!usable()) return
+          e.stopPropagation()
+          useStation.getState().enterScreen(index)
+        }}
+        onPointerOver={(e) => {
+          if (!usable()) return
+          e.stopPropagation()
+          useStation.setState({ screenHover: index, deskHover: false })
+          document.body.style.cursor = 'pointer'
+        }}
+        onPointerOut={() => {
+          if (useStation.getState().screenHover !== index) return
+          useStation.setState({ screenHover: null })
+          document.body.style.cursor = ''
+        }}
+      >
+        <planeGeometry args={[SCREEN_W, sh]} />
       </mesh>
+      {hot && (
+        <mesh position-z={-0.004} material={frame} renderOrder={2}>
+          <planeGeometry args={[SCREEN_W + 0.05, sh + 0.05]} />
+        </mesh>
+      )}
     </group>
   )
 }

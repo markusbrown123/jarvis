@@ -17,6 +17,7 @@ import { Needs, Activity, Settings } from './Pages'
 import { Jobs } from './Jobs'
 import { Terminal } from './Terminal'
 import { Station } from '../station/Station'
+import { useStation } from '../station/stationStore'
 import { UsageChip } from './Usage'
 import { VoiceWave } from './VoiceWave'
 import { ItemCard } from './shared'
@@ -47,9 +48,15 @@ function TopBar() {
   const gestures = useStore((s) => s.gestures)
   const looking = useStore((s) => s.looking)
   const model = useHub((s) => s.state?.usage.statusLine?.model)
+  const inScreen = useStation((s) => s.screen?.phase === 'on')
   return (
     <header className="topbar">
       <div className="brand">
+        {inScreen && (
+          <button className="btn btn-back" onClick={() => useStation.getState().leaveScreen()} title="Back to the room (Esc)">
+            ◂ Room <kbd>Esc</kbd>
+          </button>
+        )}
         <span className="brand-mark">JARVIS</span>
         <span className={`state-pill state-${st.tone}`}>
           <span className="state-dot" />
@@ -373,6 +380,24 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
   const setPalette = useHub((s) => s.setPalette)
   const go = useHub((s) => s.go)
   const gestures = useStore((s) => s.gestures)
+  const screen = useStation((s) => s.screen)
+  const leaveScreen = useStation((s) => s.leaveScreen)
+  // Choosing the station from inside a screen (its tab, key 0) goes back out through it.
+  useEffect(() => {
+    if (screen?.phase === 'on' && prefs.view === 'station') leaveScreen()
+  }, [screen?.phase, prefs.view, leaveScreen])
+  // Esc in a screen: back out to the room, before Esc's usual "stand down".
+  useEffect(() => {
+    if (screen?.phase !== 'on') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || useHub.getState().paletteOpen || useHub.getState().prefs.immersive) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      leaveScreen()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [screen?.phase, leaveScreen])
 
   useEffect(() => {
     connectHub()
@@ -426,14 +451,18 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
   })()
 
   const station = prefs.view === 'station' && !prefs.immersive
+  // Gone into one of the desk's screens: its page is up, with the room still
+  // loaded (and paused) underneath to come back out to.
+  const inScreen = screen?.phase === 'on' && !station
   return (
     <>
-      {station ? (
+      {(station || screen) && (
         <div className={prefs.reducedMotion ? 'reduced' : ''}>
           <Station />
         </div>
-      ) : (
-        <div className={`dash ${prefs.navCollapsed ? 'nav-collapsed' : ''} ${prefs.needsCollapsed ? 'needs-collapsed' : ''} ${prefs.reducedMotion ? 'reduced' : ''}`}>
+      )}
+      {!station && (
+        <div className={`dash ${inScreen ? 'dash-screen' : ''} ${prefs.navCollapsed ? 'nav-collapsed' : ''} ${prefs.needsCollapsed ? 'needs-collapsed' : ''} ${prefs.reducedMotion ? 'reduced' : ''}`}>
           <TopBar />
           <NavRail />
           <main className="workspace">{prefs.immersive ? null : view}</main>

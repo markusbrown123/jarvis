@@ -1753,6 +1753,52 @@ kbd {
   box-shadow: 0 0 0 2px #ff9a3c, 0 0 60px rgba(255, 154, 60, 0.45);
 }
 
+/* ------------------------------------------- a desk screen gone into (station) */
+
+/* The page powers on like the monitor it was: a bright line, opening out. */
+.dash.dash-screen {
+  /* Over the paused room (.station is 5), under the power-up screen and palette. */
+  z-index: 6;
+  animation: screen-on 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes screen-on {
+  0% {
+    clip-path: inset(49.6% 10% 49.6% 10%);
+    filter: brightness(3.5) saturate(0.3);
+  }
+  35% {
+    clip-path: inset(49.6% 0 49.6% 0);
+    filter: brightness(3) saturate(0.4);
+  }
+  75% {
+    clip-path: inset(0);
+    filter: brightness(1.3);
+  }
+  100% {
+    clip-path: inset(0);
+    filter: none;
+  }
+}
+.dash.dash-screen.reduced {
+  animation: none;
+}
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-color: rgba(140, 220, 255, 0.45);
+  background: rgba(140, 220, 255, 0.12);
+  color: #dff1ff;
+  white-space: nowrap;
+}
+.btn-back kbd {
+  padding: 0 5px;
+  border: 1px solid rgba(140, 220, 255, 0.35);
+  border-radius: 3px;
+  font: 500 10.5px var(--mono);
+  color: #a9c8e6;
+}
+
 /* ------------------------------------------------------- smaller windows */
 
 @media (max-width: 1280px) {

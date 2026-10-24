@@ -1660,6 +1660,44 @@
   }
 }
 
+/* ------------------------------------------------------------ into a desk screen and back (camera.tsx) */
+
+/* While the camera flies into a monitor or back, the HUD steps aside. */
+.station.screen-fly > :not(.station-canvas):not(.screen-off) {
+  opacity: 0;
+  pointer-events: none;
+}
+/* Coming out: the page powers off like a monitor — to a line, to a point, gone. */
+.screen-off {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  background: #e9f3ff;
+  animation: screen-off 0.5s ease-in forwards;
+}
+@keyframes screen-off {
+  0% {
+    clip-path: inset(0);
+    opacity: 0.8;
+  }
+  45% {
+    clip-path: inset(49.5% 0 49.5% 0);
+    opacity: 1;
+  }
+  75% {
+    clip-path: inset(49.7% 38% 49.7% 38%);
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(50% 50% 50% 50%);
+    opacity: 0;
+  }
+}
+.reduced .screen-off {
+  animation-duration: 0.01s;
+}
+
 /* ------------------------------------------------------------ the opening flight (intro.tsx) */
 
 /* The HUD waits until the camera has landed at the desk (the fade-in

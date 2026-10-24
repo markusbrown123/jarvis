@@ -495,6 +495,8 @@ export function Station() {
   const intro = useStation((s) => s.intro !== 'done')
   // With a selection open the right column makes room for its detail.
   const selected = useStation((s) => Boolean(s.selected))
+  // Going into one of the desk's screens, or back out: the HUD steps aside.
+  const screen = useStation((s) => s.screen?.phase ?? null)
   // J: Talk. F: Walk. C: Cinematic / Command. R: reset the view. L: Connections View.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -502,6 +504,8 @@ export function Station() {
       if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT' || el?.isContentEditable) return
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
       const st = useStation.getState()
+      // In one of the desk's screens the keys belong to its page.
+      if (st.screen) return
       if (e.key === 'c') st.setMode(st.mode === 'cinematic' ? 'command' : 'cinematic')
       else if (e.key === 'j') st.setMode('talk')
       else if (e.key === 'f') st.setMode(st.mode === 'walk' ? 'talk' : 'walk')
@@ -516,7 +520,7 @@ export function Station() {
   // The panels are a HUD over the room. (Placed inside the 3D scene they
   // blank the frame once the reflective floor is on.)
   return (
-    <div className={`station is-${mode}${intro ? ' cine-on' : ''}`}>
+    <div className={`station is-${mode}${intro ? ' cine-on' : ''}${screen ? ' screen-fly' : ''}`}>
       <ModelSync />
       <StationScene graphics={graphics} />
       <LabelLayer />
@@ -545,6 +549,8 @@ export function Station() {
       <ViewBar />
       <Dock captionOnly={mode === 'talk' || mode === 'walk'} />
       <IntroOverlay />
+      {/* Out of a screen: its page powers off like a monitor, then the camera pulls back. */}
+      {screen === 'out' && <div className="screen-off" aria-hidden />}
       {mode === 'command' && <p className="st-hint">Drag to orbit · click a system · R reset · L links · C cinematic · J talk · F walk</p>}
     </div>
   )

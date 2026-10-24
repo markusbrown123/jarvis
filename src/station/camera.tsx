@@ -26,6 +26,7 @@ export function CameraRig() {
   const mode = useStation((s) => s.mode)
   const goal = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null)
   const first = useRef(true)
+  const had = useRef<Orbit | null>(null)
 
   useEffect(() => {
     // The first measurement can be 0×0, and a NaN camera never recovers.
@@ -47,7 +48,13 @@ export function CameraRig() {
       camera.position.copy(pos)
       controls.target.copy(target)
       controls.update()
+    } else if (controls && controls !== had.current && mode === 'talk') {
+      // Fresh controls (after the opening flight, or back out of a screen)
+      // start at the origin; aim them where the camera already looks.
+      controls.target.copy(target)
+      controls.update()
     }
+    had.current = controls
   }, [view, nonce, mode, size.width, size.height, camera, controls])
 
   // Development: point the camera anywhere (render tests and screenshots).
@@ -87,7 +94,7 @@ export function CameraRig() {
 export function TalkFraming() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
   const size = useThree((s) => s.size)
-  const talk = useStation((s) => s.mode === 'talk' && s.intro === 'done')
+  const talk = useStation((s) => s.mode === 'talk' && s.intro === 'done' && !s.screen)
   const shown = useRef(0)
   const applied = useRef<string>('')
   // Eased, so the picture glides over as the panel comes in.
@@ -108,14 +115,80 @@ export function TalkFraming() {
   return null
 }
 
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+const SCREEN_MS = 1150
+
+/**
+ * Into one of the desk's monitors and back out, like walking up to a
+ * computer in a game: from wherever the camera is, it eases in until the
+ * screen fills the view (then the page takes over, Dashboard.tsx), holds
+ * there while the page is in use, and eases back to the chair after.
+ */
+export function ScreenFlight() {
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
+  const scene = useThree((s) => s.scene)
+  const size = useThree((s) => s.size)
+  const k = useMemo(
+    () => ({ key: '', from: null as null | { pos: THREE.Vector3; quat: THREE.Quaternion }, m: new THREE.Matrix4(), face: new THREE.Quaternion(), seat: new THREE.Quaternion(), c: new THREE.Vector3(), n: new THREE.Vector3(), u: new THREE.Vector3(), at: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) }),
+    [],
+  )
+  useFrame(() => {
+    const sc = useStation.getState().screen
+    if (!sc) {
+      k.key = ''
+      return
+    }
+    // Each leg starts from wherever the camera is when it begins.
+    const key = `${sc.mon}:${sc.phase}`
+    if (k.key !== key || !k.from) {
+      k.key = key
+      k.from = { pos: camera.position.clone(), quat: camera.quaternion.clone() }
+    }
+    const mesh = scene.getObjectByName(`screen_${sc.mon}`) as THREE.Mesh | undefined
+    if (!mesh || !size.width) return
+    // The screen's face: its centre, the way it faces (towards the chair), its up.
+    mesh.updateWorldMatrix(true, false)
+    mesh.getWorldPosition(k.c)
+    k.n.set(0, 0, 1).transformDirection(mesh.matrixWorld)
+    k.u.set(0, 1, 0).transformDirection(mesh.matrixWorld)
+    if (k.n.dot(k.at.copy(k.from.pos).sub(k.c)) < 0 && sc.phase !== 'out') k.n.negate()
+    // Close enough that the screen covers the view, edge to edge.
+    const { width, height } = (mesh.geometry as THREE.PlaneGeometry).parameters
+    const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
+    const d = Math.min(height / 2 / tan, width / 2 / (tan * (size.width / size.height))) * 0.97
+    let toPos: THREE.Vector3
+    let toQuat: THREE.Quaternion
+    if (sc.phase === 'out') {
+      const seat = seatCamera(size.width / size.height)
+      toPos = k.at.set(...seat.pos)
+      toQuat = k.seat.setFromRotationMatrix(k.m.lookAt(toPos, k.c.set(...seat.target), k.up))
+    } else {
+      toPos = k.at.copy(k.c).addScaledVector(k.n, d)
+      toQuat = k.face.setFromRotationMatrix(k.m.lookAt(toPos, k.c, k.u))
+    }
+    const reduced = useHub.getState().prefs.reducedMotion
+    const raw = sc.phase === 'on' || reduced ? 1 : Math.min(1, (performance.now() - sc.at) / SCREEN_MS)
+    const e = ease(raw)
+    camera.position.lerpVectors(k.from.pos, toPos, e)
+    camera.quaternion.slerpQuaternions(k.from.quat, toQuat, e)
+    if (raw >= 1) {
+      if (sc.phase === 'in') useStation.getState().screenArrived()
+      else if (sc.phase === 'out') useStation.getState().screenLeft()
+    }
+  })
+  return null
+}
+
 export function Controls() {
   const mode = useStation((s) => s.mode)
   // The opening flight drives the camera itself (intro.tsx).
   const intro = useStation((s) => s.intro !== 'done')
+  // ...and so does going into one of the desk's screens (ScreenFlight).
+  const screen = useStation((s) => s.screen !== null)
   const reduced = useHub((s) => s.prefs.reducedMotion)
   const cinematic = mode === 'cinematic'
   const limits = useMemo(() => (cinematic ? { min: -Infinity, max: Infinity } : mode === 'talk' ? { min: -0.6, max: 0.6 } : { min: -1.15, max: 1.15 }), [cinematic, mode])
-  if (mode === 'walk' || intro) return null
+  if (mode === 'walk' || intro || screen) return null
   return (
     <OrbitControls
       makeDefault

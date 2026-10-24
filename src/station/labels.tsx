@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from 
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { CONSOLE_R, HOUSE, linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
-import { useStation } from './stationStore'
+import { SCREENS, useStation } from './stationStore'
 import { describe } from './describe'
 
 /**
@@ -96,7 +96,16 @@ function Tooltip() {
     return () => window.removeEventListener('pointermove', move)
   }, [])
   const desk = useStation((s) => s.deskHover)
-  useLayoutEffect(() => void place(el.current), [hovered, desk])
+  const screen = useStation((s) => s.screenHover)
+  useLayoutEffect(() => void place(el.current), [hovered, desk, screen])
+  if (screen !== null && SCREENS[screen])
+    return (
+      <div ref={el} className="st-tip">
+        <b>{SCREENS[screen].name} screen</b>
+        <span className="st-tip-state t-live">click to use it</span>
+        <span>Opens {SCREENS[screen].what} · Esc comes back</span>
+      </div>
+    )
   if (desk)
     return (
       <div ref={el} className="st-tip">
