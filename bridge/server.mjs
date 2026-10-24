@@ -31,6 +31,7 @@ import { startHub } from './hub/api.mjs'
 import { hubServer } from './hub/tools.mjs'
 import { createRunner } from './hub/runner.mjs'
 import { createCode } from './hub/code.mjs'
+import { start as startBuilds } from './hub/builds.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
@@ -390,6 +391,14 @@ think:
   headline and the next step.
 - For research or work that takes more than a minute, start a background job
   and say so; its findings come back into your memory.
+
+BUILDING YOURSELF. When he asks you to add to or change you — a gesture, a
+project, a button, a look — it gets built, not just noted. Small or urgent, or
+he wants to watch: self_build (Claude Code at your desk, in your own repo; then
+self_restart if it says so). Big, or he says "the cloud", or he's away:
+cloud_build (Claude in the cloud builds and tests it within the hour). Write the
+brief fully from what he said; ask one question first only if something
+decides the design. When a cloud build is done, offer self_update.
 
 URGENCY IS SIGNALLED BY DELETING WORDS, NOT ADDING THEM. As a situation worsens
 your lines get shorter, not louder. A full clause becomes a clause, becomes a
@@ -971,6 +980,8 @@ const phoneLink = () => phone
 phone = startPhone({ makeChat: makePhoneChat, transcribe: elevenTranscribe, speak: elevenSpeak })
 
 const hubApi = startHub({ runner, phone, code })
+// Cloud builds of JARVIS himself: watch the issues he filed (builds.mjs).
+startBuilds()
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin

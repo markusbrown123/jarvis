@@ -14,6 +14,7 @@
 #   jarvis watch                     live terminal feed in this window
 #   jarvis remote [off]              talk to him from your iPhone over Tailscale
 #   jarvis update                    pull the newest version, install, restart
+#   jarvis restart                   restart him (after he's changed himself)
 #
 # Settings come from the environment, with defaults below. The ElevenLabs key
 # is read from the macOS Keychain (service "elevenlabs") so it never sits in a
@@ -301,6 +302,11 @@ update() {
 case "${1:-}" in
   stop) stop_all ;;
   update) update ;;
+  restart)
+    # After a change JARVIS made to himself: the page reloads by itself, his bridge needs this.
+    stop_all >/dev/null
+    start_servers
+    ;;
   remote) shift; remote "$@" ;;
   setup-phone) shift; setup_phone "$@" ;;
   watch) exec node "$DIR/scripts/watch.mjs" ;;
@@ -321,7 +327,7 @@ case "${1:-}" in
     [ -n "$n" ] && [ "$n" != 0 ] && echo "An update is waiting: $n new change(s). Run: jarvis update"
     ;;
   *)
-    echo "usage: jarvis [--safe] [stop|update|logs|watch|remote [off]|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
+    echo "usage: jarvis [--safe] [stop|update|restart|logs|watch|remote [off]|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
     exit 1
     ;;
 esac

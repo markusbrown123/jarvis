@@ -7,15 +7,41 @@
  * listed and cancelled here too.
  */
 
+import { execFileSync, spawn } from 'node:child_process'
+import { openSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import * as hub from './store.mjs'
 import * as ledger from './expenses.mjs'
 import * as memory from './memory.mjs'
 import * as ideas from './ideas.mjs'
+import * as builds from './builds.mjs'
 import { loadConfig, saveConfig } from './config.mjs'
 
 const ok = (text) => ({ content: [{ type: 'text', text }] })
+
+/** JARVIS's own checkout, for building and updating himself. */
+const SELF = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const git = (...args) => execFileSync('git', args, { cwd: SELF, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000 }).trim()
+
+/** The launcher, run on its own: it stops this bridge, so it mustn't be this bridge's child. */
+function launcher(what) {
+  const log = openSync(join(hub.DATA_DIR, 'self.log'), 'a')
+  const child = spawn('bash', [join(SELF, 'bin', 'jarvis'), what], { cwd: SELF, detached: true, stdio: ['ignore', log, log], env: { ...process.env, PATH: `${process.env.PATH ?? ''}:/opt/homebrew/bin:/usr/local/bin` } })
+  child.unref()
+}
+
+/** The brief for changing JARVIS himself, here (desk Claude Code in his own repo). */
+const SELF_BUILD = (what) => `Markus asked for this change to JARVIS — this repo is JARVIS himself, running right now:
+
+${what}
+
+Do it the way this codebase does things: read CLAUDE.md and the docs it points to (docs/STATION.md, docs/COMMAND_CENTER.md), match the code around the change, and keep to what was asked.
+Then check it: npx tsc -b, npx oxlint, npm run build — and fix whatever they report. Changes to the page reload by themselves; anything under bridge/ needs JARVIS restarted.
+Then commit on the current branch with a clear message, git pull --rebase, and git push, so the copy on GitHub (and Claude in the cloud) has it. Never push to main, never force-push.
+End with two short lines for Markus: what changed, and whether he should say "restart yourself".`
 
 function ago(ts) {
   if (!ts) return 'unknown'
@@ -301,6 +327,61 @@ export function hubServer({ emit, runner, phone, sources, code }) {
           } catch (err) {
             return ok(`Couldn't start it: ${err.message}`)
           }
+        },
+      ),
+      tool(
+        'self_build',
+        'Change JARVIS himself, here on this Mac, now: a desk Claude Code session in his own repo builds it while Markus watches, checks it compiles, commits and pushes it. Use for small or urgent changes to his own interface, voice, gestures, tools or station, when Markus wants to watch, or when he says "do it here". For big work (a new project, new models or scenes, a large feature) or "send it to the cloud", use cloud_build. Write `what` as a full brief: what to add or change, how it should behave, where it shows. Say it has started at the desk; don\'t wait for it.',
+        { what: z.string() },
+        async ({ what }) => {
+          if (!code) return ok('The desk terminal is not running.')
+          try {
+            const s = code.start({ project: 'jarvis', prompt: SELF_BUILD(what) })
+            emit('desk', { tab: 'code', session: s.id })
+            return ok(`Building it into myself at the desk (session ${s.id}). When it's done, "restart yourself" loads anything that needs it.`)
+          } catch (err) {
+            return ok(`Couldn't start it: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'cloud_build',
+        'Send a change to JARVIS himself to Claude Code in the cloud: it becomes a GitHub issue on his repo (label jarvis-build); a scheduled cloud session builds and tests it (screenshots included), pushes it and closes the issue — within the hour. It shows in Jobs, and Markus hears when it\'s done or if it has a question. Use for bigger work (a new project, new models or scenes, a large feature), when he says "send it to the cloud", or when he\'s away from the desk. `title` is short; `what` is the full brief: what to build, how it should behave, where it shows, anything he said about how it should look.',
+        { title: z.string(), what: z.string() },
+        async ({ title, what }) => {
+          try {
+            const b = await builds.request({ title, request: what })
+            return ok(`Sent to the cloud: issue #${b.number} (${b.url}). It's picked up within the hour; I'll tell you when it's built.`)
+          } catch (err) {
+            return ok(`Couldn't send it: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'self_update',
+        'Update JARVIS to the newest version on GitHub (what the cloud built, or fixes pushed for him): pulls it, installs what changed and restarts him — he goes quiet for about a minute. Use when Markus says "update yourself" or a cloud build is done and he wants it. Says first if there\'s nothing new, or if local changes would be in the way.',
+        {},
+        async () => {
+          try {
+            if (git('status', '--porcelain')) return ok('There are changes here that aren\'t committed yet, so I won\'t pull over them. Have them committed first (or run git stash).')
+            const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
+            git('fetch', '-q', 'origin', branch)
+            const n = Number(git('rev-list', '--count', `HEAD..origin/${branch}`))
+            if (!n) return ok('Already up to date.')
+            launcher('update')
+            return ok(`${n} new change${n === 1 ? '' : 's'}. Updating now — back in about a minute.`)
+          } catch (err) {
+            return ok(`Couldn't check for updates: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'self_restart',
+        'Restart JARVIS on this Mac to load changes made to himself (the bridge side of a self_build). He goes quiet for about a minute. Use when Markus says "restart yourself", or a self_build said it needs one.',
+        {},
+        async () => {
+          launcher('restart')
+          return ok('Restarting — back in about a minute.')
         },
       ),
       tool(
