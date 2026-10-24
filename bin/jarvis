@@ -179,7 +179,7 @@ phone_link() {
 }
 
 # Phone tokens go into the login Keychain, never a file or the repo. The
-# bridge reads them at start-up (restart JARVIS after changing them).
+# bridge looks them up as it needs them, so a change needs no restart.
 keychain_put() {
   local service="$1" prompt="$2" value
   printf '%s' "$prompt"

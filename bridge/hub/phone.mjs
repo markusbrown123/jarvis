@@ -347,7 +347,11 @@ export function startPhone({ makeChat, transcribe, speak }) {
         continue
       }
       try {
-        if (!botName) botName = (await tg('getMe', {})).username ?? null
+        if (!botName) {
+          botName = (await tg('getMe', {})).username ?? null
+          // Now, not after the first long poll: the terminal names the bot to open.
+          publish()
+        }
         const updates = await tg('getUpdates', { offset: cfg.offset, timeout: 50, allowed_updates: ['message'] }, { timeout: 65000 })
         lastError = null
         for (const u of updates) {
