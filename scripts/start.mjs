@@ -44,6 +44,16 @@ function vendorWasm() {
   }
 }
 
+// The face (Vite) needs Node 20.19+ or 22.12+. Older, it dies at start-up
+// with an error that doesn't say why, so say why first.
+{
+  const [major, minor] = process.versions.node.split('.').map(Number)
+  if (!((major === 20 && minor >= 19) || (major === 22 && minor >= 12) || major > 22)) {
+    console.error(`JARVIS needs Node.js 20.19+ or 22.12+; this is ${process.versions.node}. Update it (brew upgrade node, or nodejs.org) and start again.`)
+    process.exit(1)
+  }
+}
+
 const writes = process.argv.includes('--writes')
 
 // A dim label per process, so the interleaved logs stay readable.

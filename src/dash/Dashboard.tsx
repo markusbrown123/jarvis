@@ -123,7 +123,7 @@ function NavRail() {
           </button>
         ))}
       </div>
-      <button className="nav-collapse" onClick={() => setPrefs({ navCollapsed: !prefs.navCollapsed })} title="Collapse ( [ )">
+      <button className="nav-collapse" onClick={() => setPrefs({ navCollapsed: !prefs.navCollapsed })} title="Collapse ( [ )" aria-label={prefs.navCollapsed ? 'Expand the sections' : 'Collapse the sections'}>
         {prefs.navCollapsed ? '›' : '‹'}
       </button>
     </nav>
@@ -158,7 +158,7 @@ function NeedsPanel() {
       <header className="needs-head">
         <h2>Needs Markus</h2>
         <span className="badge">{items.length}</span>
-        <button className="btn btn-quiet" onClick={() => open(false)} title="Collapse ( ] )">
+        <button className="btn btn-quiet" onClick={() => open(false)} title="Collapse ( ] )" aria-label="Collapse Needs Markus">
           ›
         </button>
       </header>

@@ -1313,6 +1313,16 @@ const wss = new WebSocketServer({
  * the same network.
  */
 const BIND = process.env.JARVIS_BIND ?? '127.0.0.1'
+// The socket server passes on the HTTP server's errors. The usual one at
+// start-up: the port is taken, which deserves a sentence, not a stack trace.
+wss.on('error', (err) => {
+  console.error(
+    err.code === 'EADDRINUSE'
+      ? `[jarvis] port ${PORT} is taken — JARVIS is probably running already (jarvis stop), or another app has it (lsof -i :${PORT}).`
+      : `[jarvis] bridge server error: ${err.message}`,
+  )
+  process.exit(1)
+})
 server.listen(PORT, BIND)
 
 console.log(`[jarvis] bridge listening on ws://localhost:${PORT}`)

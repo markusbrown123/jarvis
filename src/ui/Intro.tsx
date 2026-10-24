@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore, type BootStage } from '../store'
-import { useHub } from '../hub/client'
+import { TOUCH, useHub } from '../hub/client'
 import { BRIDGE_HTTP_URL } from '../config'
 import { openItems } from '../dash/state'
 import { until } from '../hub/format'
@@ -311,7 +311,10 @@ export function Intro({ onStart }: { onStart: () => void }) {
       : count !== null
         ? `Starting in ${count}`
         : ready
-          ? 'Ready'
+          ? // On a phone the ways to start are below the fold: say it here.
+            TOUCH
+            ? 'Ready — tap to start'
+            : 'Ready'
           : 'Systems check'
 
   return (
@@ -368,14 +371,23 @@ export function Intro({ onStart }: { onStart: () => void }) {
                 <b>Say “Jarvis”</b>
                 <span>or “wake up”</span>
               </button>
-              <button className="way" onClick={onStart}>
-                <b>Any key</b>
-                <span>or click anywhere</span>
-              </button>
-              <button className="way" onClick={onStart}>
-                <b>Double-clap</b>
-                <span>near the Mac</span>
-              </button>
+              {TOUCH ? (
+                <button className="way" onClick={onStart}>
+                  <b>Tap</b>
+                  <span>anywhere</span>
+                </button>
+              ) : (
+                <>
+                  <button className="way" onClick={onStart}>
+                    <b>Any key</b>
+                    <span>or click anywhere</span>
+                  </button>
+                  <button className="way" onClick={onStart}>
+                    <b>Double-clap</b>
+                    <span>near the Mac</span>
+                  </button>
+                </>
+              )}
             </div>
             <label className="intro-auto">
               <input type="checkbox" checked={autoStart} onChange={(e) => setPrefs({ autoStart: e.target.checked })} />
@@ -391,7 +403,7 @@ export function Intro({ onStart }: { onStart: () => void }) {
                   Hold (Esc)
                 </button>
               ) : autoStart && ready && bridgeUp && !held && !sound ? (
-                <span className="intro-note">— Chrome wants one key press first this time</span>
+                <span className="intro-note">{TOUCH ? '— the browser wants one tap first' : '— Chrome wants one key press first this time'}</span>
               ) : null}
             </label>
           </>
@@ -406,7 +418,7 @@ export function SoundLockHint() {
   const locked = useStore((s) => s.soundLocked && s.phase !== 'offline' && s.phase !== 'boot')
   return locked ? (
     <div className="sound-lock" role="status">
-      Press any key or click once so JARVIS can speak — Chrome holds sound until then.
+      {TOUCH ? 'Tap once so JARVIS can speak — the browser holds sound until then.' : 'Press any key or click once so JARVIS can speak — Chrome holds sound until then.'}
     </div>
   ) : null
 }

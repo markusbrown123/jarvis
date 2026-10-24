@@ -276,6 +276,14 @@ proxy sets) and, when it has an origin, that it's the Mac's own tailnet name.
 `jarvis remote off` turns it off. Until it's set up, a P3 Needs Markus item
 says how.
 
+On the phone the dashboard is one column: the sections are a strip that
+scrolls sideways (Needs Markus is its own tab, with its badge), and the bottom
+bar is what he last said, a line to type, and Talk. A new phone starts on the
+overview at Low graphics (the station at Ultra is more than Safari will hold);
+the station is a tap away, with the conversation in the lower half and the
+room above. Walk mode isn't offered on a touch screen. The page server listens
+on 127.0.0.1 only, which is where `tailscale serve` sends the phone.
+
 ## Security
 
 - The bridge listens on `127.0.0.1` only (`JARVIS_BIND` to change, on purpose).
