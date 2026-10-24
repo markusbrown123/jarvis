@@ -289,9 +289,13 @@ export function startHub({ runner, phone } = {}) {
       // A worker posting events: { activity: [...], jobs: [...] }.
       if (req.method === 'POST' && path === '/api/events') {
         const body = JSON.parse(await readBody(req))
+        const list = (k) => (Array.isArray(body?.[k]) ? body[k].filter((x) => x && typeof x === 'object') : [])
+        if (!body || typeof body !== 'object' || ['activity', 'jobs'].some((k) => body[k] != null && !Array.isArray(body[k]))) {
+          return json(res, cors, 400, { error: 'Expected { activity: [...], jobs: [...] }.' })
+        }
         let n = 0
-        for (const a of body.activity ?? []) n += hub.activity({ ...a, source: a.source ?? 'worker' }) ? 1 : 0
-        for (const j of body.jobs ?? []) n += hub.upsertJob({ ...j, source: j.source ?? 'worker' }) ? 1 : 0
+        for (const a of list('activity')) n += hub.activity({ ...a, source: a.source ?? 'worker' }) ? 1 : 0
+        for (const j of list('jobs')) n += hub.upsertJob({ ...j, source: j.source ?? 'worker' }) ? 1 : 0
         return json(res, cors, 200, { ok: true, applied: n })
       }
 
@@ -309,7 +313,8 @@ export function startHub({ runner, phone } = {}) {
           return json(res, cors, 200, { ok: true, result, item: hub.getItem(id) })
         }
         if (action === 'snooze') {
-          const hours = Math.min(168, Math.max(1, Number(url.searchParams.get('hours') ?? 4)))
+          // Not a number means the default: NaN would save no wake-up time and snooze it for good.
+          const hours = Math.min(168, Math.max(1, Number(url.searchParams.get('hours')) || 4))
           hub.upsertItem({ id, state: 'snoozed', snoozedUntil: Date.now() + hours * 3600000 }, { fromSource: false })
         }
         if (action === 'start') hub.upsertItem({ id, state: 'in_progress' }, { fromSource: false })
@@ -363,13 +368,19 @@ export function startHub({ runner, phone } = {}) {
 
       // The expense ledger, for the dashboard. JARVIS uses the same ledger
       // through its tools.
+      // The ledger's own periods only: anything else would be echoed back
+      // (and into the CSV's file name) while quietly meaning this month.
+      const periodOf = (fallback) => {
+        const p = url.searchParams.get('period') ?? fallback
+        return /^(this-month|last-month|this-year|all|\d{4}-\d{2})$/.test(p) ? p : fallback
+      }
       if (req.method === 'GET' && path === '/api/expenses') {
-        const period = url.searchParams.get('period') ?? 'this-month'
+        const period = periodOf('this-month')
         const list = ledger.listExpenses({ period })
         return json(res, cors, 200, { period, list, summary: ledger.summarize(list) })
       }
       if (req.method === 'GET' && path === '/api/expenses.csv') {
-        const period = url.searchParams.get('period') ?? 'all'
+        const period = periodOf('all')
         res.writeHead(200, { ...cors, 'content-type': 'text/csv; charset=utf-8', 'cache-control': 'no-store', 'content-disposition': `attachment; filename="jarvis-expenses-${period}.csv"` })
         return res.end(ledger.csv(period))
       }

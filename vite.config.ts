@@ -9,6 +9,11 @@ export default defineConfig({
     // only accepts sockets from localhost:5173-5199, so stay inside that range
     // or set JARVIS_ALLOWED_ORIGINS to match.
     port: Number(process.env.PORT) || 5173,
+    // IPv4 loopback, like the bridge. Left to "localhost", Node on a Mac
+    // resolves it to ::1 first and Vite listens there only, so `tailscale
+    // serve` (pointed at 127.0.0.1:5173) would find nothing; the browser on
+    // the Mac still reaches http://localhost:5173 either way.
+    host: '127.0.0.1',
     // `jarvis remote` serves the page to your iPhone at <mac>.<tailnet>.ts.net
     // (Tailscale's own proxy, tailnet only); Vite refuses unknown host names.
     allowedHosts: ['.ts.net'],
