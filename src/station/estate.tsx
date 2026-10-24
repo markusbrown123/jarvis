@@ -4,7 +4,7 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import type { Graphics } from '../hub/client'
 import { OUTDOOR } from './environment'
-import { ESTATE } from './layout'
+import { ESTATE, HOUSE } from './layout'
 import { SKY } from './sky'
 import { cliffEdge, coastMaterial, ground, lawnNorm } from './coastland'
 import { GARDEN } from './garden'
@@ -34,6 +34,28 @@ const MODEL = '/station/estate.glb'
 const WARM = new THREE.Color(1.0, 0.62, 0.32)
 const EDGE = new THREE.Color(0.7, 0.85, 1.6)
 
+/**
+ * The wings stand close against the house, and two reach inside its wall:
+ * the one behind it showed a column and the edge of its roof in the room, by
+ * the back wall, and where its faces met the wall's they flickered through.
+ * Nothing of the estate is drawn inside the house, out to the wall's outer
+ * face — there it's within the walls and under the house's roof, so from
+ * outside nothing changes — and nothing there casts a shadow into the room.
+ */
+const INSIDE = `length(vEstateW.xz) < ${(HOUSE.r + 0.45).toFixed(2)} && vEstateW.y < ${(HOUSE.ceiling + 0.4).toFixed(2)}`
+function outsideOnly<M extends THREE.Material>(m: M): M {
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vEstateW;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvEstateW = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vEstateW;')
+      .replace('void main() {', `void main() {\n  if (${INSIDE}) discard;`)
+  }
+  m.customProgramCacheKey = () => 'estate-outside-only'
+  return m
+}
+
 export function Estate({ graphics }: { graphics: Graphics }) {
   const { nodes } = useGLTF(MODEL, false) as unknown as { nodes: Record<string, THREE.Mesh> }
   const maps = useLoader(THREE.TextureLoader, [`/station/estate_white_detail_${graphics}.jpg`, `/station/estate_pad_detail_${graphics}.jpg`])
@@ -44,15 +66,17 @@ export function Estate({ graphics }: { graphics: Graphics }) {
       t.anisotropy = 8
       t.needsUpdate = true
     }
-    const outdoor = <M extends THREE.MeshStandardMaterial>(m: M) => (OUTDOOR.add(m), m)
+    const outdoor = <M extends THREE.MeshStandardMaterial>(m: M) => (OUTDOOR.add(outsideOnly(m)), m)
     return {
       white: outdoor(new THREE.MeshStandardMaterial({ map: maps[0], roughness: 0.7, envMapIntensity: 0.7 })),
       pad: outdoor(new THREE.MeshStandardMaterial({ map: maps[1], roughness: 0.85 })),
       paint: outdoor(new THREE.MeshStandardMaterial({ color: '#e9e8e3', roughness: 0.6 })),
       glass: outdoor(new THREE.MeshStandardMaterial({ color: '#091017', roughness: 0.04, metalness: 0.2, envMapIntensity: 1.8, transparent: true, opacity: 0.86 })),
       frames: outdoor(new THREE.MeshStandardMaterial({ color: '#16181b', roughness: 0.35, metalness: 0.7 })),
-      glow: new THREE.MeshBasicMaterial({ color: '#000' }),
-      lights: new THREE.MeshBasicMaterial({ color: '#000', toneMapped: false }),
+      glow: outsideOnly(new THREE.MeshBasicMaterial({ color: '#000' })),
+      lights: outsideOnly(new THREE.MeshBasicMaterial({ color: '#000', toneMapped: false })),
+      // What casts the shadows, with the same cut.
+      depth: outsideOnly(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking })),
     }
   }, [maps])
 
@@ -85,7 +109,7 @@ export function Estate({ graphics }: { graphics: Graphics }) {
       {parts.map(([n, m, cast]) =>
         nodes[n]
           ? pieces[n].map((g, i) => (
-              <mesh key={`${n}${i}`} geometry={g} position={nodes[n].position} quaternion={nodes[n].quaternion} material={m} castShadow={cast} receiveShadow={n !== 'glass'} renderOrder={n === 'glass' ? 4 : 0} />
+              <mesh key={`${n}${i}`} geometry={g} position={nodes[n].position} quaternion={nodes[n].quaternion} material={m} customDepthMaterial={cast ? mats.depth : undefined} castShadow={cast} receiveShadow={n !== 'glass'} renderOrder={n === 'glass' ? 4 : 0} />
             ))
           : null,
       )}
