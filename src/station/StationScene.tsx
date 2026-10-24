@@ -11,6 +11,7 @@ import { Clusters } from './clusters'
 import { Foundry } from './foundry'
 import { Drones } from './drones'
 import { Robot } from './robot'
+import { Hologram } from './hologram'
 import { FloorWorks } from './floorworks'
 import { Console } from './console'
 import { Lair } from './lair'
@@ -308,6 +309,10 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
         <Suspense fallback={null}>
           <Console graphics={graphics} />
         </Suspense>
+      </ConsoleGuard>
+      {/* JARVIS himself, projected over the desk. */}
+      <ConsoleGuard what="hologram">
+        <Hologram />
       </ConsoleGuard>
       <Links />
       <Clusters />
