@@ -87,7 +87,7 @@ export function createCode({ model, effort, decide, writes }) {
     s.updatedAt = line.at
     emit({ op: 'line', session: meta(s), line })
     // The dashboard's terminal shows it too, a line at a time.
-    if (kind === 'text' || kind === 'tool' || kind === 'error') hub.term(`code:${s.project}`, text, kind === 'tool' ? 'tool' : kind === 'error' ? 'error' : 'text')
+    if (kind === 'text' || kind === 'tool' || kind === 'error') hub.term(`claude:${s.project}`, text, kind === 'tool' ? 'tool' : kind === 'error' ? 'error' : 'text')
   }
 
   /** Paths read relative to the project, as the CLI shows them. */
