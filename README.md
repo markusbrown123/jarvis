@@ -6,6 +6,20 @@ searches the web, generates images, drives your phone, reads your mail. The face
 is a web page (React + Vite + Three.js + custom GLSL). The brain is Claude Code,
 run headless as a library.
 
+**This build** (Markus's) adds, on top of the voice assistant:
+
+- **One command, `jarvis`** — starts everything in write mode, links your
+  phone the first time, prints a status board, opens the window.
+- **The Station** — a 3D Tony Stark house on a Malibu cliff under the real sky
+  and weather: a GTA-style loading screen and fly-in from the sea, the estate,
+  FPV drones and Dum-E doing the real work, your desk looking out to sea.
+  [docs/STATION.md](docs/STATION.md)
+- **The command center** — Roblox studio (queue, galleries), Automaton (site
+  pipeline, public checks), Finance (research data, services, expenses), jobs,
+  Needs Markus, usage, memory. [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md)
+- **Your phone** — Telegram chat and voice notes, reports, urgent Pushover
+  alerts, and live voice from the iPhone over Tailscale (`jarvis remote`).
+
 **The only subscription you need is Claude Code.** No API keys, no OpenAI
 account, no cloud bill — the brain runs on your existing Claude Code login, and
 the heavy work (the model itself) runs on Anthropic's servers, so even a low-end

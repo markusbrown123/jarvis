@@ -324,4 +324,8 @@ rm -rf ~/.jarvis             # forget hub state (optional)
   committed renders instead.
 - **Claude artifacts registry**, TradingView alert webhooks and broker
   monitoring aren't built; no broker or webhook source exists yet.
-- **Real-hardware voice timing** has to be measured on the Mac.
+- **Checked only in a test browser** (software graphics, fake microphone):
+  real-hardware voice timing, the iPhone over Tailscale, and the station's
+  movement at full frame rate have to be confirmed on the Mac and the phone.
+- **Finance numbers** were checked against stand-in databases with the real
+  table layouts, not against your own master-hub and Scout data.
