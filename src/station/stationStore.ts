@@ -25,6 +25,9 @@ type StationStore = {
   hovered: Sel | null
   /** The pointer is over the desk (Command / Cinematic): a click sits you down at it. */
   deskHover: boolean
+  /** At the desk: talking to JARVIS, Claude Code (which session), or the Ideas board (which idea). */
+  desk: { tab: DeskTab; session: string | null; idea: string | null; draft: { project: string; prompt: string } | null }
+  setDesk: (d: Partial<StationStore['desk']>) => void
   /**
    * Talk: sat at the desk facing JARVIS, the conversation in front of you.
    * Command: panels and labels, built for working. Cinematic: the same live
@@ -56,6 +59,7 @@ type StationStore = {
 let seq = 0
 
 export type Mode = 'talk' | 'command' | 'cinematic' | 'walk'
+export type DeskTab = 'talk' | 'code' | 'ideas'
 
 // The mode is remembered between visits (and the room opens at the desk).
 const MODE_KEY = 'jarvis.station.mode'
@@ -73,6 +77,8 @@ export const useStation = create<StationStore>((set, get) => ({
   selected: null,
   hovered: null,
   deskHover: false,
+  desk: { tab: 'talk', session: null, idea: null, draft: null },
+  setDesk: (d) => set({ desk: { ...get().desk, ...d } }),
   mode: savedMode(),
   walk: { hint: null, locked: false },
   setWalk: (w) => {

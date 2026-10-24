@@ -23,7 +23,7 @@ import { expand, loadConfig } from './config.mjs'
 const MAX_RUNNING = 3
 
 /** Where a job for this project should run: its local repo if there is one. */
-function cwdFor(project) {
+export function cwdFor(project) {
   const cfg = loadConfig()
   const pick = (cands = []) => cands.map(expand).find((p) => p && existsSync(join(p, '.git')))
   if (project === 'automaton') return pick(cfg.automaton.repoCandidates) ?? homedir()

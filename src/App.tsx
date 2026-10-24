@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Dashboard } from './dash/Dashboard'
 import { useHub, hubActions, markPresent, type View } from './hub/client'
 import { useStore } from './store'
+import { useStation, type DeskTab } from './station/stationStore'
 import { startVoice, diag as voiceDiag, type Voice, type VoiceHandlers, type VoiceMode } from './lib/voice'
 import { createSpeaker, cycleVoice, currentVoiceName, speakingNow } from './lib/tts'
 import { startAnnouncer } from './hub/announce'
@@ -643,6 +644,15 @@ export default function App() {
             selectedGame: d.game ?? prefs.selectedGame,
             immersive: Boolean(d.immersive),
           })
+          break
+        }
+        case 'desk': {
+          // JARVIS handing something to the desk: Claude Code at work, or an idea.
+          const d = (args ?? {}) as { tab?: DeskTab; session?: string; idea?: string }
+          useHub.getState().setPrefs({ view: 'station', immersive: false })
+          const st = useStation.getState()
+          if (st.mode !== 'talk') st.setMode('talk')
+          st.setDesk({ tab: d.tab ?? 'talk', ...(d.session ? { session: d.session } : {}), ...(d.idea ? { idea: d.idea } : {}) })
           break
         }
         case 'screen':

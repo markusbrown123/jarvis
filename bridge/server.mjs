@@ -30,6 +30,7 @@ import { renderPage } from './page.mjs'
 import { startHub } from './hub/api.mjs'
 import { hubServer } from './hub/tools.mjs'
 import { createRunner } from './hub/runner.mjs'
+import { createCode } from './hub/code.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
@@ -830,6 +831,10 @@ const http = await import('node:http')
 // Jobs run in the background, so they can afford to think harder than chat.
 const runner = createRunner({ model: MODEL, effort: process.env.JARVIS_JOB_EFFORT ?? 'high', canUseTool: permissionGate, mcpServers: MCP_SERVERS })
 
+// The desk's Claude Code terminal: the same gate decides, and in read-only
+// mode what it won't allow by itself is put to Markus at the desk.
+const code = createCode({ model: MODEL, effort: process.env.JARVIS_JOB_EFFORT ?? 'high', decide: decideTool, writes: ALLOW_WRITES })
+
 /**
  * How hard to think about this turn. Quick exchanges stay at the configured
  * effort so he answers fast; advice, plans, analysis, trading and business
@@ -895,7 +900,7 @@ function makePhoneChat() {
   const session = query({
     prompt: prompts(),
     options: {
-      mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink(), sources: hubApi.sources }) },
+      mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink(), sources: hubApi.sources, code }) },
       systemPrompt: PHONE_PROMPT + memory.promptBlock(),
       cwd: homedir(),
       settingSources: [],
@@ -965,7 +970,7 @@ let phone = null
 const phoneLink = () => phone
 phone = startPhone({ makeChat: makePhoneChat, transcribe: elevenTranscribe, speak: elevenSpeak })
 
-const hubApi = startHub({ runner, phone })
+const hubApi = startHub({ runner, phone, code })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
@@ -1548,7 +1553,7 @@ wss.on('connection', (socket) => {
         // The camera, which unlike everything else here has to ask and wait.
         jarvis_eyes: visionServer(ask),
         // The command center: live project data, dashboard, background jobs.
-        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner, phone, sources: hubApi.sources }),
+        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner, phone, sources: hubApi.sources, code }),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk

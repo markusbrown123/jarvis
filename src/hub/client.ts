@@ -74,9 +74,40 @@ function loadPrefs(): Prefs {
   }
 }
 
+/** The desk's Claude Code terminal (bridge/hub/code.mjs). */
+export type CodeLine = { n: number; kind: 'you' | 'text' | 'tool' | 'out' | 'error' | 'note'; text: string; at: number }
+export type CodeSession = {
+  id: string
+  project: string
+  cwd: string
+  title: string
+  state: 'working' | 'approval' | 'ready'
+  approval: { id: string; tool: string; detail: string } | null
+  cost: number
+  createdAt: number
+  updatedAt: number
+  lines: CodeLine[]
+}
+
+/** An idea on the desk's board (bridge/hub/ideas.mjs). */
+export type Idea = {
+  id: string
+  title: string
+  text: string
+  notes: string
+  project: string
+  state: 'new' | 'developing' | 'building' | 'done' | 'parked'
+  source: string
+  createdAt: number
+  updatedAt: number
+}
+
 type HubStore = {
   state: HubState | null
+  ideas: Idea[]
   term: TermLine[]
+  /** Claude Code at the desk: whether it can change things by itself, and its sessions, newest first. */
+  code: { writes: boolean; sessions: CodeSession[] }
   link: Link
   lastUpdate: number
   prefs: Prefs
@@ -91,6 +122,8 @@ type HubStore = {
 export const useHub = create<HubStore>((set, get) => ({
   state: null,
   term: [],
+  code: { writes: false, sessions: [] },
+  ideas: [],
   link: 'connecting',
   lastUpdate: 0,
   prefs: loadPrefs(),
@@ -138,6 +171,30 @@ export function connectHub() {
       if (lines.length && lines[lines.length - 1].id < last) return useHub.setState({ term: lines })
       const fresh = lines.filter((l) => l.id > last)
       if (fresh.length) useHub.setState({ term: [...have, ...fresh].slice(-500) })
+    } catch {
+      /* skip a malformed frame */
+    }
+  })
+  // The desk's Claude Code sessions: all of them on connect, then a line or a
+  // state change at a time.
+  source.addEventListener('code', (e) => {
+    try {
+      const ev = JSON.parse((e as MessageEvent).data)
+      const { code } = useHub.getState()
+      const byNew = (a: CodeSession, b: CodeSession) => b.createdAt - a.createdAt
+      if (ev.op === 'all') return useHub.setState({ code: { writes: ev.writes, sessions: [...ev.sessions].sort(byNew) } })
+      if (ev.op === 'gone') return useHub.setState({ code: { ...code, sessions: code.sessions.filter((x) => x.id !== ev.id) } })
+      const had = code.sessions.find((x) => x.id === ev.session.id)
+      const lines = had?.lines ?? []
+      const next: CodeSession = { ...ev.session, lines: ev.op === 'line' && !lines.some((l) => l.n === ev.line.n) ? [...lines, ev.line].slice(-800) : lines }
+      useHub.setState({ code: { ...code, sessions: had ? code.sessions.map((x) => (x.id === next.id ? next : x)) : [next, ...code.sessions].sort(byNew) } })
+    } catch {
+      /* skip a malformed frame */
+    }
+  })
+  source.addEventListener('ideas', (e) => {
+    try {
+      useHub.setState({ ideas: JSON.parse((e as MessageEvent).data) })
     } catch {
       /* skip a malformed frame */
     }
@@ -196,6 +253,14 @@ export const hubActions = {
   addMemory: (text: string, topic: string) => post('/api/memory', { text, topic }),
   forgetMemory: (id: string) => post(`/api/memory/${encodeURIComponent(id)}/forget`),
   clearConversation: () => post('/api/memory/clear-conversation'),
+  codeStart: (project: string, prompt: string): Promise<{ session: CodeSession }> => post('/api/code/start', { project, prompt }),
+  codeSend: (id: string, prompt: string) => post(`/api/code/${encodeURIComponent(id)}/send`, { prompt }),
+  codeStop: (id: string) => post(`/api/code/${encodeURIComponent(id)}/stop`),
+  codeApprove: (id: string, ask: string, allow: boolean) => post(`/api/code/${encodeURIComponent(id)}/approve`, { ask, allow }),
+  codeClose: (id: string) => post(`/api/code/${encodeURIComponent(id)}/close`),
+  ideaAdd: (text: string, project: string): Promise<{ idea: Idea }> => post('/api/ideas', { text, project }),
+  ideaUpdate: (id: string, patch: Partial<Pick<Idea, 'title' | 'text' | 'notes' | 'project' | 'state'>>) => post(`/api/ideas/${encodeURIComponent(id)}`, patch),
+  ideaDelete: (id: string) => post(`/api/ideas/${encodeURIComponent(id)}/delete`),
   phonePair: () => post('/api/phone/pair'),
   phoneUnpair: () => post('/api/phone/unpair'),
   phoneSettings: (p: Record<string, unknown>) => post('/api/phone/settings', p),

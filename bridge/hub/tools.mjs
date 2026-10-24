@@ -12,6 +12,7 @@ import { z } from 'zod'
 import * as hub from './store.mjs'
 import * as ledger from './expenses.mjs'
 import * as memory from './memory.mjs'
+import * as ideas from './ideas.mjs'
 import { loadConfig, saveConfig } from './config.mjs'
 
 const ok = (text) => ({ content: [{ type: 'text', text }] })
@@ -117,7 +118,7 @@ function project(name, detail) {
 
 const VIEWS = ['station', 'overview', 'roblox', 'finance', 'automaton', 'needs', 'jobs', 'terminal', 'activity', 'settings']
 
-export function hubServer({ emit, runner, phone, sources }) {
+export function hubServer({ emit, runner, phone, sources, code }) {
   return createSdkMcpServer({
     name: 'jarvis_hub',
     version: '1.0.0',
@@ -246,6 +247,59 @@ export function hubServer({ emit, runner, phone, sources }) {
             return ok(`Updated ${ledger.describe(ledger.updateExpense(id, patch))}.`)
           } catch (err) {
             return ok(`Not changed: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'idea_save',
+        `Put an idea of Markus's on the Ideas board at the desk, in his words as he said them. Use whenever he says "I have an idea", "idea:", "what if we…" or "note this idea". project: ${ideas.PROJECTS.join(' | ')}. Confirm in a few words and offer to develop it.`,
+        { idea: z.string(), project: z.enum(ideas.PROJECTS).optional() },
+        async ({ idea, project }) => {
+          try {
+            const i = ideas.add({ text: idea, project, source: 'voice' })
+            emit('desk', { tab: 'ideas', idea: i.id })
+            return ok(`On the board (${i.id}).`)
+          } catch (err) {
+            return ok(`Not saved: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'idea_list',
+        `The Ideas board: each idea's id, title, project and state (${ideas.STATES.join(', ')}), newest first. Use before developing or updating one.`,
+        { state: z.enum(ideas.STATES).optional() },
+        async ({ state }) => {
+          const list = ideas.list().filter((i) => !state || i.state === state)
+          if (!list.length) return ok(state ? `No ${state} ideas.` : 'The board is empty.')
+          return ok(list.slice(0, 40).map((i) => `${i.id} · ${i.state} · ${i.project} · ${i.title}${i.notes ? ' (has notes)' : ''}`).join('\n'))
+        },
+      ),
+      tool(
+        'idea_develop',
+        'Work on an idea from the board: add your notes (the angle worth taking, the first three steps, what it needs, the main risk, rough time or cost — from what you know of his projects and numbers, not generic advice) and/or move it along (developing, building, done, parked). The notes show at the desk; speak only the headline and the next step.',
+        { id: z.string(), notes: z.string().optional(), state: z.enum(ideas.STATES).optional(), project: z.enum(ideas.PROJECTS).optional() },
+        async ({ id, notes, state, project }) => {
+          try {
+            const i = ideas.update(id, { addNotes: notes, state, project })
+            emit('desk', { tab: 'ideas', idea: i.id })
+            return ok(`Updated: ${i.title} (${i.state}).`)
+          } catch (err) {
+            return ok(`Not updated: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'desk_code',
+        `Have Claude Code do something in one of Markus's project folders, at the desk where he can watch it work and answer it: start a session (task + project: ${ideas.PROJECTS.join(' | ')}) or continue one (session id from a previous call). Use when he says "have Claude Code…", "build this", or hands an idea over to be built. It works with the same permissions you have. Don't wait for it: say it has started at the desk.`,
+        { task: z.string(), project: z.enum(ideas.PROJECTS).optional(), session: z.string().optional() },
+        async ({ task, project, session }) => {
+          if (!code) return ok('The desk terminal is not running.')
+          try {
+            const s = session ? code.send(session, task) : code.start({ project: project ?? 'other', prompt: task })
+            emit('desk', { tab: 'code', session: s.id })
+            return ok(`Claude Code is on it at the desk (session ${s.id}, in ${s.cwd}).`)
+          } catch (err) {
+            return ok(`Couldn't start it: ${err.message}`)
           }
         },
       ),

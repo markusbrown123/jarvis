@@ -20,6 +20,7 @@ import { startAutomaton } from './automaton.mjs'
 import { startFinance } from './finance.mjs'
 import * as ledger from './expenses.mjs'
 import * as memory from './memory.mjs'
+import * as ideas from './ideas.mjs'
 
 const MAX_BODY = 1024 * 1024
 
@@ -159,7 +160,7 @@ function onStatusLine(s) {
   hub.observeStatusLine({ at, model: s?.model?.display_name ?? null, version: s?.version ?? null, hasRateLimits: Boolean(s?.rate_limits) })
 }
 
-export function startHub({ runner, phone } = {}) {
+export function startHub({ runner, phone, code } = {}) {
   const token = hub.apiToken()
   let cfg = loadConfig()
   const sources = {
@@ -265,10 +266,18 @@ export function startHub({ runner, phone } = {}) {
         const off = hub.subscribe(send)
         res.write(`event: term\ndata: ${JSON.stringify(hub.termBacklog())}\n\n`)
         const offTerm = hub.termSubscribe((line) => res.write(`event: term\ndata: ${JSON.stringify([line])}\n\n`))
+        // The desk's Claude Code sessions: all of them on connect, then each change.
+        if (code) res.write(`event: code\ndata: ${JSON.stringify({ op: 'all', writes: code.writes, sessions: code.list() })}\n\n`)
+        const offCode = code?.subscribe((e) => res.write(`event: code\ndata: ${JSON.stringify(e)}\n\n`))
+        // Ideas: the whole list, now and on every change (it's small).
+        res.write(`event: ideas\ndata: ${JSON.stringify(ideas.list())}\n\n`)
+        const offIdeas = ideas.subscribe((list) => res.write(`event: ideas\ndata: ${JSON.stringify(list)}\n\n`))
         const ping = setInterval(() => res.write(': ping\n\n'), 25000)
         req.on('close', () => {
           off()
           offTerm()
+          offCode?.()
+          offIdeas()
           clearInterval(ping)
         })
         return
@@ -415,6 +424,49 @@ export function startHub({ runner, phone } = {}) {
       if (req.method === 'POST' && path === '/api/presence') {
         hub.observePresence({ where: 'dashboard' })
         return json(res, cors, 200, { ok: true })
+      }
+
+      // The desk's Claude Code terminal (code.mjs).
+      if (code && req.method === 'POST' && path === '/api/code/start') {
+        const body = JSON.parse((await readBody(req)) || '{}')
+        try {
+          return json(res, cors, 200, { ok: true, session: code.start({ project: body.project, prompt: body.prompt }) })
+        } catch (err) {
+          return json(res, cors, 409, { error: err.message })
+        }
+      }
+      m = path.match(/^\/api\/code\/([\w-]+)\/(send|stop|approve|close)$/)
+      if (code && req.method === 'POST' && m) {
+        const body = JSON.parse((await readBody(req)) || '{}')
+        try {
+          if (m[2] === 'send') return json(res, cors, 200, { ok: true, session: code.send(m[1], body.prompt) })
+          if (m[2] === 'stop') return json(res, cors, 200, { ok: true, session: code.stop(m[1]) })
+          if (m[2] === 'approve') return json(res, cors, 200, { ok: true, session: code.approve(m[1], String(body.ask ?? ''), body.allow === true) })
+          code.close(m[1])
+          return json(res, cors, 200, { ok: true })
+        } catch (err) {
+          return json(res, cors, err.status ?? 409, { error: err.message })
+        }
+      }
+
+      // Ideas (ideas.mjs): add, change, delete. JARVIS works on them through his tools.
+      if (req.method === 'GET' && path === '/api/ideas') return json(res, cors, 200, { ideas: ideas.list() })
+      if (req.method === 'POST' && path === '/api/ideas') {
+        const body = JSON.parse((await readBody(req)) || '{}')
+        try {
+          return json(res, cors, 200, { ok: true, idea: ideas.add({ text: body.text, project: body.project, source: 'desk' }) })
+        } catch (err) {
+          return json(res, cors, 400, { error: err.message })
+        }
+      }
+      m = path.match(/^\/api\/ideas\/([\w-]+)(\/delete)?$/)
+      if (req.method === 'POST' && m) {
+        if (m[2]) return ideas.remove(m[1]) ? json(res, cors, 200, { ok: true }) : json(res, cors, 404, { error: 'no such idea' })
+        try {
+          return json(res, cors, 200, { ok: true, idea: ideas.update(m[1], JSON.parse((await readBody(req)) || '{}')) })
+        } catch (err) {
+          return json(res, cors, err.status ?? 400, { error: err.message })
+        }
       }
 
       m = path.match(/^\/api\/phone\/(pair|unpair|settings|test)$/)

@@ -13,6 +13,7 @@ import { useLiveEvents } from './events'
 import { ZONE, ZONES, type View as Focus } from './layout'
 import { describe, termMatch } from './describe'
 import { Detail } from './Detail'
+import { DeskCode, DeskIdeas } from './desk'
 import { LabelLayer } from './labels'
 import { IntroOverlay } from './intro'
 import './station.css'
@@ -372,68 +373,88 @@ function TalkPanel() {
     if (body.current) body.current.scrollTop = body.current.scrollHeight
   }, [turns, live, caption])
   const shown = turns.slice(-14)
+  const tab = useStation((s) => s.desk.tab)
+  const setDesk = useStation((s) => s.setDesk)
+  const codeState = useHub((s) => (s.code.sessions.some((x) => x.state === 'approval') ? 'ask' : s.code.sessions.some((x) => x.state === 'working') ? 'busy' : null))
+  const fresh = useHub((s) => s.ideas.filter((i) => i.state === 'new').length)
   return (
-    <section className="st-talk" aria-label="Conversation with JARVIS">
+    <section className={`st-talk${tab === 'talk' ? '' : ' wide'}`} aria-label="The desk">
       <header className="st-talk-head">
-        <span className="st-talk-title">JARVIS</span>
+        <nav className="st-desk-tabs" role="tablist" aria-label="At the desk">
+          <button role="tab" aria-selected={tab === 'talk'} className={tab === 'talk' ? 'on' : ''} onClick={() => setDesk({ tab: 'talk' })}>
+            JARVIS
+          </button>
+          <button role="tab" aria-selected={tab === 'code'} className={tab === 'code' ? 'on' : ''} onClick={() => setDesk({ tab: 'code' })}>
+            Claude Code{codeState && <i className={`st-tab-dot d-${codeState}`} aria-label={codeState === 'ask' ? 'waiting on you' : 'working'} />}
+          </button>
+          <button role="tab" aria-selected={tab === 'ideas'} className={tab === 'ideas' ? 'on' : ''} onClick={() => setDesk({ tab: 'ideas' })}>
+            Ideas{fresh > 0 && <b className="st-tab-n">{fresh}</b>}
+          </button>
+        </nav>
         <span className={`st-talk-state p-${phase}`}>
           <i />
           {PHASE_WORD[phase] ?? phase}
           {phase === 'tooling' && tool ? ` · ${tool.replace(/^mcp__\w+?__/, '').replace(/_/g, ' ')}` : ''}
         </span>
       </header>
-      <div className="st-talk-body" ref={body}>
-        {shown.map((t) => (
-          <div key={t.id} className={`st-turn ${t.role === 'user' ? 'you' : 'him'}`}>
-            <span className="st-turn-who">{t.role === 'user' ? 'You' : 'JARVIS'}</span>
-            <p>{t.text}</p>
-            {t.role === 'jarvis' && t.tools && t.tools.length > 0 && <span className="st-turn-tools">used {[...new Set(t.tools)].map((x) => x.replace(/^mcp__\w+?__/, '').replace(/_/g, ' ')).join(' · ')}</span>}
-          </div>
-        ))}
-        {live && (
-          <div className="st-turn you live">
-            <span className="st-turn-who">You</span>
-            <p>{caption}</p>
-          </div>
-        )}
-        {!shown.length && !live && (
-          <p className="st-talk-empty">
-            {TOUCH ? (
-              'Say “Hey Jarvis”, tap below, or type.'
-            ) : (
-              <>
-                Say “Hey Jarvis”, hold Space, or type below.
-                <br />
-                <span>F to get up and walk the station.</span>
-              </>
+      {tab === 'code' && <DeskCode />}
+      {tab === 'ideas' && <DeskIdeas />}
+      {tab === 'talk' && (
+        <>
+          <div className="st-talk-body" ref={body}>
+            {shown.map((t) => (
+              <div key={t.id} className={`st-turn ${t.role === 'user' ? 'you' : 'him'}`}>
+                <span className="st-turn-who">{t.role === 'user' ? 'You' : 'JARVIS'}</span>
+                <p>{t.text}</p>
+                {t.role === 'jarvis' && t.tools && t.tools.length > 0 && <span className="st-turn-tools">used {[...new Set(t.tools)].map((x) => x.replace(/^mcp__\w+?__/, '').replace(/_/g, ' ')).join(' · ')}</span>}
+              </div>
+            ))}
+            {live && (
+              <div className="st-turn you live">
+                <span className="st-turn-who">You</span>
+                <p>{caption}</p>
+              </div>
             )}
-          </p>
-        )}
-      </div>
-      <form
-        className="st-talk-input"
-        onSubmit={(e) => {
-          e.preventDefault()
-          const t = text.trim()
-          if (!t) return
-          c.sendText(t)
-          setText('')
-        }}
-      >
-        <input
-          value={text}
-          onChange={(e) => {
-            typing.at = performance.now()
-            setText(e.target.value)
-          }}
-          placeholder="Talk to JARVIS…"
-          aria-label="Type to JARVIS"
-          spellCheck={false}
-        />
-        <button type="submit" disabled={!text.trim()}>
-          Send
-        </button>
-      </form>
+            {!shown.length && !live && (
+              <p className="st-talk-empty">
+                {TOUCH ? (
+                  'Say “Hey Jarvis”, tap below, or type.'
+                ) : (
+                  <>
+                    Say “Hey Jarvis”, hold Space, or type below.
+                    <br />
+                    <span>F to get up and walk the station.</span>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+          <form
+            className="st-talk-input"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const t = text.trim()
+              if (!t) return
+              c.sendText(t)
+              setText('')
+            }}
+          >
+            <input
+              value={text}
+              onChange={(e) => {
+                typing.at = performance.now()
+                setText(e.target.value)
+              }}
+              placeholder="Talk to JARVIS…"
+              aria-label="Type to JARVIS"
+              spellCheck={false}
+            />
+            <button type="submit" disabled={!text.trim()}>
+              Send
+            </button>
+          </form>
+        </>
+      )}
     </section>
   )
 }
