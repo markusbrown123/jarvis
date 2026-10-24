@@ -2488,3 +2488,15 @@ body.dash-mode .bl {
 .spark.down path {
   stroke: var(--red);
 }
+
+.site-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.pipe-card .chip {
+  align-self: flex-start;
+  margin-top: 4px;
+}

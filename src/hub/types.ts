@@ -146,6 +146,8 @@ export type Site = {
   publishStatus: string | null
   publishedAt: number | null
   updatedAt: number
+  /** The public check of a deployed site's URL: verified = answers and shows the business name. */
+  check?: { state: 'verified' | 'mismatch' | 'unreachable' | 'no-url'; status?: number; ms?: number; reason: string; checkedAt?: number; finalUrl?: string; title?: string | null; fails?: number } | null
 }
 
 export type AutomatonProject = {

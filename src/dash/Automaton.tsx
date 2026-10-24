@@ -9,12 +9,27 @@ import { useTick } from './state'
  * Automaton: the website pipeline at automaton.llc.
  *
  * Stages are the real portfolio_sites statuses, in order. "Deployed" means
- * publish-netlify recorded a published URL; whether that URL answers is a
- * separate check. Previews load the site's own hosted preview or published
+ * publish-netlify recorded a published URL; "publicly verified" is JARVIS's
+ * own check that the URL answers and shows the business — shown apart. Previews load the site's own hosted preview or published
  * URL in a sandboxed frame. Nothing here publishes, emails or calls anyone.
  */
 
 const STAGES = ['generated_draft', 'needs_review', 'needs_edits', 'approved', 'client_ready', 'deployed']
+
+const CHECK_LABEL = { verified: 'publicly verified', mismatch: 'wrong page', unreachable: 'not answering', 'no-url': 'no URL' } as const
+const CHECK_TONE = { verified: 'ok', mismatch: 'need', unreachable: 'fail', 'no-url': 'need' } as const
+
+/** Deployed (what the pipeline recorded) vs publicly verified (what a check of the URL found). */
+function CheckChip({ site }: { site: Site }) {
+  const c = site.check
+  if (!c) return site.publishedUrl ? <Chip tone="idle" title="Checked on the next refresh">not checked yet</Chip> : null
+  const title = `${c.reason}${c.status ? ` · HTTP ${c.status}` : ''}${c.ms ? ` · ${c.ms} ms` : ''}${c.checkedAt ? ` · checked ${ago(c.checkedAt)}` : ''}`
+  return (
+    <Chip tone={CHECK_TONE[c.state]} title={title}>
+      {CHECK_LABEL[c.state]}
+    </Chip>
+  )
+}
 
 function SitePreview({ site }: { site: Site }) {
   const mode = useHub((x) => x.prefs.sitePreviewMode)
@@ -30,6 +45,19 @@ function SitePreview({ site }: { site: Site }) {
             {site.publishedAt ? ` · published ${clock(site.publishedAt)}` : ''}
             {site.publishStatus === 'error' ? ' · last publish failed' : ''}
           </div>
+          {(site.check || site.publishedUrl) && (
+            <div className="site-check">
+              <CheckChip site={site} />
+              {site.check && (
+                <span className="muted small">
+                  {site.check.reason}
+                  {site.check.status ? ` HTTP ${site.check.status}` : ''}
+                  {site.check.ms ? ` in ${site.check.ms} ms` : ''}
+                  {site.check.checkedAt ? ` · ${ago(site.check.checkedAt)}` : ''}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="tabs">
           <button className={`tab ${mode === 'desktop' ? 'on' : ''}`} onClick={() => setPrefs({ sitePreviewMode: 'desktop' })}>
@@ -81,6 +109,12 @@ export function Automaton() {
               automaton.llc
             </a>{' '}
             {a.site ? (a.site.ok ? `answered ${a.site.status} in ${a.site.ms} ms` : `did not answer (${a.site.status || a.site.error})`) : 'not checked'} · {ago(a.site?.checkedAt)}
+            {(() => {
+              const deployed = sites.filter((x) => x.stage === 'deployed')
+              if (!deployed.length) return null
+              const ok = deployed.filter((x) => x.check?.state === 'verified').length
+              return ` · ${deployed.length} deployed, ${ok} publicly verified`
+            })()}
             {a.repo?.commit && (
               <>
                 {' '}· repo {a.repo.branch} @ <span className="mono">{a.repo.commit.short}</span>
@@ -130,6 +164,7 @@ export function Automaton() {
                     <span className="pipe-sub">
                       {[x.category, x.location].filter(Boolean).join(' · ')} · {ago(x.updatedAt)}
                     </span>
+                    {st === 'deployed' && <CheckChip site={x} />}
                   </button>
                 ))}
                 {here.length > 8 && <div className="muted pipe-more">+{here.length - 8} more</div>}

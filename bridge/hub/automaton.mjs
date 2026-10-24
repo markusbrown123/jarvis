@@ -6,6 +6,12 @@
  * time, so it is never copied anywhere), selecting status columns only —
  * never generated_html. The repo itself is read with plain git commands. No
  * deploy, email, call or payment path is touched from here.
+ *
+ * "Deployed" is what the pipeline recorded; whether the public can see it is
+ * checked separately: each deployed site's published URL is fetched (a plain
+ * GET, at most every 30 minutes) and counts as publicly verified only if it
+ * answers and the page shows the business's name. A site failing twice in a
+ * row goes to activity and Needs Markus, and resolves itself once it passes.
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -104,7 +110,88 @@ async function repoInfo(repo) {
   }
 }
 
-async function refresh(cfg) {
+// ---------------------------------------------------------------- public checks
+
+const CHECK_EVERY = 30 * 60000
+const checks = new Map() // site id → { url, at, result, fails }
+
+const plain = (s) =>
+  String(s ?? '')
+    .toLowerCase()
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;|&rsquo;|’/g, "'")
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+
+/** Whether the public can see a deployed site: it answers, and it's that business's page. */
+export async function verifySite(site) {
+  const t0 = Date.now()
+  try {
+    const res = await fetch(site.publishedUrl, { redirect: 'follow', signal: AbortSignal.timeout(12000), headers: { 'user-agent': 'JARVIS site check (read-only)' } })
+    const ms = Date.now() - t0
+    if (!res.ok) return { state: 'unreachable', status: res.status, ms, finalUrl: res.url, reason: `HTTP ${res.status}` }
+    const html = (await res.text()).slice(0, 400000)
+    const title = html.match(/<title[^>]*>([^<]*)/i)?.[1]?.trim() ?? null
+    const name = plain(site.name)
+    const found = name.length > 0 && ` ${plain(html.replace(/<[^>]+>/g, ' '))} `.includes(` ${name} `)
+    return found
+      ? { state: 'verified', status: res.status, ms, finalUrl: res.url, title, reason: 'Answers, and shows the business name.' }
+      : { state: 'mismatch', status: res.status, ms, finalUrl: res.url, title, reason: `Answers, but the page doesn't show "${site.name}"${title ? ` (its title is "${title.slice(0, 80)}")` : ''}.` }
+  } catch (err) {
+    const code = err.cause?.code
+    const reason = err.name === 'TimeoutError' ? 'No answer within 12 seconds.' : code === 'ENOTFOUND' ? "The domain doesn't resolve." : code ? `Couldn't connect (${code}).` : err.message
+    return { state: 'unreachable', status: 0, ms: Date.now() - t0, reason }
+  }
+}
+
+/** Check the deployed sites that are due (a few at a time), and raise or clear what fails. */
+async function checkDeployed(sites) {
+  const due = sites.filter((s) => {
+    if (!s.publishedUrl) return false
+    const c = checks.get(s.id)
+    return !c || c.url !== s.publishedUrl || Date.now() - c.at > CHECK_EVERY
+  })
+  const queue = due.slice(0, 40)
+  await Promise.all(
+    Array.from({ length: 4 }, async () => {
+      for (let s = queue.shift(); s; s = queue.shift()) {
+        const prev = checks.get(s.id)
+        const result = { ...(await verifySite(s)), checkedAt: Date.now() }
+        const fails = result.state === 'verified' ? 0 : (prev?.url === s.publishedUrl ? prev.fails : 0) + 1
+        checks.set(s.id, { url: s.publishedUrl, at: Date.now(), result, fails })
+        const itemId = `automaton:site-check:${s.id}`
+        if (result.state === 'verified') {
+          if (prev && prev.result.state !== 'verified') hub.activity({ source: 'automaton', project: 'automaton', title: `${s.name} is publicly reachable again`, detail: s.publishedUrl, level: 'success' })
+          const item = hub.getItem(itemId)
+          if (item && item.state !== 'resolved') hub.upsertItem({ id: itemId, state: 'resolved' }, { fromSource: false })
+        } else if (fails >= 2) {
+          // Twice in a row, so a passing blip doesn't page anyone.
+          if (fails === 2) hub.activity({ source: 'automaton', project: 'automaton', title: `${s.name}: deployed but not publicly verified`, detail: `${s.publishedUrl} — ${result.reason}`, level: 'error' })
+          hub.upsertItem({
+            id: itemId,
+            source: 'automaton',
+            project: 'automaton',
+            title: `${s.name}'s live site ${result.state === 'mismatch' ? "isn't showing their page" : "isn't answering"}`,
+            why: `The pipeline records it as deployed at ${s.publishedUrl}, but a public check ${result.state === 'mismatch' ? 'got a page without the business name on it' : 'got no working page'}: ${result.reason}`,
+            instructions: 'Open the URL. If it is down or shows the wrong page, check its Netlify deploy (the publish step) and the domain. JARVIS only checks; it does not redeploy or contact the client.',
+            destination: { label: 'Published URL', url: s.publishedUrl },
+            prepared: `Checked ${fails} times, ${Math.round(CHECK_EVERY / 60000)} minutes apart.`,
+            verify: { kind: 'source', note: 'Resolves by itself when the next check passes.' },
+            resumes: 'The site shows as publicly verified.',
+            priority: result.state === 'unreachable' ? 'P1' : 'P2',
+            actions: [
+              { kind: 'copy', label: 'Copy URL', value: s.publishedUrl },
+              { kind: 'check', label: 'Check again' },
+            ],
+          })
+        }
+      }
+    }),
+  )
+}
+
+async function refresh(cfg, { recheck = false } = {}) {
+  if (recheck) checks.clear()
   const repo = findRepo(cfg.repoCandidates)
   const key = anonKey(repo)
   const out = {
@@ -156,6 +243,12 @@ async function refresh(cfg) {
           publishedAt: r.published_at ? Date.parse(r.published_at) : null,
           updatedAt: Date.parse(r.updated_at),
         }))
+      // Deployed is what the pipeline says; publicly verified is checked here.
+      await checkDeployed(out.sites.filter((x) => x.stage === 'deployed' || x.publishStatus === 'published'))
+      for (const x of out.sites) {
+        const c = checks.get(x.id)
+        x.check = x.publishedUrl ? (c?.url === x.publishedUrl ? { ...c.result, fails: c.fails } : null) : x.stage === 'deployed' ? { state: 'no-url', reason: 'Recorded as deployed, but no published URL is stored.' } : null
+      }
       const keep = []
       for (const s of out.sites.slice(0, 40)) {
         const id = `automaton:${s.id}`
@@ -219,8 +312,9 @@ async function refresh(cfg) {
 
 export function startAutomaton(cfg) {
   // Re-read the config each time, so edits to projects.json take effect.
-  const run = () => refresh(loadConfig().automaton).catch((err) => console.warn('[hub] automaton:', err.message))
+  const run = (opts) => refresh(loadConfig().automaton, opts).catch((err) => console.warn('[hub] automaton:', err.message))
   void run()
   setInterval(run, Math.max(1, cfg.refreshMinutes) * 60000).unref()
-  return { refresh: run }
+  // A refresh asked for by hand (or "Check again") checks every site now.
+  return { refresh: () => run({ recheck: true }) }
 }
