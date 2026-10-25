@@ -32,3 +32,9 @@ public/mediapipe/
 
 # Output of project bases (bases/*/CLAUDE.md sessions)
 bases/*/out/
+
+# Secrets and local copies stay on the Mac: never committed
+.env
+.env.*
+!.env.example
+backups/
