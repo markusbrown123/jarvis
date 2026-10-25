@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { BONES, INDEX_TIP, THUMB_TIP, TIPS, WRIST, diag, hands } from '../lib/hands'
+import { BONES, INDEX_TIP, THUMB_TIP, TIPS, WRIST, diag, hands, padMode } from '../lib/hands'
 
 /**
  * Your hands, drawn on the glass.
@@ -23,6 +23,17 @@ import { BONES, INDEX_TIP, THUMB_TIP, TIPS, WRIST, diag, hands } from '../lib/ha
  *  on top for the line itself. One pass with a big shadow reads as fog. */
 const GLOW_WIDTH = 7
 const LINE_WIDTH = 2
+
+const SCROLL_TONE = '#ffc24b'
+const RIGHT_TONE = '#ff7a7a'
+const FLASH_MS = 420
+const CURSOR_WORDS: Record<string, string> = {
+  clutch: 'CLUTCH',
+  pressed: 'PRESS',
+  dragging: 'DRAG',
+  scrolling: 'SCROLL',
+  zooming: 'ZOOM',
+}
 
 export function Pointer() {
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -80,7 +91,7 @@ export function Pointer() {
       raf.current = requestAnimationFrame(draw)
       if (!fit()) return
       ctx.clearRect(0, 0, w, h)
-      if (!diag.enabled || !hands.length) return
+      if (!diag.enabled) return
 
       const accent = accentOf()
 
@@ -150,38 +161,96 @@ export function Pointer() {
         ctx.setLineDash([])
 
         // -- the cursor -----------------------------------------------------
-        // Drawn at the hand's aimed point rather than at the raw fingertip:
-        // that point drifts to the middle of the pinch as the fingers close,
-        // which is where a press actually lands.
+        // The pad's cursor. It is not under the fingertip: it moves by how far
+        // the hand moved, like a trackpad, so the skeleton and the cursor are
+        // deliberately in different places.
         const cx = hand.x
         const cy = hand.y
+        const clutch = hand.cursor === 'clutch'
+        const tone = hand.mode === 'scroll' ? SCROLL_TONE : hand.pinched ? '#ffffff' : accent
         const ring = (17 - hand.closeness * 8) * scale
 
-        ctx.globalAlpha = 0.75 + hand.closeness * 0.25
-        ctx.strokeStyle = hand.pinched ? '#ffffff' : accent
-        ctx.shadowColor = hand.pinched ? '#ffffff' : accent
+        ctx.globalAlpha = clutch ? 0.35 : 0.75 + hand.closeness * 0.25
+        ctx.strokeStyle = tone
+        ctx.shadowColor = tone
         ctx.shadowBlur = 14 * scale
         ctx.lineWidth = 1.5 * scale
+        ctx.setLineDash(clutch ? [3 * scale, 4 * scale] : [])
         ctx.beginPath()
         ctx.arc(cx, cy, ring, 0, Math.PI * 2)
         ctx.stroke()
+        ctx.setLineDash([])
 
         if (hand.pinched) {
           // A filled core on contact. This is the only feedback that the press
           // actually fired, so it is deliberately unmistakable.
           ctx.globalAlpha = 0.28
-          ctx.fillStyle = '#ffffff'
+          ctx.fillStyle = tone
           ctx.beginPath()
           ctx.arc(cx, cy, ring, 0, Math.PI * 2)
           ctx.fill()
         }
 
-        ctx.globalAlpha = 1
-        ctx.fillStyle = hand.pinched ? '#ffffff' : accent
+        ctx.globalAlpha = clutch ? 0.4 : 1
+        ctx.fillStyle = tone
         ctx.shadowBlur = 10 * scale
         ctx.beginPath()
         ctx.arc(cx, cy, (hand.pinched ? 4.2 : 3) * scale, 0, Math.PI * 2)
         ctx.fill()
+
+        // Scroll mode: chevrons above and below, so the mode is visible at the cursor itself.
+        if (hand.mode === 'scroll') {
+          ctx.globalAlpha = 0.9
+          ctx.lineWidth = 1.6 * scale
+          for (const dir of [-1, 1]) {
+            const y0 = cy + dir * (ring + 7 * scale)
+            ctx.beginPath()
+            ctx.moveTo(cx - 5 * scale, y0 + dir * 4 * scale)
+            ctx.lineTo(cx, y0)
+            ctx.lineTo(cx + 5 * scale, y0 + dir * 4 * scale)
+            ctx.stroke()
+          }
+        }
+
+        // Right click: a thumb+middle pinch fills this ring, and fires when it is full.
+        if (hand.rightProgress > 0) {
+          ctx.globalAlpha = 0.95
+          ctx.strokeStyle = RIGHT_TONE
+          ctx.shadowColor = RIGHT_TONE
+          ctx.lineWidth = 3 * scale
+          ctx.beginPath()
+          ctx.arc(cx, cy, ring + 8 * scale, -Math.PI / 2, -Math.PI / 2 + hand.rightProgress * Math.PI * 2)
+          ctx.stroke()
+        }
+
+        // Something just fired: a ring that leaves the cursor and fades.
+        if (hand.flash) {
+          const age = performance.now() - hand.flash.at
+          if (age < FLASH_MS) {
+            const k = age / FLASH_MS
+            const c = hand.flash.kind === 'right' ? RIGHT_TONE : hand.flash.kind === 'mode' ? SCROLL_TONE : '#ffffff'
+            ctx.globalAlpha = (1 - k) * 0.85
+            ctx.strokeStyle = c
+            ctx.shadowColor = c
+            ctx.lineWidth = 2 * scale
+            for (let n = 0; n < (hand.flash.kind === 'double' ? 2 : 1); n++) {
+              ctx.beginPath()
+              ctx.arc(cx, cy, ring + (k * 28 + n * 9) * scale, 0, Math.PI * 2)
+              ctx.stroke()
+            }
+          }
+        }
+
+        // What the cursor is doing, under it, in words.
+        const word = CURSOR_WORDS[hand.cursor] ?? ''
+        if (word) {
+          ctx.globalAlpha = 0.85
+          ctx.shadowBlur = 0
+          ctx.fillStyle = tone
+          ctx.font = `600 ${Math.round(9 * Math.min(scale, 1.3))}px ui-monospace, monospace`
+          ctx.textAlign = 'center'
+          ctx.fillText(word, cx, cy + ring + (hand.mode === 'scroll' ? 26 : 16) * scale)
+        }
 
         // -- what it thinks you are doing -----------------------------------
         // Below the wrist, quiet. Worth showing because when a gesture is
@@ -199,6 +268,38 @@ export function Pointer() {
           ctx.fillText(tag, p[WRIST].x, p[WRIST].y + 22 * scale)
         }
       }
+
+      // -- the status strip: mode, cursor, pinch ----------------------------
+      const mode = padMode()
+      const lead = hands[0]
+      const amber = mode === 'scroll'
+      const parts = lead
+        ? [
+            `MODE ${mode.toUpperCase()}`,
+            `CURSOR ${lead.cursor === 'clutch' ? 'CLUTCHED' : lead.cursor.toUpperCase()}`,
+            `PINCH ${lead.pinchKind === 'index' ? 'INDEX' : lead.pinchKind === 'middle' ? 'MIDDLE' : lead.closeness > 0 ? 'CLOSING' : 'OPEN'}`,
+          ]
+        : [`MODE ${mode.toUpperCase()}`, 'NO HAND — RAISE ONE']
+      const text = parts.join('   ·   ')
+      ctx.shadowBlur = 0
+      ctx.font = '500 10px ui-monospace, monospace'
+      ctx.textAlign = 'center'
+      const tw = ctx.measureText(text).width + 24
+      const bx = w / 2 - tw / 2
+      const by = h - 44
+      const tone = amber ? SCROLL_TONE : accent
+      ctx.globalAlpha = 0.82
+      ctx.fillStyle = 'rgba(2, 8, 12, 0.78)'
+      ctx.beginPath()
+      ctx.roundRect(bx, by, tw, 22, 3)
+      ctx.fill()
+      ctx.globalAlpha = 0.55
+      ctx.strokeStyle = tone
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.globalAlpha = 0.95
+      ctx.fillStyle = tone
+      ctx.fillText(text, w / 2, by + 14.5)
 
       ctx.globalAlpha = 1
       ctx.shadowBlur = 0

@@ -9,6 +9,7 @@ import { startAnnouncer } from './hub/announce'
 import * as sfx from './lib/sfx'
 import * as music from './lib/music'
 import * as hands from './lib/hands'
+import { setHandsEnabled } from './lib/handsControl'
 import { listenForClap } from './lib/clap'
 import { listenForName } from './lib/coldwake'
 import * as camera from './lib/camera'
@@ -658,6 +659,9 @@ export default function App() {
         case 'screen':
           s.clearScreen(a.what ?? 'all')
           break
+        case 'hands':
+          void setHandsEnabled(Boolean((args as { enabled?: boolean })?.enabled))
+          break
         default:
           console.warn('[jarvis] unknown ui op:', op, args)
       }
@@ -874,26 +878,7 @@ export default function App() {
       // thought it might be useful is not a trade anyone agreed to.
       if (e.key === 'g' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
-        const on = store.getState().gestures
-        if (on) {
-          hands.disableHands()
-          store.getState().setGestures(false)
-        } else {
-          store.getState().setError(null)
-          void hands
-            .enableHands()
-            .then(() => store.getState().setGestures(true))
-            .catch((err: Error) => {
-              store.getState().setGestures(false)
-              store
-                .getState()
-                .setError(
-                  err?.name === 'NotAllowedError'
-                    ? 'Camera access denied — gesture control is unavailable.'
-                    : `Gesture control failed to start: ${err?.message ?? err}`,
-                )
-            })
-        }
+        void setHandsEnabled()
         return
       }
 

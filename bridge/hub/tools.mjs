@@ -208,6 +208,15 @@ export function hubServer({ emit, runner, phone, sources, code }) {
         },
       ),
       tool(
+        'hands_control',
+        'Turn hand tracking on or off. On = the webcam runs and Markus\'s index finger becomes a cursor (pinch to click or drag a blade, open palm to scroll); video is processed on this Mac only. Only turn it on when he asks for it ("turn on hand control"), and turn it off when he asks or says he is done.',
+        { enabled: z.boolean() },
+        async ({ enabled }) => {
+          emit('hands', { enabled })
+          return ok(enabled ? 'Hand tracking is starting; the camera indicator shows while it is on.' : 'Hand tracking is off and the camera is released.')
+        },
+      ),
+      tool(
         'job_list',
         'List background and project jobs with their state, stage and last update.',
         { include_finished: z.boolean().optional() },

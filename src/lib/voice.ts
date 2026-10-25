@@ -145,6 +145,24 @@ const TRAILS = /[,;:–—-]$/
 const SELF_GUARD_MS = 350
 
 /**
+ * Energy alone is not a person. A cough, a jingle, a door or a passing voice
+ * crosses the threshold for a moment, and cutting him off for it made him stop
+ * mid-sentence at every noise. A real interruption keeps going, so the cut
+ * waits until the signal has held this long.
+ */
+const BARGE_SUSTAIN_MS = 900
+
+/**
+ * Transcribers label non-speech in brackets — [background noise], (coughing),
+ * [outro jingle] — or with music notes. Those are the room, never the user.
+ */
+const stripNoiseTags = (text: string) =>
+  text
+    .replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*|[♪♫]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+/**
  * A quiet gap this long with a finished-looking sentence ends the turn.
  *
  * Small on purpose: by the time a transcript reaches the assembler the detector
@@ -475,7 +493,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
         return
       }
       const { text } = (await res.json()) as { text?: string }
-      const said = (text ?? '').trim()
+      const said = stripNoiseTags((text ?? '').trim())
       diag.lastError = ''
 
       if (!said) {
@@ -529,6 +547,8 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
     }
   }
 
+  let bargeTimer: ReturnType<typeof setTimeout> | null = null
+
   vad = await startVad({
     onStart: () => {
       const mode = h.mode()
@@ -549,10 +569,21 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
           diag.selfGuarded++
           return
         }
-        h.onSpeechStart()
+        // Wait out a short noise: cut only if he is still speaking after the
+        // sustain window, and the mode has not changed in the meantime.
+        if (bargeTimer) clearTimeout(bargeTimer)
+        bargeTimer = setTimeout(() => {
+          bargeTimer = null
+          if (h.mode() === 'guard' && vad?.meter().speaking) h.onSpeechStart()
+          else diag.selfGuarded++
+        }, BARGE_SUSTAIN_MS)
       }
     },
     onEnd: (blob) => {
+      if (bargeTimer) {
+        clearTimeout(bargeTimer)
+        bargeTimer = null
+      }
       // The segment closes after SILENCE_MS of quiet, so speech ended then.
       diag.lastSpeechAt = Date.now() - SILENCE_MS
       pendingAudio.push(blob)

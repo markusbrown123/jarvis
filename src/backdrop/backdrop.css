@@ -1,0 +1,146 @@
+/* The station's procedural backdrop sits under the transparent 3D canvas. */
+
+.bd {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #050409;
+}
+.bd-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.bd-fallback {
+  background:
+    radial-gradient(900px 520px at 50% 40%, color-mix(in srgb, var(--accent, #00e5ff) 14%, transparent), transparent 70%),
+    radial-gradient(1200px 700px at 50% 100%, rgba(91, 33, 182, 0.14), transparent 70%),
+    #050409;
+}
+.bd-fallback .bd-canvas {
+  display: none;
+}
+.bd-tag {
+  position: absolute;
+  left: 24px;
+  bottom: 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: 400 11px var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  color: #5d5877;
+  opacity: 0;
+  animation: bd-tag 9s ease both;
+}
+.bd-tag b {
+  font-weight: 500;
+  color: #8a84a8;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.bd-key {
+  color: #4a4663;
+}
+@keyframes bd-tag {
+  0%,
+  8% {
+    opacity: 0;
+  }
+  16%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bd-tag {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* The knowledge graph sits over the scene, under the 3D room. */
+.bd-graph {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  contain: strict;
+}
+/* A soft dark wash keeps nodes and labels readable over the brighter scenes. */
+.bd::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 3, 9, 0) 18%, rgba(4, 3, 9, 0.38) 100%);
+  pointer-events: none;
+}
+
+.gl-legend {
+  position: absolute;
+  right: 22px;
+  bottom: 38px;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 132px;
+  padding: 8px 10px;
+  border: 1px solid rgba(140, 180, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(7, 8, 16, 0.72);
+  font: 500 11px var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.06em;
+  contain: layout paint;
+}
+.gl-title,
+.gl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 2px;
+  border: 0;
+  background: none;
+  color: #c6cfe8;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gl-title {
+  margin-bottom: 3px;
+  color: #7f89ad;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 10px;
+}
+.gl-title:hover,
+.gl-row:hover {
+  color: #fff;
+}
+.gl-row i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.gl-row span {
+  flex: 1;
+}
+.gl-row b {
+  font-weight: 500;
+  color: #8a93b4;
+}
+.gl-dim {
+  opacity: 0.38;
+}
+.gl-off {
+  min-width: 0;
+}
