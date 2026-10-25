@@ -188,7 +188,7 @@ export function Settings() {
             <StatRow name="End of speech → first words" s={t.firstText} target="—" />
             <StatRow name="End of speech → voice starts" s={t.firstSound} target="1.5–2.5s" />
           </div>
-          <p className="fine">Keys: 0 station · 1–9 views · Space talk · Enter finish speaking · M mic on/off · Esc stand down · D diagnostics · T audio test · ⌘K commands</p>
+          <p className="fine keys-hint">Keys: 0 station · 1–9 views · Space talk · Enter finish speaking · M mic on/off · Esc stand down · D diagnostics · T audio test · ⌘K commands</p>
         </section>
 
         <MemoryPanel />

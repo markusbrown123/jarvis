@@ -169,6 +169,8 @@ function layout(sectors: Sector[], w: number, h: number) {
     const a = rad(hubAt[sec.id] ?? sec.angle)
     hubs.set(sec.id, { x: cx + Math.cos(a) * (R + 30), y: cy + Math.sin(a) * (R + 30), above: Math.sin(a) < 0 })
   }
+  // A phone has no room for the columns beside the core (they'd sit half off the screen): the hubs open their pages.
+  if (w < 560) return { cx, cy, colX, hubs, kids }
   for (const [side, ids] of Object.entries(sides) as [keyof typeof sides, string[]][]) {
     const groups = ids.map((id) => sectors.find((x) => x.id === id)?.children ?? [])
     const n = groups.reduce((k, g) => k + g.length, 0) + (groups.length - 1)

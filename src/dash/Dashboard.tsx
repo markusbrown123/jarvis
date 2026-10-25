@@ -13,6 +13,7 @@ import { HandsToggle } from '../ui/HandsToggle'
 import { Diagnostics } from '../ui/Diagnostics'
 import { Intro, SoundLockHint } from '../ui/Intro'
 import { PhoneLock } from '../ui/PhoneLock'
+import { PhoneTabBar } from './PhoneTabBar'
 import { Overview } from './Overview'
 import { Projects } from './Projects'
 import { Roblox } from './Roblox'
@@ -54,6 +55,9 @@ function TopBar() {
   const looking = useStore((s) => s.looking)
   const model = useHub((s) => s.state?.usage.statusLine?.model)
   const inScreen = useStation((s) => s.screen?.phase === 'on')
+  const phone = useMedia('(max-width: 640px)')
+  const micArmed = useStore((s) => s.micArmed)
+  const c = useStore((s) => s.controls)
   return (
     <header className="topbar">
       <div className="brand">
@@ -65,13 +69,32 @@ function TopBar() {
         <span className="brand-mark">JARVIS</span>
         <span className={`state-pill state-${st.tone}`}>
           <span className="state-dot" />
-          <span className="state-label">{st.label}</span>
+          {/* On the phone just the state ("Standby"), not how to wake him. */}
+          <span className="state-label">{phone ? st.label.split(' — ')[0] : st.label}</span>
         </span>
       </div>
       <div className="topbar-mid">
         <span className="crumb">{NAV.find((n) => n.id === view)?.label}</span>
         {looking ? <span className="state-pill state-busy">{`Camera: ${looking}`}</span> : <HandsToggle />}
       </div>
+      {phone && (
+        <div className="topbar-phone">
+          <span className={`link-dot link-${link}`} title={link === 'live' ? 'Linked to your Mac' : 'Not linked to your Mac'} />
+          <button className={`icon-btn ${micArmed ? '' : 'icon-btn-off'}`} onClick={() => c.setMicArmed(!micArmed)} aria-label={micArmed ? 'Microphone on — tap to mute' : 'Microphone off — tap to turn on'} aria-pressed={!micArmed}>
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <rect x="9" y="3.5" width="6" height="11" rx="3" />
+              <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" />
+              {!micArmed && <path d="M4 4l16 16" />}
+            </svg>
+          </button>
+          <button className="icon-btn" onClick={() => setPrefs({ immersive: true })} aria-label="Voice view">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <circle cx="12" cy="12" r="3.2" />
+              <circle cx="12" cy="12" r="7.5" strokeDasharray="3 2.4" />
+            </svg>
+          </button>
+        </div>
+      )}
       <div className="topbar-right">
         <span className={`link-dot link-${link}`} title={link === 'live' ? 'Command center connected' : link === 'down' ? 'Command center disconnected — showing the last state' : 'Connecting'} />
         <span className="muted small">{link === 'live' ? 'live' : link === 'down' ? 'offline' : '…'}</span>
@@ -236,7 +259,12 @@ function ConversationBar() {
           setText('')
         }}
       >
-        <input className="input" placeholder={phase === 'offline' ? 'Start JARVIS first' : 'Type to Jarvis…'} value={text} onChange={(e) => setText(e.target.value)} disabled={phase === 'offline'} aria-label="Message Jarvis" />
+        <input className="input" placeholder={phase === 'offline' ? 'Start JARVIS first' : 'Type to Jarvis…'} value={text} onChange={(e) => setText(e.target.value)} disabled={phase === 'offline'} aria-label="Message Jarvis" enterKeyHint="send" />
+        <button className="convo-send" type="submit" disabled={!text.trim() || phase === 'offline'} aria-label="Send">
+          <svg viewBox="0 0 24 24" aria-hidden>
+            <path d="M12 19V6M6.5 11.5 12 6l5.5 5.5" />
+          </svg>
+        </button>
       </form>
       <div className="convo-controls">
         {listening ? (
@@ -382,6 +410,7 @@ function Toast() {
 
 export function Dashboard({ onStart }: { onStart: () => void }) {
   const prefs = useHub((s) => s.prefs)
+  const phone = useMedia('(max-width: 640px)')
   const setPrefs = useHub((s) => s.setPrefs)
   const setPalette = useHub((s) => s.setPalette)
   const go = useHub((s) => s.go)
@@ -497,6 +526,7 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
         </div>
       )}
       {prefs.immersive && <Immersive />}
+      {phone && <PhoneTabBar />}
       <div className="dash-overlay">
         <Blades />
       </div>

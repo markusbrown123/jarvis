@@ -34,7 +34,7 @@ function BurstScene({ q }: { q: BurstQuality }) {
     burst.uniforms.uR0.value = R0
     return () => burst.dispose()
   }, [burst])
-  const k = useMemo(() => ({ level: 0, energy: 0.2, fill: new THREE.Vector3(0.3, 0.3, 0.3) }), [])
+  const k = useMemo(() => ({ level: 0, energy: 0.2, fill: new THREE.Vector3(0.3, 0.3, 0.3), frame: 0, widths: [] as number[] }), [])
   useFrame((_, dtIn) => {
     const dt = Math.min(dtIn, 0.1)
     const st = useStore.getState()
@@ -65,12 +65,16 @@ function BurstScene({ q }: { q: BurstQuality }) {
     burst.spin.rotation.x = Math.sin((u.uT.value as number) * 0.07) * 0.12
     // The tags ride on the burst: where each anchor is on screen, written straight to its element.
     burst.spin.updateMatrixWorld()
+    // Widths only change with the figures in them: measured now and then, never in the same pass as the moves.
+    if (++k.frame % 60 === 1) tagEls.forEach((el, i) => el && (k.widths[i] = el.offsetWidth))
     TAG_ANCHORS.forEach((a, i) => {
       const el = tagEls[i]
       if (!el) return
       v.copy(a).applyMatrix4(burst.spin.matrixWorld).project(camera)
       const behind = v.z > 1
-      el.style.transform = `translate(${((v.x + 1) / 2) * size.width}px, ${((1 - v.y) / 2) * size.height}px)`
+      // Kept on the screen (a tag sits 12px right of its point): on a phone the burst reaches past the edges.
+      const x = Math.max(8, Math.min(size.width - (k.widths[i] ?? 0) - 20, ((v.x + 1) / 2) * size.width))
+      el.style.transform = `translate(${x}px, ${((1 - v.y) / 2) * size.height}px)`
       el.style.opacity = behind ? '0' : '1'
     })
   })

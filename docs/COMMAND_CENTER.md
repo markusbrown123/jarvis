@@ -356,9 +356,15 @@ proxy sets) and, when it has an origin, that it's the Mac's own tailnet name.
 `jarvis remote off` turns it off. Until it's set up, a P3 Needs Markus item
 says how.
 
-On the phone the dashboard is one column: the sections are a strip that
-scrolls sideways (Needs Markus is its own tab, with its badge), and the bottom
-bar is what he last said, a line to type, and Talk. A new phone starts on the
+On the phone the dashboard is one column, laid out for a thumb: a tab bar
+along the bottom — Home, Projects, a big round **Talk** button in the middle,
+Needs (with its count) and More (a sheet with the station, the other pages and
+the voice view). Talk does what the moment calls for: start talking, Done
+while he's listening, Stop while he's speaking, Cancel while he's thinking.
+Above the tabs, what he said last and a line to type to him; at the top his
+state in a word, and icons for the microphone (on/off) and the voice view. The
+talk mode is in Settings. The overview is four cards and the core with its
+four areas; Activity lists each change full width (`dash/PhoneTabBar.tsx`). A new phone starts on the
 overview at Low graphics (the station at Ultra is more than Safari will hold);
 the station is a tap away, with the conversation in the lower half and the
 room above. Walk mode isn't offered on a touch screen. The page server listens

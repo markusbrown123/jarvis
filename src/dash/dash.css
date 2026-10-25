@@ -73,6 +73,16 @@ body.dash-mode::after {
 
 /* --------------------------------------------------------------- layout */
 
+:root {
+  /* Where the iPhone's notch and home bar are, running as a home-screen app (0 everywhere else). */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  /* The phone's tab bar, above the home bar (PhoneTabBar.tsx). */
+  --tabbar-h: 58px;
+}
+
 .dash {
   position: fixed;
   inset: 0;
@@ -87,7 +97,7 @@ body.dash-mode::after {
   font-size: 15px;
   line-height: 1.45;
   /* As a home-screen app on the phone it runs under the notch and the home bar: keep clear of them (0 elsewhere). */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
   background:
     radial-gradient(1200px 700px at 50% 45%, rgba(91, 33, 182, 0.16), transparent 70%),
     var(--g0);
@@ -1865,14 +1875,22 @@ kbd {
    (badge on the strip) rather than a drawer over the page; the bottom bar
    is what he last said, a line to type to him, and Talk. */
 @media (max-width: 640px) {
+  /* The phone: a compact top bar, the page, the line to type to him, and the tab bar under it all. */
   .dash {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 52px auto minmax(0, 1fr) auto;
-    grid-template-areas: 'top' 'nav' 'main' 'convo';
+    grid-template-rows: 48px minmax(0, 1fr) auto;
+    grid-template-areas: 'top' 'main' 'convo';
+    padding-bottom: calc(var(--safe-b) + var(--tabbar-h));
+  }
+  .dash > .nav {
+    display: none;
   }
   .topbar {
-    gap: 10px;
-    padding: 0 12px;
+    gap: 8px;
+    padding: 0 6px 0 14px;
+  }
+  .topbar-right {
+    display: none;
   }
   .brand {
     flex: 1;
@@ -1888,8 +1906,7 @@ kbd {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .topbar-mid,
-  .topbar-right > :not(.link-dot):not(.btn-voice) {
+  .topbar-mid {
     display: none;
   }
   .nav {
@@ -1927,21 +1944,83 @@ kbd {
   }
   .convo {
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    padding: 8px 12px;
+    gap: 6px;
+    /* Room under it for the Talk button, which stands up out of the tab bar. */
+    padding: 6px 12px 22px;
     min-height: 0;
   }
-  .convo-center {
+  .convo-center,
+  .convo-controls {
     display: none;
   }
   .convo-right .convo-input {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     flex: 1;
     max-width: none;
     min-width: 0;
   }
+  .convo-input .input {
+    flex: 1;
+    min-width: 0;
+    height: 42px;
+    padding: 0 16px;
+    border-radius: 21px;
+  }
+  .convo-send {
+    display: grid;
+  }
+  /* Just what was said last, two lines at most. */
+  .convo-transcript {
+    max-height: 2.9em;
+    overflow: hidden;
+    font-size: 13.5px;
+  }
+  .convo-transcript .line:not(:last-child) {
+    display: none;
+  }
   .convo-transcript:empty {
     display: none;
+  }
+  /* The overview: four cards two by two, the core and its four hubs below. */
+  .overview-strip {
+    grid-auto-flow: row;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-columns: unset;
+    overflow: visible;
+    gap: 8px;
+    padding: 12px 12px 0;
+  }
+  .glance-img {
+    display: none;
+  }
+  .glance {
+    min-height: 64px;
+    padding: 9px 11px;
+  }
+  .glance-v {
+    font-size: 16px;
+  }
+  /* Activity: when and where on one line, what happened under it, full width. */
+  .act {
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    padding: 10px 2px;
+  }
+  .act-title,
+  .act-detail {
+    grid-column: 1 / -1;
+  }
+  /* Over the tab bar, not behind it. */
+  .toast {
+    bottom: calc(var(--safe-b) + var(--tabbar-h) + 64px);
+  }
+  .immersive {
+    inset: var(--safe-t) 0 calc(var(--safe-b) + var(--tabbar-h)) 0;
+  }
+  .immersive-words {
+    bottom: 150px;
   }
   /* Under 16px Safari zooms the page into a field when it's tapped. */
   .input,
@@ -2714,3 +2793,233 @@ body.dash-mode .bl {
 .btag-warn b, .btag-warn { color: #f5a524; }
 .btag-bad b, .btag-bad { color: #ff5a5a; }
 .btag span { color: #e8f8ff; }
+
+/* ------------------------------------------------------------ the phone */
+
+/* The send button by the line to type on (the Mac sends with Enter). */
+.convo-send {
+  display: none;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--violet);
+  color: #fff;
+}
+.convo-send:disabled {
+  opacity: 0.35;
+}
+.convo-send svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (hover: none) {
+  .keys-hint {
+    display: none;
+  }
+}
+
+/* The top bar's icons: the microphone, the voice view. */
+.topbar-phone {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.topbar-phone .link-dot {
+  margin-right: 6px;
+}
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--text);
+}
+.icon-btn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.icon-btn svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-btn-off {
+  color: var(--amber);
+}
+
+/* The tab bar (PhoneTabBar.tsx). */
+.ptab {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: end;
+  height: calc(var(--tabbar-h) + var(--safe-b));
+  padding: 0 4px var(--safe-b);
+  border-top: 1px solid var(--line);
+  background: rgba(11, 9, 19, 0.94);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+.ptab button {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  align-content: end;
+  height: var(--tabbar-h);
+  padding: 0 0 7px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 500 10.5px var(--body);
+  letter-spacing: 0.02em;
+  -webkit-tap-highlight-color: transparent;
+}
+.ptab button svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ptab button.on {
+  color: var(--text);
+}
+.ptab button.on svg {
+  stroke: #c4b5fd;
+}
+.ptab-icon {
+  position: relative;
+  display: grid;
+}
+.ptab-badge {
+  position: absolute;
+  top: -5px;
+  right: -11px;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--amber);
+  color: #1a1205;
+  font: 700 11px var(--body);
+}
+/* Talk: big, round, in the middle, standing proud of the bar; its label on the same line as the others. */
+.ptab .ptab-talk {
+  color: var(--text);
+}
+.ptab-talk-ring {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-top: -24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, #8b5cf6, #5b21b6);
+  box-shadow: 0 6px 22px rgba(124, 58, 237, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  color: #fff;
+  transition: background 0.2s;
+}
+.ptab .ptab-talk-ring svg {
+  width: 28px;
+  height: 28px;
+  stroke: #fff;
+  stroke-width: 2;
+}
+.ptab-talk-live .ptab-talk-ring {
+  background: radial-gradient(circle at 50% 30%, #fb923c, #c2410c);
+  animation: ptab-pulse 1.2s ease-in-out infinite;
+}
+.ptab-talk-busy .ptab-talk-ring {
+  background: radial-gradient(circle at 50% 30%, #64748b, #1e293b);
+}
+.ptab-talk:disabled .ptab-talk-ring {
+  opacity: 0.45;
+}
+@keyframes ptab-pulse {
+  50% {
+    box-shadow: 0 0 0 10px rgba(251, 146, 60, 0.16), 0 6px 22px rgba(194, 65, 12, 0.5);
+  }
+}
+/* More: a sheet up from the bottom with the other pages. */
+.ptab-sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.45);
+  animation: ptab-fade 0.2s ease-out;
+}
+.ptab-sheet {
+  width: 100%;
+  padding: 10px 14px calc(var(--tabbar-h) + var(--safe-b) + 14px);
+  border-top: 1px solid var(--line-strong);
+  border-radius: 18px 18px 0 0;
+  background: #141021;
+  animation: ptab-up 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ptab-grip {
+  width: 36px;
+  height: 5px;
+  margin: 0 auto 12px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.ptab-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.ptab-grid button {
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: 500 15px var(--body);
+}
+.ptab-grid button.on {
+  border-color: var(--violet);
+  background: rgba(139, 92, 246, 0.14);
+}
+@keyframes ptab-up {
+  from {
+    transform: translateY(40%);
+    opacity: 0;
+  }
+}
+@keyframes ptab-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ptab-talk-live .ptab-talk-ring,
+  .ptab-sheet,
+  .ptab-sheet-wrap {
+    animation: none;
+  }
+}

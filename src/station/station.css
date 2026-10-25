@@ -3,7 +3,7 @@
 .station {
   position: fixed;
   /* As a home-screen app on the phone, clear of the notch and the home bar (0 elsewhere). */
-  inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  inset: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
   /* Under the power-up screen (7) and palette/toasts, over nothing else. */
   z-index: 5;
   background: #050409;
@@ -1920,3 +1920,14 @@
 .cine-cut { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: cine-cut 260ms ease-out; }
 @keyframes cine-cut { 0% { opacity: 0.32; } 100% { opacity: 0; } }
 .reduced .cine-cut { display: none; }
+
+/* The phone: the station ends above the tab bar, which does the getting about. */
+@media (max-width: 640px) {
+  .station {
+    bottom: calc(var(--safe-b) + var(--tabbar-h));
+  }
+  .st-nav,
+  .st-clock {
+    display: none;
+  }
+}
