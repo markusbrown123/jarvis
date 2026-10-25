@@ -19,8 +19,9 @@ Pick the niche, publish one pilot video made end to end by the pipeline, then a 
 ## First milestones
 - [x] Niche shortlist of five, with the reasoning — `NICHES.md` (2026-10-25); Markus picks
 - [x] Channel name and look — `BRAND.md` + `brand/brand.json` + `tools/make_brand.py` (2026-10-25); Markus picks the name from the five
-- [ ] Script template
+- [x] Script template — `SCRIPT.md` + `templates/script.md` + `tools/new_script.py` / `script_lint.py` (2026-10-26); the lint output feeds the voice and visuals stages
 - [ ] One pilot video, end to end
+- [ ] Read YouTube's own Help pages on AI disclosure and inauthentic content, and confirm `SCRIPT.md`'s Disclosure section (this machine couldn't open them)
 - [ ] A weekly check of the numbers
 - [ ] Check the handle is free and re-render the look under the chosen name (one field in `brand/brand.json`)
 - [ ] Channel trailer: 45 seconds, the same look, what the channel is and what turns up weekly
@@ -34,4 +35,4 @@ Pick the niche, publish one pilot video made end to end by the pipeline, then a 
 - Channel logins never go in a file.
 
 ## Status
-Name shortlist and the full look are done and rendered (`BRAND.md`, 2026-10-25): avatar, banner, three thumbnail variants, end card, lower third and caption style all generate from `brand/brand.json` into `out/brand/`. Waiting on Markus for two choices — the niche and the channel name. Nothing built or uploaded.
+Script template done (2026-10-26): `SCRIPT.md` defines the six-beat shape, `tools/script_lint.py` checks a script and emits `voice.txt`, `shots.json` and `description.txt`, with a self-test. Still waiting on Markus for the niche and the channel name; nothing built or uploaded. Next: the pilot video.
