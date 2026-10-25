@@ -60,7 +60,7 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
   const recentStarts = []
 
   /** `onDone(output)` is called with the job's final text when it finishes properly. */
-  function start({ title, project = 'other', instructions, notify = null, onDone = null }) {
+  function start({ title, project = 'other', instructions, notify = null, onDone = null, autopilot = false }) {
     const live = [...running.keys()].filter((id) => hub.getJob(id)?.state === 'running').length
     const limit = maxRunning()
     if (live >= limit) {
@@ -88,6 +88,8 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
       cwd,
       cancel: 'supported',
       notify,
+      // Started by JARVIS's own autopilot on a project (autopilot.mjs).
+      autopilot,
       expectsHeartbeat: true,
       staleAfterMs: 10 * 60000,
       heartbeatAt: now,

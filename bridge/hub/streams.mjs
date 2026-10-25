@@ -46,3 +46,18 @@ export function status(which) {
   const m = b?.text.match(/^## Status\s*\n+([^\n]+)/m)
   return m?.[1].trim() ?? 'no status written'
 }
+
+/** A brief's milestones: its checklist lines, ticked or not. */
+export function milestones(which) {
+  const b = brief(which)
+  if (!b) return []
+  return [...b.text.matchAll(/^- \[( |x)\] (.+)$/gm)].map((m) => ({ done: m[1] === 'x', text: m[2].trim() }))
+}
+
+/** Every stream with its status, milestones and brief: the dashboard's Projects page. */
+export function all() {
+  return STREAMS.map((s) => {
+    const b = brief(s.id)
+    return { ...s, base: BASE_PROJECTS.includes(s.project) ? `bases/${s.id}` : null, status: status(s.id), milestones: milestones(s.id), brief: b?.text ?? '' }
+  })
+}

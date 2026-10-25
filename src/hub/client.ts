@@ -13,7 +13,7 @@ import type { HubState, TermLine } from './types'
 
 export type Link = 'connecting' | 'live' | 'down'
 
-export type View = 'station' | 'overview' | 'roblox' | 'finance' | 'automaton' | 'needs' | 'jobs' | 'terminal' | 'activity' | 'settings'
+export type View = 'station' | 'overview' | 'projects' | 'roblox' | 'finance' | 'automaton' | 'needs' | 'jobs' | 'terminal' | 'activity' | 'settings'
 
 export type Graphics = 'low' | 'high' | 'ultra'
 
@@ -226,7 +226,26 @@ export type GalleryItem = { sha: string; name: string; label: string; device: st
 export type GallerySection = { id: string; title: string; note?: string; items: GalleryItem[] }
 export type Gallery = { game: string; revision: string | null; sections: GallerySection[]; counts: Record<string, number> }
 
+/** JARVIS building one of the base projects himself (bridge/hub/autopilot.mjs). */
+export type Autopilot = { paused: boolean; lastAt: number | null; waiting: number; off: boolean }
+
+/** A stream of work from its base (bridge/hub/streams.mjs): the Projects page. */
+export type Stream = {
+  id: string
+  name: string
+  project: string
+  line: string
+  base: string | null
+  status: string
+  milestones: { done: boolean; text: string }[]
+  brief: string
+}
+
 export const hubActions = {
+  streams: (): Promise<{ streams: Stream[]; links: { label: string; url: string }[]; autopilot: Record<string, Autopilot> }> => get('/api/streams'),
+  projectWork: (project: string) => post(`/api/autopilot/${project}/run`),
+  projectPause: (project: string, paused: boolean) => post(`/api/autopilot/${project}/pause`, { paused }),
+  projectNote: (project: string, text: string) => post(`/api/autopilot/${project}/note`, { text }),
   robloxGallery: (game: string): Promise<Gallery> => get(`/api/roblox/gallery?game=${encodeURIComponent(game)}`),
   robloxImages: (shas: string[]): Promise<{ files: Record<string, string | null> }> => post('/api/roblox/images', { shas }),
   checkItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/check`),

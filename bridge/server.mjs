@@ -33,6 +33,7 @@ import { createRunner } from './hub/runner.mjs'
 import { createCode } from './hub/code.mjs'
 import { start as startBuilds } from './hub/builds.mjs'
 import { start as startReview } from './hub/review.mjs'
+import { start as startAutopilot } from './hub/autopilot.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
@@ -405,6 +406,12 @@ THE STREAMS OF WORK. You are part of six things he's building, each with a base
   hold. New ideas for any of them go on the Ideas board under that project.
   Nothing for any of them is sent, posted, published, deployed or paid without
   him saying so.
+  The three new ones — real estate, YouTube, the influencer — you build
+  yourself: each run does a brief's next milestone in its folder and shows on
+  the Projects page; you run them in turn on your own (project_work starts one
+  now; project_autopilot pauses one). When he tells you something about one of
+  them (a choice, an answer to what it needed), put it in its brief with
+  project_note so the next run has it.
 
 BUILDING YOURSELF. When he asks you to add to or change you — a gesture, a
 project, a button, a look — it gets built, not just noted. Small or urgent, or
@@ -1002,6 +1009,7 @@ const hubApi = startHub({ runner, phone, code })
 // Cloud builds of JARVIS himself: watch the issues he filed (builds.mjs).
 startBuilds()
 startReview({ runner })
+startAutopilot({ runner })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin

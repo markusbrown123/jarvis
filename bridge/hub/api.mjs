@@ -21,8 +21,9 @@ import { startFinance } from './finance.mjs'
 import * as ledger from './expenses.mjs'
 import * as memory from './memory.mjs'
 import * as ideas from './ideas.mjs'
-import { BASE_PROJECTS } from './streams.mjs'
+import { BASE_PROJECTS, all as allStreams } from './streams.mjs'
 import * as review from './review.mjs'
+import * as autopilot from './autopilot.mjs'
 
 const MAX_BODY = 1024 * 1024
 
@@ -474,6 +475,26 @@ export function startHub({ runner, phone, code } = {}) {
 
       // Ideas (ideas.mjs): add, change, delete. JARVIS works on them through his tools.
       if (req.method === 'GET' && path === '/api/ideas') return json(res, cors, 200, { ideas: ideas.list() })
+      // The streams of work, from their bases (streams.mjs): the Projects page.
+      if (req.method === 'GET' && path === '/api/streams') return json(res, cors, 200, { streams: allStreams(), links: loadConfig().finance.links ?? [], autopilot: autopilot.status() })
+      // JARVIS building a project himself (autopilot.mjs): now, pause/resume, or Markus's word on it.
+      const ap = path.match(/^\/api\/autopilot\/([a-z]+)\/(run|pause|note)$/)
+      if (req.method === 'POST' && ap) {
+        const [, project, what] = ap
+        const body = JSON.parse((await readBody(req)) || '{}')
+        try {
+          if (what === 'run') {
+            if (!runner) return json(res, cors, 503, { error: 'Background jobs are not available.' })
+            const r = autopilot.work(project, { runner })
+            return json(res, cors, r.started ? 200 : 409, r.started ? { ok: true, ...r } : { error: r.why })
+          }
+          if (what === 'pause') autopilot.setPaused(project, body.paused !== false)
+          if (what === 'note') autopilot.note(project, String(body.text ?? ''))
+          return json(res, cors, 200, { ok: true, autopilot: autopilot.status() })
+        } catch (err) {
+          return json(res, cors, 400, { error: err.message })
+        }
+      }
       if (req.method === 'POST' && path === '/api/ideas') {
         const body = JSON.parse((await readBody(req)) || '{}')
         try {

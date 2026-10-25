@@ -11,6 +11,7 @@ import { HandsToggle } from '../ui/HandsToggle'
 import { Diagnostics } from '../ui/Diagnostics'
 import { Intro, SoundLockHint } from '../ui/Intro'
 import { Overview } from './Overview'
+import { Projects } from './Projects'
 import { Roblox } from './Roblox'
 import { Finance } from './Finance'
 import { Automaton } from './Automaton'
@@ -28,6 +29,7 @@ import './dash.css'
 const NAV: { id: View; label: string; key: string }[] = [
   { id: 'station', label: 'Station', key: '0' },
   { id: 'overview', label: 'Overview', key: '1' },
+  { id: 'projects', label: 'Projects', key: 'p' },
   { id: 'roblox', label: 'Roblox', key: '2' },
   { id: 'finance', label: 'Finance', key: '3' },
   { id: 'automaton', label: 'Automaton', key: '4' },
@@ -429,6 +431,8 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
 
   const view = (() => {
     switch (prefs.view) {
+      case 'projects':
+        return <Projects />
       case 'roblox':
         return <Roblox />
       case 'finance':

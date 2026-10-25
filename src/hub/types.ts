@@ -33,6 +33,8 @@ export type Job = {
   updatedAt: number
   blocker?: string | null
   summary?: string
+  /** Started by JARVIS's autopilot on one of the projects he builds (autopilot.mjs). */
+  autopilot?: boolean
   acceptance?: string[]
   attempts?: number
   done?: number
