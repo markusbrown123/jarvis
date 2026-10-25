@@ -31,6 +31,7 @@ export const DATA_DIR = process.env.JARVIS_DATA_DIR ?? join(homedir(), '.jarvis'
 const STATE_FILE = join(DATA_DIR, 'state.json')
 const EVENTS_FILE = join(DATA_DIR, 'events.jsonl')
 const TOKEN_FILE = join(DATA_DIR, 'token')
+const DISMISSED_FILE = join(DATA_DIR, 'dismissed.json')
 
 /** Explicit job states. Background work never borrows the voice loop's. */
 export const JOB_STATES = new Set([
@@ -108,6 +109,51 @@ function load() {
 
 const state = load()
 const seen = new Set(state.seen)
+
+/**
+ * Items Markus marked Done. Kept in their own file, keyed by id and by
+ * normalised title, and checked every time the list is built — so a restart,
+ * or a source (the studio queue) reporting the item open again, can't bring
+ * one back. Entries: { id?, key, title, at }.
+ */
+const normTitle = (t) => String(t ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+const SEEDED_DISMISSED = ['Switch the cloud chat to Sonnet']
+
+function loadDismissed() {
+  let list = []
+  try {
+    const parsed = JSON.parse(readFileSync(DISMISSED_FILE, 'utf8'))
+    if (Array.isArray(parsed)) list = parsed.filter((e) => e && typeof e.key === 'string')
+  } catch {
+    /* none yet */
+  }
+  let added = false
+  for (const title of SEEDED_DISMISSED) {
+    if (!list.some((e) => e.key === normTitle(title))) {
+      list.push({ key: normTitle(title), title, at: Date.now() })
+      added = true
+    }
+  }
+  return { list, added }
+}
+
+function saveDismissed() {
+  const tmp = `${DISMISSED_FILE}.tmp`
+  writeFileSync(tmp, JSON.stringify(dismissed, null, 2))
+  renameSync(tmp, DISMISSED_FILE)
+}
+
+const loadedDismissed = loadDismissed()
+const dismissed = loadedDismissed.list
+if (loadedDismissed.added) saveDismissed()
+
+export function isDismissed(item) {
+  if (!item) return false
+  const key = normTitle(item.title)
+  return dismissed.some((e) => (e.id && e.id === item.id) || (key && e.key === key))
+}
+
+for (const [id, item] of Object.entries(state.items)) if (isDismissed(item)) delete state.items[id]
 const listeners = new Set()
 
 let saveTimer = null
@@ -287,6 +333,7 @@ export function upsertItem(patch, { fromSource = true } = {}) {
   const now = Date.now()
   let next = { ...(prev ?? { createdAt: now, state: 'open', priority: 'P2' }), ...patch, updatedAt: now }
   if (patch.state && !ITEM_STATES.has(patch.state)) return false
+  if (isDismissed(next)) return false
   if (fromSource && prev && !patch.state) next.state = prev.state
   if (fromSource && prev && patch.state === 'open' && ['snoozed', 'in_progress', 'verifying'].includes(prev.state)) {
     next.state = prev.state
@@ -312,6 +359,41 @@ export function upsertItem(patch, { fromSource = true } = {}) {
 
 export function getItem(id) {
   return state.items[id] ?? null
+}
+
+/**
+ * Markus's Done: by item id or by title (exact once normalised, else the one
+ * item whose title contains it). Returns the dismissed item, or null when
+ * nothing matches or the title is ambiguous.
+ */
+export function dismissItem(ref) {
+  const key = normTitle(ref)
+  if (!key) return null
+  let item = state.items[ref]
+  if (!item) {
+    const live = Object.values(state.items).filter((i) => !['resolved', 'canceled'].includes(i.state))
+    const exact = live.filter((i) => normTitle(i.title) === key)
+    const loose = exact.length ? exact : live.filter((i) => normTitle(i.title).includes(key))
+    if (loose.length !== 1) return null
+    item = loose[0]
+  }
+  dismissed.push({ id: item.id, key: normTitle(item.title), title: item.title, at: Date.now() })
+  delete state.items[item.id]
+  try {
+    saveDismissed()
+  } catch (err) {
+    console.error('[hub] could not save dismissed items:', err.message)
+  }
+  activity({
+    id: `item:${item.id}:dismissed:${Date.now()}`,
+    source: item.source ?? 'needs',
+    project: item.project,
+    title: `Done: ${item.title}`,
+    level: 'success',
+    ref: { kind: 'item', id: item.id },
+  })
+  changed()
+  return item
 }
 
 export function getJob(id) {

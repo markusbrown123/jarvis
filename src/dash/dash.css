@@ -546,6 +546,25 @@ body.dash-mode::after {
   border-color: var(--amber);
   color: var(--amber);
 }
+/* Done: big and unmistakable, and a plain button so a mouse click and the
+   hand's synthetic click both land on it. */
+.btn-done {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 12px;
+  font: 700 16px var(--body);
+  color: #06210f;
+  background: linear-gradient(180deg, #4ade80, #22c55e);
+  border-color: transparent;
+  position: relative;
+  z-index: 1;
+}
+.btn-done:hover {
+  border-color: #bbf7d0;
+  filter: brightness(1.08);
+}
 .btn-voice {
   border-color: rgba(255, 154, 60, 0.5);
 }

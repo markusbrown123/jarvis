@@ -234,6 +234,7 @@ export const hubActions = {
   startItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/start`),
   cancelItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/cancel`),
   reopenItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/reopen`),
+  doneItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/done`),
   cancelJob: (id: string) => post(`/api/jobs/${encodeURIComponent(id)}/cancel`),
   startJob: (title: string, project: string, instructions: string) => post('/api/jobs/start', { title, project, instructions }),
   refresh: (project: 'roblox' | 'automaton' | 'finance') => post(`/api/refresh/${project}`),

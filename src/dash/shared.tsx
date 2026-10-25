@@ -85,6 +85,9 @@ export function ItemCard({ item, full = false }: { item: Item; full?: boolean })
         </p>
       )}
       {snoozed && <p className="item-check">Snoozed — back in {until(item.snoozedUntil)}</p>}
+      <button className="btn btn-done" disabled={busy} onClick={() => act(() => hubActions.doneItem(item.id), 'Marked done')}>
+        ✓ Done
+      </button>
       <div className="item-actions">
         {(item.actions ?? []).map((a, i) =>
           a.kind === 'copy' ? (

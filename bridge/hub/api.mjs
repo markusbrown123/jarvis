@@ -310,12 +310,16 @@ export function startHub({ runner, phone, code } = {}) {
         return json(res, cors, 200, { ok: true, applied: n })
       }
 
-      let m = path.match(/^\/api\/items\/([^/]+)\/(check|snooze|start|cancel|reopen)$/)
+      let m = path.match(/^\/api\/items\/([^/]+)\/(check|snooze|start|cancel|reopen|done)$/)
       if (req.method === 'POST' && m) {
         const id = decodeURIComponent(m[1])
         const item = hub.getItem(id)
         if (!item) return json(res, cors, 404, { error: 'no such item' })
         const action = m[2]
+        if (action === 'done') {
+          hub.dismissItem(id)
+          return json(res, cors, 200, { ok: true, dismissed: id })
+        }
         if (action === 'check') {
           hub.upsertItem({ id, state: 'verifying' }, { fromSource: false })
           const result = await verify(item)

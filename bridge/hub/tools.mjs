@@ -181,6 +181,15 @@ export function hubServer({ emit, runner, phone, sources, code }) {
         },
       ),
       tool(
+        'needs_done',
+        'Mark an item on Markus\'s Needs Markus list as Done, so it leaves the list for good (it stays gone after restarts, even if the studio queue still lists it). Use when he says something is done or to take it off the list. title: the item\'s title or a distinctive part of it, from hub_overview.',
+        { title: z.string() },
+        async ({ title }) => {
+          const item = hub.dismissItem(title)
+          return ok(item ? `Marked done: ${item.title}.` : `No single open item matches "${title}". Check hub_overview for the exact title.`)
+        },
+      ),
+      tool(
         'job_start',
         'Start a long piece of work as a background job (research, reading a codebase, writing a report, a multi-step check) so the conversation stays free. It runs as its own agent in that project\'s folder with the same read/write permissions as you, and shows on the dashboard with live progress. Say briefly that it has started; do not wait for it. Never use it for sending messages, deploying, publishing or payments.',
         {
