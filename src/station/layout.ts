@@ -140,6 +140,8 @@ export function linkAnchor(l: LinkModel): [number, number, number] {
 export const HOUSE = {
   /** Glass and back wall. */
   r: 15,
+  /** How thick the back wall is, out from r. */
+  wall: 0.4,
   ceiling: 4.6,
   /** The glass in 13 bays; the middle one stands open onto the terrace. */
   bays: 13,
@@ -182,9 +184,18 @@ export const houseAngle = (x: number, z: number) => Math.atan2(-z, x)
  */
 export const OBSTACLES: [number, number, number][] = [
   [0, 0, CONSOLE_R],
+  // The bronze pillars where the glass meets the wall (lair.py: centred 0.25 out, over a metre deep).
+  [HOUSE.r + 0.25, 0, 0.85],
+  [-(HOUSE.r + 0.25), 0, 0.85],
+  // The pavilions beside the house reach the terrace: the north one's glass wall, and the south
+  // one's lower terrace with its glass railing (ESTATE.wings, glass_r and roof_r less its rail).
+  [ESTATE.wings[0][0], ESTATE.wings[0][1], 9.1],
+  [ESTATE.wings[1][0], ESTATE.wings[1][1], 11.0],
   ...ZONES.map((z): [number, number, number] => [z.pos[0], z.pos[2], 1.35]),
   [FOUNDRY[0], FOUNDRY[2], FOUNDRY_R],
   [DUME[0], DUME[2], 0.42],
+  // The six drone docks in the floor behind the build bay (drones.tsx DOCK_R, DOCK_DEG).
+  ...[-27, -16, -5, 5, 16, 27].map((d): [number, number, number] => [7.25 * Math.sin((d * Math.PI) / 180), -7.25 * Math.cos((d * Math.PI) / 180), 0.45]),
 ]
 
 /** Can someone stand here? Inside, out through the open bay, and on the terrace. */
@@ -196,6 +207,8 @@ export function walkable(x: number, z: number, body = 0.3) {
   const step = Math.PI / HOUSE.bays
   const inDoor = a > HOUSE.door * step + body / R && a < (HOUSE.door + 1) * step - body / R
   if (r <= R + body) return inDoor
+  // Past the glass's ends the wall carries on, and the deck runs round behind it.
+  if (a < 0 && r < R + HOUSE.wall + body + 0.05) return false
   const d = HOUSE.deck
   const onDeck = a > d.a0 + body / r && a < d.a1 - body / r && r < HOUSE.rail - body
   if (!onDeck) return false
