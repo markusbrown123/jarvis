@@ -6,12 +6,14 @@
  * brief, does the next unticked milestone as far as it can without Markus,
  * ticks it and rewrites the Status line, commits that folder and pushes it.
  * What only Markus can do — a choice that's his, an account, photos, money —
- * comes back as NEED lines and goes on his Needs list; while one of those is
- * open, the project waits for him rather than guessing. What he says about a
- * project goes into its brief (note), so the next run has it.
+ * comes back as NEED lines and goes on his Needs list. A run that couldn't
+ * move at all without him says BLOCKED, and the project waits for him (until
+ * those are done, or he notes an answer) rather than guessing; otherwise the
+ * next run carries on with what it can. What he says about a project goes
+ * into its brief (note), so the next run has it.
  *
  * On its own it takes one project at a time, round-robin, a run starting at
- * least GAP after the last one finished, never while three jobs are going,
+ * least GAP after the last one finished (JARVIS_AUTOPILOT_GAP_MIN, default 120), never while three jobs are going,
  * and not while the 5-hour allowance is past 70%. Each project can be
  * paused; JARVIS_NO_AUTOPILOT=1 turns the whole thing off. Every run, and
  * every result, shows on the Projects page and in Jobs.
@@ -23,7 +25,7 @@ import * as hub from './store.mjs'
 import { BASE_PROJECTS, STREAMS, baseDir, milestones } from './streams.mjs'
 
 const FILE = join(hub.DATA_DIR, 'autopilot.json')
-const GAP = 2 * 3600000
+const GAP = Math.max(1, Number(process.env.JARVIS_AUTOPILOT_GAP_MIN) || 120) * 60000
 const TICK = 10 * 60000
 const MAX_ALLOWANCE = 70
 
@@ -34,7 +36,7 @@ const read = () => {
     return {}
   }
 }
-let saved = { paused: {}, lastAt: {}, ...read() }
+let saved = { paused: {}, lastAt: {}, blocked: {}, ...read() }
 const save = () => writeFileSync(FILE, JSON.stringify(saved, null, 2))
 
 const streamOf = (project) => STREAMS.find((s) => s.project === project)
@@ -64,6 +66,8 @@ Never post, publish, upload, send messages or email, sign up for anything or pay
 /** What a run handed back: its NEED lines go on the Needs list. */
 function takeResult(project, output) {
   const s = streamOf(project)
+  saved.blocked[project] = /^\s*BLOCKED\s*$/m.test(output)
+  save()
   for (const [, title, what] of output.matchAll(/^\s*NEED:\s*(.+?)\s*::\s*(.+)$/gm)) {
     hub.upsertItem({
       id: `${project}:need:${slug(title)}`,
@@ -108,6 +112,9 @@ export function note(project, text) {
   const line = `- ${today()}: ${String(text).trim().slice(0, 1000)}`
   if (/^## From Markus$/m.test(body)) writeFileSync(file, body.replace(/^## From Markus\n/m, `## From Markus\n${line}\n`))
   else appendFileSync(file, `\n## From Markus\n${line}\n`)
+  // An answer from him: worth another run even if the last one was stuck.
+  saved.blocked[project] = false
+  save()
   return line
 }
 
@@ -120,7 +127,7 @@ export function setPaused(project, paused) {
 /** Each base project's autopilot, for the Projects page. */
 export function status() {
   return Object.fromEntries(
-    BASE_PROJECTS.map((p) => [p, { paused: Boolean(saved.paused[p]), lastAt: saved.lastAt[p] ?? null, waiting: waiting(p).length, off: Boolean(process.env.JARVIS_NO_AUTOPILOT) }]),
+    BASE_PROJECTS.map((p) => [p, { paused: Boolean(saved.paused[p]), lastAt: saved.lastAt[p] ?? null, waiting: waiting(p).length, blocked: Boolean(saved.blocked[p] && waiting(p).length), off: Boolean(process.env.JARVIS_NO_AUTOPILOT) }]),
   )
 }
 
@@ -135,8 +142,9 @@ export function start({ runner }) {
       if (Date.now() - last < GAP) return
       const used = hub.snapshot().usage?.windows?.five_hour?.usedPct
       if (typeof used === 'number' && used > MAX_ALLOWANCE) return
-      // The one that's waited longest, that isn't paused or waiting on him.
-      const next = BASE_PROJECTS.filter((p) => !saved.paused[p] && !waiting(p).length && milestones(streamOf(p).id).some((m) => !m.done)).sort(
+      // The one that's waited longest, that isn't paused or stuck waiting on him.
+      const stuck = (p) => saved.blocked[p] && waiting(p).length > 0
+      const next = BASE_PROJECTS.filter((p) => !saved.paused[p] && !stuck(p) && milestones(streamOf(p).id).some((m) => !m.done)).sort(
         (a, b) => (saved.lastAt[a] ?? 0) - (saved.lastAt[b] ?? 0),
       )[0]
       if (next) work(next, { runner, by: 'autopilot' })

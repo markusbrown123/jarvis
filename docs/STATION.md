@@ -27,7 +27,7 @@ comparing one hub snapshot with the next — never from a timer.
 | Click the desk | From Command or Cinematic (walking: look at it and press `E`, or click): the desk lights up under the pointer ("The desk — click to sit down") and a click flies you to the chair in Talk. |
 | Hover | A tooltip with the thing's status and its source. |
 | Quality | Low / High / Ultra on the top bar (or Settings). A blank-frame guard steps down automatically if a setting renders nothing on this machine. |
-| Opening flight | Each time the app opens on the Mac (auto-start on, the default) it goes straight here — no start screen; JARVIS powers up behind the loading screen, which shows how far he's got. A phone keeps tap-to-start. The station loads behind letterbox bars with the real place, time and weather, over a loading screen of Cycles-rendered stills of the estate and the drones panning and crossfading (`tools/blender/showcase.py`, the night shot first after dark); then it cuts to the live scene and the camera flies in low over the waves past the boats, rises to take in the whole estate on its headland, comes down over the terrace and the pool, in through the open glass, round the stage past the drones and the build bay, and settles behind the chair in Talk (`intro.tsx`, about 19 s). Any key or a click skips it. Not with reduced motion. |
+| Opening flight | Each time the app opens on the Mac (auto-start on, the default) it goes straight here — no start screen; JARVIS powers up behind the loading screen, which shows how far he's got. A phone keeps tap-to-start. The station loads behind letterbox bars with the real place, time and weather, over a loading screen of Cycles-rendered stills of the estate and the drones panning and crossfading (`tools/blender/showcase.py`, the night shot first after dark); then, the way GTA Online opens, a run of short shots with hard cuts (a brief flash on each): low over the waves past the boats, the whole estate on its headland, the terrace and the pool, in through the open glass, and round the stage to settle behind the chair in Talk (`intro.tsx`, five shots, about 12.6 s). JARVIS says hello as the camera comes in through the glass, not out over the sea — straight away if you skip. Any key or a click skips it. Not with reduced motion. |
 | Reduced motion | Settings → reduced motion: flows stop, flights jump, rotations slow to a crawl. |
 
 ## The room
@@ -118,7 +118,7 @@ In development, `window.__gl` reads the last frame's draw calls and triangles.
 | `houselight.ts` | Sun and moon through the glass only (the house's shape in the shaders); the lightmaps' three kinds of light |
 | `sky.ts` | Sun, moon and stars from the clock; atmospheric scattering; the sky's shaders; weather state |
 | `weather.ts` | Location from IP, current weather from Open-Meteo, easing, lightning |
-| `intro.tsx` | The opening flight and its letterbox overlay |
+| `intro.tsx` | The opening's shots and cuts, and its letterbox overlay |
 | `outside.tsx` | Sky backdrop, sea, surf, wakes |
 | `estate.tsx`, `tools/blender/estate.py` | The estate's pavilions, helipad and walls; its grounds (palms, cypresses, trees, drive) |
 | `split.ts` | Splits a big mesh into pieces by where they lie, so those out of view aren't drawn |

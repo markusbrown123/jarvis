@@ -85,8 +85,8 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
             ? 'Autopilot is off on this Mac (JARVIS_NO_AUTOPILOT).'
             : ap.paused
               ? 'Paused — JARVIS leaves it until you say.'
-              : ap.waiting
-                ? 'Waiting on you (below) before the next run.'
+              : ap.blocked
+                ? 'Waiting on you (below): the last run could not go further without you.'
                 : `JARVIS works on it in turn${ap.lastAt ? ` · last run ${ago(ap.lastAt)}` : ' · not run yet'}.`}
         </p>
       )}
@@ -102,7 +102,7 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
       {items.length > 0 && (
         <div className="project-needs">
           {items.map((i) => (
-            <ItemCard key={i.id} item={i} />
+            <ItemCard key={i.id} item={i} full />
           ))}
         </div>
       )}

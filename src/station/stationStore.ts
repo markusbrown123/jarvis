@@ -75,6 +75,12 @@ type StationStore = {
   push: (e: Omit<StationEvent, 'id' | 'at'>) => void
   /** The opening flight (intro.tsx): waiting for the house to load, flying in, or over. */
   intro: 'loading' | 'flying' | 'done'
+  /** The opening has come in through the glass (or is over): JARVIS says hello then, not over the sea. */
+  home: boolean
+  arriveHome: () => void
+  /** Counts the opening's cuts, for its flash. */
+  introCut: number
+  cutIntro: () => void
   setIntro: (p: 'loading' | 'flying' | 'done') => void
 }
 
@@ -161,7 +167,14 @@ export const useStation = create<StationStore>((set, get) => ({
   toggleConnections: () => set({ connections: !get().connections }),
   fly: (view) => set({ view, viewNonce: get().viewNonce + 1 }),
   intro: 'loading',
+  home: false,
+  arriveHome: () => {
+    if (!get().home) set({ home: true })
+  },
+  introCut: 0,
+  cutIntro: () => set({ introCut: get().introCut + 1 }),
   setIntro: (intro) => {
+    if (intro === 'done' && !get().home) set({ home: true })
     if (get().intro === intro) return
     // It always lands at the desk.
     if (intro !== 'done' && get().mode !== 'talk') set({ mode: 'talk', view: 'overview' })

@@ -751,20 +751,31 @@ export default function App() {
     store.getState().setBootStage('ready')
 
     // His only start-up: a greeting, in whichever voice is configured — held
-    // until his voice is released if Chrome is still holding it.
+    // until his voice is released if Chrome is still holding it, and, while
+    // the opening plays, until the camera is in through the glass: a hello
+    // out over the sea, before you're anywhere, is just odd.
     const greet = () => {
       const greeting = createSpeaker()
       speaker.current = greeting
       greeting.say('Hey sir.')
       void greeting.end()
     }
-    if (!store.getState().soundLocked) greet()
+    const ready = () => {
+      const st = useStation.getState()
+      const { view, immersive } = useHub.getState().prefs
+      const opening = view === 'station' && !immersive && !st.home
+      return !store.getState().soundLocked && !opening
+    }
+    if (ready()) greet()
     else {
-      const off = store.subscribe((st) => {
-        if (st.soundLocked) return
-        off()
+      const go = () => {
+        if (!ready()) return
+        offStore()
+        offStation()
         if (store.getState().phase === 'dormant') greet()
-      })
+      }
+      const offStore = store.subscribe(go)
+      const offStation = useStation.subscribe(go)
     }
 
     // Important things, said out loud as they land — only while he's idle.

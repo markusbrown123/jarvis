@@ -4,49 +4,62 @@ import { useProgress } from '@react-three/drei'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
 import { useStore } from '../store'
-import { seatCamera } from './layout'
+import { HOUSE, seatCamera } from './layout'
 import { SKY_STATE, WEATHER } from './sky'
 import { useStation } from './stationStore'
 
 /**
- * The opening, like a game's loading screen: while the house streams in,
- * the camera waits far out over the sea; then it flies — low over the
- * waves past the boats, rising to see the whole estate on its headland, down
- * over the terrace and the pool, in through the open glass, round the stage past the
- * drones and the build bay, and settles behind the chair at the desk, where
- * Talk mode takes over. Letterbox bars, the title and the real place, time
- * and weather over it; any key or a click skips it.
+ * The opening, like a game's loading screen: while the house streams in, the
+ * camera waits out over the sea; then, the way GTA Online opens, a run of
+ * short shots with hard cuts between them — low over the waves past the
+ * boats; the whole estate on its headland; the terrace and the pool; in
+ * through the open glass; round the stage to settle behind the chair at the
+ * desk, where Talk mode takes over. Each shot is a slow push, two or three
+ * seconds; a brief flash marks each cut. Letterbox bars, the title and the
+ * real place, time and weather over it; any key or a click skips it.
+ *
+ * JARVIS says hello once the camera is inside (the store's `home`), not over
+ * the sea — and straight away if the opening is skipped.
  *
  * It plays once each time the app opens (not when coming back to the
  * station from another tab: the station's store remembers), and not at
  * all with reduced motion.
  */
 
-/** Seconds along the flight for each waypoint. */
-const KEYS: { t: number; pos: [number, number, number]; look: [number, number, number]; fov: number }[] = [
-  // Low over the waves out in the bay…
-  { t: 0, pos: [-470, -23, -360], look: [-60, -6, -20], fov: 30 },
-  { t: 3.2, pos: [-290, -16, -230], look: [-10, -4, 5], fov: 32 },
-  // …rising to see the whole estate on its headland (framed as the aerial
-  // loading still, tools/blender/showcase.py)…
-  { t: 6.4, pos: [-128, 58, -96], look: [20, -4, 30], fov: 37 },
-  { t: 9.0, pos: [-62, 26, -46], look: [8, 0, 12], fov: 38 },
-  // …down over the terrace and the pool, in through the open glass…
-  { t: 11.0, pos: [-17, 7.5, -42], look: [0, 1.5, -12], fov: 42 },
-  { t: 12.8, pos: [-2.5, 3.3, -24.5], look: [0, 2.3, -10], fov: 46 },
-  { t: 14.2, pos: [0, 2.7, -15.4], look: [-1, 2.2, -6], fov: 50 },
-  // …round the stage, past the drones and the build bay, to the desk.
-  { t: 15.7, pos: [-5.2, 3.3, -8.6], look: [-0.5, 1.5, -3.5], fov: 50 },
-  { t: 17.3, pos: [-6.9, 3.1, 0.6], look: [0, 1.3, -1.6], fov: 46 },
+type Cam = { pos: [number, number, number]; look: [number, number, number]; fov: number }
+type Shot = { dur: number; from: Cam; to: Cam | 'seat'; via?: Cam[]; ease?: 'out' }
+
+const SHOTS: Shot[] = [
+  // Low over the waves out in the bay, past the boats.
+  { dur: 2.6, from: { pos: [-420, -21, -330], look: [-40, -5, -10], fov: 30 }, to: { pos: [-330, -16, -255], look: [-10, -4, 5], fov: 32 } },
+  // The whole estate on its headland (framed as the aerial loading still, tools/blender/showcase.py).
+  { dur: 2.8, from: { pos: [-150, 66, -112], look: [20, -4, 30], fov: 36 }, to: { pos: [-118, 52, -88], look: [16, -3, 26], fov: 38 } },
+  // The terrace and the pool.
+  { dur: 2.4, from: { pos: [-20, 8, -44], look: [0, 1.5, -12], fov: 42 }, to: { pos: [-8, 4.6, -32], look: [0, 2.2, -11], fov: 45 } },
+  // In through the open glass.
+  { dur: 2.2, from: { pos: [-2.5, 3.3, -24.5], look: [0, 2.3, -10], fov: 46 }, to: { pos: [0, 2.7, -13.6], look: [-1, 2.2, -6], fov: 50 } },
+  // Round the stage, past the drones and the build bay, to the chair.
+  { dur: 2.6, from: { pos: [-5.4, 3.3, -7.2], look: [-0.5, 1.5, -3.2], fov: 50 }, via: [{ pos: [-6.6, 3.1, 0.2], look: [0, 1.3, -1.6], fov: 46 }], to: 'seat', ease: 'out' },
 ]
-const SETTLE = 1.6 // from the last waypoint to the seat
 
 function flight(aspect: number) {
   const seat = seatCamera(aspect)
-  const keys = [...KEYS, { t: KEYS[KEYS.length - 1].t + SETTLE, pos: seat.pos, look: seat.target, fov: 38 }]
-  const pos = new THREE.CatmullRomCurve3(keys.map((k) => new THREE.Vector3(...k.pos)), false, 'centripetal')
-  const look = new THREE.CatmullRomCurve3(keys.map((k) => new THREE.Vector3(...k.look)), false, 'centripetal')
-  return { keys, pos, look, end: keys[keys.length - 1].t }
+  let t = 0
+  const shots = SHOTS.map((sh) => {
+    const to: Cam = sh.to === 'seat' ? { pos: seat.pos, look: seat.target, fov: 38 } : sh.to
+    const cams = [sh.from, ...(sh.via ?? []), to]
+    const shot = {
+      start: t,
+      dur: sh.dur,
+      ease: sh.ease,
+      cams,
+      pos: new THREE.CatmullRomCurve3(cams.map((c) => new THREE.Vector3(...c.pos)), false, 'centripetal'),
+      look: new THREE.CatmullRomCurve3(cams.map((c) => new THREE.Vector3(...c.look)), false, 'centripetal'),
+    }
+    t += sh.dur
+    return shot
+  })
+  return { shots, end: t }
 }
 
 /** The camera during the opening (inside the canvas). */
@@ -58,6 +71,7 @@ export function IntroFlight() {
   const path = useMemo(() => flight(size.width / Math.max(1, size.height)), [size.width, size.height])
   const start = useRef<number | null>(null)
   const readyAt = useRef<number | null>(null)
+  const shotNow = useRef(-1)
   const tmp = useMemo(() => ({ p: new THREE.Vector3(), l: new THREE.Vector3(), d: new THREE.Vector3(), from: new THREE.Vector3() }), [])
   // With reduced motion there's no flight: straight to the desk.
   useEffect(() => {
@@ -69,13 +83,13 @@ export function IntroFlight() {
   useFrame((st) => {
     if (phase === 'done') return
     const now = st.clock.elapsedTime
-    const k = path.keys
+    const first = path.shots[0].cams[0]
     if (phase === 'loading') {
       // Hold out over the sea, drifting with the swell, until the house has loaded.
       tmp.d.set(Math.sin(now * 0.21) * 4, Math.sin(now * 0.37) * 0.5, Math.sin(now * 0.13) * 5)
-      camera.position.set(...k[0].pos).add(tmp.d)
-      camera.lookAt(tmp.l.set(...k[0].look))
-      camera.fov = k[0].fov
+      camera.position.set(...first.pos).add(tmp.d)
+      camera.lookAt(tmp.l.set(...first.look))
+      camera.fov = first.fov
       camera.updateProjectionMatrix()
       if (!useProgress.getState().active && readyAt.current === null) readyAt.current = now
       // Start once loaded (and the first frames have compiled), or give up waiting after 40 s.
@@ -90,11 +104,11 @@ export function IntroFlight() {
     // Dev: hold the flight at a moment for a look (window.__introAt = seconds),
     // or put the camera anywhere (window.__introCam = { pos, look, fov }).
     const held = import.meta.env.DEV ? (window as { __introAt?: number }).__introAt : undefined
-    const shot = import.meta.env.DEV ? (window as { __introCam?: { pos: [number, number, number]; look: [number, number, number]; fov: number } }).__introCam : undefined
-    if (shot) {
-      camera.position.set(...shot.pos)
-      camera.lookAt(tmp.l.set(...shot.look))
-      camera.fov = shot.fov
+    const shotCam = import.meta.env.DEV ? (window as { __introCam?: Cam }).__introCam : undefined
+    if (shotCam) {
+      camera.position.set(...shotCam.pos)
+      camera.lookAt(tmp.l.set(...shotCam.look))
+      camera.fov = shotCam.fov
       camera.updateProjectionMatrix()
       return
     }
@@ -103,21 +117,29 @@ export function IntroFlight() {
       setIntro('done')
       return
     }
-    // Time → position along the waypoints, eased in at the start and out at the seat.
+    // Which shot, and how far through it: a slow push, eased.
     let i = 0
-    while (i < k.length - 2 && t > k[i + 1].t) i++
-    let s = (t - k[i].t) / (k[i + 1].t - k[i].t)
-    if (i === 0) s = s * s * (2 - s)
-    if (i === k.length - 2) s = 1 - (1 - s) * (1 - s) * (1 - s)
-    const u = Math.min(1, (i + s) / (k.length - 1))
-    path.pos.getPoint(u, tmp.p)
-    path.look.getPoint(u, tmp.l)
-    // Carry on from where the drift had got to, easing onto the path.
-    tmp.p.addScaledVector(tmp.from, Math.max(0, 1 - t / 2.5))
+    while (i < path.shots.length - 1 && t >= path.shots[i + 1].start) i++
+    const sh = path.shots[i]
+    const r = Math.min(1, (t - sh.start) / sh.dur)
+    const u = sh.ease === 'out' ? 1 - Math.pow(1 - r, 3) : r * r * (3 - 2 * r) * 0.35 + r * 0.65
+    if (i !== shotNow.current) {
+      shotNow.current = i
+      // A cut: the overlay flashes.
+      if (i > 0) useStation.getState().cutIntro()
+    }
+    sh.pos.getPoint(u, tmp.p)
+    sh.look.getPoint(u, tmp.l)
+    // The first shot carries on from where the drift had got to, easing onto the path.
+    if (i === 0) tmp.p.addScaledVector(tmp.from, Math.max(0, 1 - t / 1.5))
     camera.position.copy(tmp.p)
     camera.lookAt(tmp.l)
-    camera.fov = k[i].fov + (k[i + 1].fov - k[i].fov) * s
+    const seg = Math.min(sh.cams.length - 2, Math.floor(u * (sh.cams.length - 1)))
+    const su = u * (sh.cams.length - 1) - seg
+    camera.fov = sh.cams[seg].fov + (sh.cams[seg + 1].fov - sh.cams[seg].fov) * su
     camera.updateProjectionMatrix()
+    // In through the glass: home.
+    if (Math.hypot(tmp.p.x, tmp.p.z) < HOUSE.r - 0.3 && tmp.p.y < HOUSE.ceiling) useStation.getState().arriveHome()
   })
 
   // Back to the normal lens once it's over.
@@ -199,6 +221,7 @@ export function IntroOverlay() {
   // The phase while he's off, the boot stage while he powers up, then online.
   const jarvis = useStore((s) => (s.phase === 'offline' ? 'offline' : s.phase === 'boot' ? s.bootStage : 'ready'))
   const setIntro = useStation((s) => s.setIntro)
+  const cut = useStation((s) => s.introCut)
   const { progress, active } = useProgress()
   // The loader recounts as each new batch of files starts (60% → 0%); the
   // bar only ever moves forward.
@@ -244,6 +267,7 @@ export function IntroOverlay() {
   return (
     <div className={`cine cine-${phase === 'done' ? 'leave' : phase}`} aria-label="Loading the station">
       {phase !== 'done' && <Slides on={phase === 'loading'} />}
+      {cut > 0 && phase === 'flying' && <div key={cut} className="cine-cut" aria-hidden />}
       <div className="cine-bar cine-bar-top" />
       <div className="cine-bar cine-bar-bottom" />
       <div className="cine-title">

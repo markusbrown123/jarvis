@@ -1914,3 +1914,8 @@
 .cine-leave .cine-skip {
   display: none;
 }
+
+/* The opening's cuts: a quick flash, the way GTA Online cuts between shots. */
+.cine-cut { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: cine-cut 260ms ease-out; }
+@keyframes cine-cut { 0% { opacity: 0.32; } 100% { opacity: 0; } }
+.reduced .cine-cut { display: none; }
