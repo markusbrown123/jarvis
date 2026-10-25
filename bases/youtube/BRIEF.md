@@ -18,10 +18,13 @@ Pick the niche, publish one pilot video made end to end by the pipeline, then a 
 
 ## First milestones
 - [x] Niche shortlist of five, with the reasoning — `NICHES.md` (2026-10-25); Markus picks
-- [ ] Channel name and look
+- [x] Channel name and look — `BRAND.md` + `brand/brand.json` + `tools/make_brand.py` (2026-10-25); Markus picks the name from the five
 - [ ] Script template
 - [ ] One pilot video, end to end
 - [ ] A weekly check of the numbers
+- [ ] Check the handle is free and re-render the look under the chosen name (one field in `brand/brand.json`)
+- [ ] Channel trailer: 45 seconds, the same look, what the channel is and what turns up weekly
+- [ ] Series plan: how the build logs and the website redesigns alternate week to week
 
 ## Rules
 - Each video has real value of its own: researched, with a point of view. YouTube's rules on repetitive, mass-produced content apply.
@@ -31,4 +34,4 @@ Pick the niche, publish one pilot video made end to end by the pipeline, then a 
 - Channel logins never go in a file.
 
 ## Status
-Niche shortlist written (`NICHES.md`, 2026-10-25): waiting for Markus to pick. Nothing built or uploaded.
+Name shortlist and the full look are done and rendered (`BRAND.md`, 2026-10-25): avatar, banner, three thumbnail variants, end card, lower third and caption style all generate from `brand/brand.json` into `out/brand/`. Waiting on Markus for two choices — the niche and the channel name. Nothing built or uploaded.
