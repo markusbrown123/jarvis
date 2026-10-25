@@ -136,6 +136,22 @@ function readLog() {
   return out
 }
 
+/** What Markus himself said over the last `days` (voice and phone, not jobs), oldest first, as plain lines. */
+export function recentUserTurns({ days = 7, maxChars = 14000 } = {}) {
+  const since = Date.now() - days * 86400000
+  const lines = readLog()
+    .filter((t) => t.role === 'user' && t.ts >= since && t.channel !== 'job')
+    .map((t) => `${when(t.ts)} — ${String(t.text).replace(/\s+/g, ' ').slice(0, 400)}`)
+  // Keep the newest if there's too much.
+  const out = []
+  let n = 0
+  for (let i = lines.length - 1; i >= 0 && n + lines[i].length < maxChars; i--) {
+    out.unshift(lines[i])
+    n += lines[i].length + 1
+  }
+  return out
+}
+
 export function clearConversation() {
   for (const f of [LOG, `${LOG}.1`]) {
     try {

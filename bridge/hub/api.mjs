@@ -22,6 +22,7 @@ import * as ledger from './expenses.mjs'
 import * as memory from './memory.mjs'
 import * as ideas from './ideas.mjs'
 import { BASE_PROJECTS } from './streams.mjs'
+import * as review from './review.mjs'
 
 const MAX_BODY = 1024 * 1024
 
@@ -331,6 +332,16 @@ export function startHub({ runner, phone, code } = {}) {
         if (action === 'cancel') hub.upsertItem({ id, state: 'canceled' }, { fromSource: false })
         if (action === 'reopen') hub.upsertItem({ id, state: 'open', snoozedUntil: null }, { fromSource: false })
         return json(res, cors, 200, { ok: true, item: hub.getItem(id) })
+      }
+
+      // JARVIS looking back at what Markus has asked for (review.mjs).
+      if (req.method === 'POST' && path === '/api/review') {
+        if (!runner) return json(res, cors, 503, { error: 'Background jobs are not available.' })
+        try {
+          return json(res, cors, 200, { ok: true, ...review.run({ runner }) })
+        } catch (err) {
+          return json(res, cors, 409, { error: err.message })
+        }
       }
 
       // Start a background job from the dashboard (same runner as voice).

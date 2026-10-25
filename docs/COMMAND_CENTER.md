@@ -232,6 +232,16 @@ gets built, two ways (he picks; say "here" or "the cloud" to choose):
 Needs the GitHub CLI signed in on this Mac, once: `brew install gh` and
 `gh auth login`. Nothing is ever pushed to main.
 
+**Reviewing himself.** Each night between 3 and 6 am (and on "review yourself",
+or `POST /api/review`) a background job reads what you've said to him over the
+last week (`memory.recentUserTurns`), checks it against his own code and docs,
+and reports what's done and what's missing. What it learns about how you like
+things done is kept as lessons in his memory; what's missing and buildable goes
+to Claude in the cloud as build requests, at most two a night. Needs a week's
+conversation to have anything to look at; `JARVIS_NO_REVIEW=1` turns the
+nightly run off. It never changes the JARVIS that's running: builds land on his
+branch and he only updates when you say "update yourself". (`review.mjs`)
+
 ## Memory and learning
 
 JARVIS remembers across restarts, reloads and `jarvis stop` — in read-only mode too

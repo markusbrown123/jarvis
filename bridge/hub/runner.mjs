@@ -14,12 +14,15 @@
 
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import * as hub from './store.mjs'
 import * as memory from './memory.mjs'
 import { expand, loadConfig } from './config.mjs'
 import { BASE_PROJECTS, baseDir } from './streams.mjs'
+
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 const MAX_RUNNING = 3
 
@@ -27,6 +30,8 @@ const MAX_RUNNING = 3
 export function cwdFor(project) {
   const cfg = loadConfig()
   const pick = (cands = []) => cands.map(expand).find((p) => p && existsSync(join(p, '.git')))
+  // JARVIS's own repo, for work on himself.
+  if (project === 'jarvis') return REPO
   if (project === 'automaton') return pick(cfg.automaton.repoCandidates) ?? homedir()
   if (project === 'roblox') {
     const repo = pick(cfg.roblox.repoCandidates)
@@ -41,7 +46,8 @@ export function cwdFor(project) {
 export function createRunner({ model, effort, canUseTool, mcpServers }) {
   const running = new Map()
 
-  function start({ title, project = 'other', instructions, notify = null }) {
+  /** `onDone(output)` is called with the job's final text when it finishes properly. */
+  function start({ title, project = 'other', instructions, notify = null, onDone = null }) {
     const live = [...running.keys()].filter((id) => hub.getJob(id)?.state === 'running').length
     if (live >= MAX_RUNNING) {
       throw new Error(`${live} background jobs are already running; wait for one or cancel one first.`)
@@ -129,6 +135,13 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
             })
             const okResult = msg.subtype === 'success' && !msg.is_error
             const output = String(msg.result ?? lastText)
+            if (okResult && onDone) {
+              try {
+                onDone(output)
+              } catch (err) {
+                console.warn(`[hub] job "${title}" follow-up failed:`, err.message)
+              }
+            }
             // Keep what it learned, and the result itself, in JARVIS's memory.
             for (const m of output.matchAll(/^\s*LESSON:\s*(.+)$/gm)) {
               try {

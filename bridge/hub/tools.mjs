@@ -19,6 +19,7 @@ import * as memory from './memory.mjs'
 import * as ideas from './ideas.mjs'
 import * as builds from './builds.mjs'
 import * as streams from './streams.mjs'
+import * as review from './review.mjs'
 import { loadConfig, saveConfig } from './config.mjs'
 
 const ok = (text) => ({ content: [{ type: 'text', text }] })
@@ -370,6 +371,19 @@ export function hubServer({ emit, runner, phone, sources, code }) {
             return ok(`Sent to the cloud: issue #${b.number} (${b.url}). It's picked up within the hour; I'll tell you when it's built.`)
           } catch (err) {
             return ok(`Couldn't send it: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'self_review',
+        'Look back at yourself: a background job reads what Markus has asked you for over the last week, checks it against your own code and docs, saves what it learns about how he likes things done, and sends what is missing and buildable to Claude in the cloud (at most two). Use when he says "review yourself", "what have I asked you for that you haven\'t done", "learn from this week". It also runs by itself each night. The builds land on your branch; he still decides when you update yourself.',
+        { days: z.number().int().min(1).max(30).optional() },
+        async ({ days }) => {
+          try {
+            const r = review.run({ runner, days: days ?? 7 })
+            return ok(r.started ? 'Reviewing myself now, as a background job. The result and anything I send to the cloud will show in Jobs and reach your phone.' : r.why)
+          } catch (err) {
+            return ok(`Not started: ${err.message}`)
           }
         },
       ),

@@ -32,6 +32,7 @@ import { hubServer } from './hub/tools.mjs'
 import { createRunner } from './hub/runner.mjs'
 import { createCode } from './hub/code.mjs'
 import { start as startBuilds } from './hub/builds.mjs'
+import { start as startReview } from './hub/review.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
@@ -411,7 +412,11 @@ he wants to watch: self_build (Claude Code at your desk, in your own repo; then
 self_restart if it says so). Big, or he says "the cloud", or he's away:
 cloud_build (Claude in the cloud builds and tests it within the hour). Write the
 brief fully from what he said; ask one question first only if something
-decides the design. When a cloud build is done, offer self_update.
+decides the design. When a cloud build is done, offer self_update. You also
+review yourself each night (self_review, or when he asks): you look back at
+what he's asked for, learn how he likes things done, and send what's missing to
+the cloud. What gets built waits on your branch; you only change when he says
+to update yourself.
 
 URGENCY IS SIGNALLED BY DELETING WORDS, NOT ADDING THEM. As a situation worsens
 your lines get shorter, not louder. A full clause becomes a clause, becomes a
@@ -995,6 +1000,7 @@ phone = startPhone({ makeChat: makePhoneChat, transcribe: elevenTranscribe, spea
 const hubApi = startHub({ runner, phone, code })
 // Cloud builds of JARVIS himself: watch the issues he filed (builds.mjs).
 startBuilds()
+startReview({ runner })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin

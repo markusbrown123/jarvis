@@ -17,7 +17,7 @@ Pick the niche, publish one pilot video made end to end by the pipeline, then a 
 8. **Learn**: views, watch time, retention — what to do more of.
 
 ## First milestones
-- [ ] Niche shortlist of five, with the reasoning
+- [x] Niche shortlist of five, with the reasoning — `NICHES.md` (2026-10-25); Markus picks
 - [ ] Channel name and look
 - [ ] Script template
 - [ ] One pilot video, end to end
@@ -31,4 +31,4 @@ Pick the niche, publish one pilot video made end to end by the pipeline, then a 
 - Channel logins never go in a file.
 
 ## Status
-Not started: base only.
+Niche shortlist written (`NICHES.md`, 2026-10-25): waiting for Markus to pick. Nothing built or uploaded.
