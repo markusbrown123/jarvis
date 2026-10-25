@@ -19,25 +19,47 @@ import { getMic } from './audio'
 
 /** How far above the running floor counts as a candidate transient. */
 const PEAK_OVER_FLOOR = 7
-/** ...and an absolute floor, so a silent room cannot make a whisper a clap. */
+/** ...and an absolute floor, so a silent room cannot make a whisper a clap (lower for a finger snap). */
 const MIN_PEAK = 0.055
+
+/**
+ * The level is measured over every 256 samples of the microphone (about 5 ms),
+ * in the audio thread, so a clap is never missed between two drawn frames
+ * however busy the page is, and a snap isn't averaged away.
+ */
+const WINDOW = 256
 
 /** The room has to have been this quiet just before the strike. */
 const QUIET_BEFORE = 0.16
-/** Frames of history kept — about a third of a second at 60fps. */
-const HISTORY = 20
-/** How many frames back "just before" means. */
-const LOOKBACK = 5
+/** Windows of history kept: about a fifth of a second. */
+const HISTORY = 40
+/** How far back "just before" means: about 85 ms. */
+const LOOKBACK = 16
+/** A clap is up from nothing in a couple of milliseconds: two windows (about 11 ms) back, it was under this share of its level. */
+const RISE_FROM = 0.35
 
-/** Confirmed once the level has fallen this far below the peak... */
+/** Confirmed once the level (smoothed over two windows) has stayed this far below the peak for two readings... */
 const DECAY_TO = 0.35
-/** ...within this long. Speech and music simply do not collapse this fast. */
-const DECAY_MS = 130
+/** ...within this long. A clap is gone in a few tens of milliseconds; speech and music simply do not collapse this fast. */
+const DECAY_MS = 100
 /** A candidate that has not decayed by now was something sustained. */
 const GIVE_UP_MS = 260
 
 /** Nothing counts for this long after a clap, so one strike is one event. */
 const COOLDOWN_MS = 1200
+
+/** Runs in the audio thread: the level of every WINDOW samples, sent to the page. */
+const LEVELS = `registerProcessor('clap-level', class extends AudioWorkletProcessor {
+  constructor() { super(); this.sum = 0; this.n = 0 }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0]
+    if (!ch) return true
+    for (let i = 0; i < ch.length; i++) this.sum += ch[i] * ch[i]
+    this.n += ch.length
+    if (this.n >= ${WINDOW}) { this.port.postMessage(Math.sqrt(this.sum / this.n)); this.sum = 0; this.n = 0 }
+    return true
+  }
+})`
 
 export type ClapListener = { stop: () => void }
 
@@ -46,6 +68,10 @@ export const diag = {
   claps: 0,
   lastPeak: 0,
   rejected: '',
+  /** The levels leading up to the last clap, for a look at what set it off. */
+  lastLevels: [] as number[],
+  /** Readings taken, per listener (by its sensitivity): is it hearing anything at all? */
+  readings: {} as Record<string, number>,
 }
 
 if (typeof window !== 'undefined') {
@@ -60,7 +86,7 @@ if (typeof window !== 'undefined') {
  * button, not a requirement, and an interface that reports an error about a
  * feature the user never asked for is worse than one that quietly does without.
  */
-export async function listenForClap(onClap: () => void): Promise<ClapListener> {
+export async function listenForClap(onClap: () => void, { minPeak = MIN_PEAK }: { minPeak?: number } = {}): Promise<ClapListener> {
   let stream: MediaStream
   try {
     stream = await getMic()
@@ -72,66 +98,71 @@ export async function listenForClap(onClap: () => void): Promise<ClapListener> {
   const ctx = new AudioContext()
   void ctx.resume()
   const source = ctx.createMediaStreamSource(stream)
-  const analyser = ctx.createAnalyser()
-  // Small window: we are looking for an attack, and a long FFT smears exactly
-  // the sharpness that identifies one.
-  analyser.fftSize = 512
-  analyser.smoothingTimeConstant = 0
-  source.connect(analyser)
-  const buf = new Float32Array(analyser.fftSize)
+  let node: AudioWorkletNode
+  const url = URL.createObjectURL(new Blob([LEVELS], { type: 'text/javascript' }))
+  try {
+    await ctx.audioWorklet.addModule(url)
+    node = new AudioWorkletNode(ctx, 'clap-level')
+  } catch {
+    // No audio worklets (an old browser, or a page that isn't a secure origin).
+    diag.rejected = 'no audio worklet'
+    void ctx.close()
+    return { stop: () => {} }
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+  source.connect(node)
 
   const history: number[] = []
   let floor = 0.01
   let stopped = false
-  let raf = 0
-  let lastClap = 0
+  let lastClap = -Infinity
 
   /** A transient under examination, waiting to prove it decays. */
-  let candidate: { at: number; peak: number } | null = null
+  let candidate: { at: number; peak: number; low: number } | null = null
 
-  const rms = () => {
-    analyser.getFloatTimeDomainData(buf)
-    let sum = 0
-    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
-    return Math.sqrt(sum / buf.length)
-  }
-
-  const tick = () => {
+  // Time by the audio, not by when a reading reaches the page: readings can
+  // arrive bunched up while the page is busy.
+  let windows = 0
+  const step = (level: number) => {
     if (stopped) return
-    raf = requestAnimationFrame(tick)
-
-    const now = performance.now()
-    const level = rms()
+    diag.readings[minPeak] = (diag.readings[minPeak] ?? 0) + 1
+    const now = (++windows * WINDOW * 1000) / ctx.sampleRate
+    const prev = history[history.length - 1] ?? level
     history.push(level)
     if (history.length > HISTORY) history.shift()
+    // Over the last two windows: one quiet 5 ms of noise isn't a collapse.
+    const smooth = Math.sqrt((level * level + prev * prev) / 2)
 
     // The floor tracks the room, and never while a candidate is in flight —
     // otherwise the clap itself raises the bar it is being measured against.
     if (!candidate && level < floor * 3) {
-      floor += (level - floor) * 0.05
+      floor += (level - floor) * 0.03
       floor = Math.max(floor, 0.002)
     }
 
     if (candidate) {
-      if (level < candidate.peak * DECAY_TO && now - candidate.at < DECAY_MS) {
+      candidate.low = smooth < candidate.peak * DECAY_TO ? candidate.low + 1 : 0
+      if (candidate.low >= 2 && now - candidate.at < DECAY_MS) {
         // Quiet before, instant rise, immediate collapse. That is a clap.
         candidate = null
         lastClap = now
         diag.claps++
         diag.rejected = ''
+        diag.lastLevels = history.map((v) => Math.round(v * 1000) / 1000)
         onClap()
       } else if (now - candidate.at > GIVE_UP_MS) {
         // Still going. A voice, a chair, music — something with a body to it.
         diag.rejected = 'too sustained to be a clap'
         candidate = null
       } else {
-        candidate.peak = Math.max(candidate.peak, level)
+        candidate.peak = Math.max(candidate.peak, smooth)
       }
       return
     }
 
     if (now - lastClap < COOLDOWN_MS) return
-    if (level < MIN_PEAK || level < floor * PEAK_OVER_FLOOR) return
+    if (level < minPeak || level < floor * PEAK_OVER_FLOOR) return
 
     // Was the room actually quiet a moment ago? A rise out of noise is a swell,
     // not a strike, and this is the test that rejects most of speech.
@@ -140,19 +171,23 @@ export async function listenForClap(onClap: () => void): Promise<ClapListener> {
       diag.rejected = 'no silence before it'
       return
     }
+    // ...and did it get there at once? A syllable takes tens of milliseconds.
+    if (history[history.length - 3] > level * RISE_FROM) {
+      diag.rejected = 'too slow a rise'
+      return
+    }
 
     diag.lastPeak = level
-    candidate = { at: now, peak: level }
+    candidate = { at: now, peak: smooth, low: 0 }
   }
-
-  tick()
+  node.port.onmessage = (e: MessageEvent<number>) => step(e.data)
   diag.listening = true
 
   return {
     stop: () => {
       stopped = true
       diag.listening = false
-      cancelAnimationFrame(raf)
+      node.port.onmessage = null
       try {
         source.disconnect()
         // The shared microphone stream is NOT stopped here. It belongs to

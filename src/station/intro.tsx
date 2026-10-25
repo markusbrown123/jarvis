@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useProgress } from '@react-three/drei'
 import * as THREE from 'three'
-import { useHub } from '../hub/client'
+import { TOUCH, useHub } from '../hub/client'
+import { listenForClap, type ClapListener } from '../lib/clap'
 import { useStore } from '../store'
 import { HOUSE, seatCamera } from './layout'
 import { SKY_STATE, WEATHER } from './sky'
@@ -16,7 +17,8 @@ import { useStation } from './stationStore'
  * through the open glass; round the stage to settle behind the chair at the
  * desk, where Talk mode takes over. Each shot is a slow push, two or three
  * seconds; a brief flash marks each cut. Letterbox bars, the title and the
- * real place, time and weather over it; any key or a click skips it.
+ * real place, time and weather over it; any key, a click, a clap or a finger
+ * snap skips it.
  *
  * JARVIS says hello once the camera is inside (the store's `home`), not over
  * the sea — and straight away if the opening is skipped.
@@ -205,6 +207,15 @@ const TIPS = [
   'The build bay grows a tower for every job — one floor per step it reports.',
 ]
 
+/** Has the microphone been allowed already? Never prompts. */
+async function micAllowed() {
+  try {
+    return (await navigator.permissions.query({ name: 'microphone' as PermissionName })).state === 'granted'
+  } catch {
+    return false
+  }
+}
+
 /** The letterbox, title and loading read-out over the opening (in the page). */
 const BOOT_WORD: Record<string, string> = {
   offline: 'starting',
@@ -231,6 +242,8 @@ export function IntroOverlay() {
   const [, tick] = useState(0)
   // Stays a moment after landing, so the letterbox can slide away.
   const [leaving, setLeaving] = useState(false)
+  // Listening for a clap or a snap to skip.
+  const [hears, setHears] = useState(false)
   useEffect(() => {
     if (phase !== 'done') return
     setLeaving(true)
@@ -252,8 +265,24 @@ export function IntroOverlay() {
       window.addEventListener('keydown', skip, true)
       window.addEventListener('pointerdown', skip, true)
     }
+    // ...and so does a clap or a finger snap, on the Mac, once the microphone's
+    // already allowed (the opening never asks for it). Lower than a clap to
+    // start him: a snap is quieter, and its shape is just as sharp.
+    let clap: ClapListener | null = null
+    let gone = false
+    if (on && !TOUCH)
+      void micAllowed().then(async (ok) => {
+        if (!ok || gone) return
+        const l = await listenForClap(() => setIntro('done'), { minPeak: 0.02 })
+        if (gone) return l.stop()
+        clap = l
+        setHears(true)
+      })
     const t = setInterval(() => tick((n) => n + 1), 1000)
     return () => {
+      gone = true
+      clap?.stop()
+      setHears(false)
       window.removeEventListener('keydown', skip, true)
       window.removeEventListener('pointerdown', skip, true)
       clearInterval(t)
@@ -289,7 +318,7 @@ export function IntroOverlay() {
           </p>
         </div>
       ) : (
-        <p className="cine-skip">Any key to skip</p>
+        <p className="cine-skip">{hears ? 'Any key, clap or snap to skip' : 'Any key to skip'}</p>
       )}
     </div>
   )

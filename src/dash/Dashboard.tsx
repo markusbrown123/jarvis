@@ -426,6 +426,21 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
       if (e.key === 'Escape' && useHub.getState().prefs.immersive) {
         e.stopImmediatePropagation()
         setPrefs({ immersive: false })
+        return
+      }
+      // Otherwise, with him idle, Esc goes back to the station's overview: from
+      // a page, from Talk, Walk or Cinematic, from a zone or pad close-up. (A
+      // picture or the palette that's open closes first, and in a desk screen
+      // it backs out to the room first.) While he's listening, thinking or
+      // talking it stays what it was: App stands him down.
+      if (e.key === 'Escape' && !e.defaultPrevented && !useHub.getState().paletteOpen) {
+        const st = useStation.getState()
+        if (st.screen || st.intro !== 'done') return
+        if (!['offline', 'boot', 'dormant'].includes(useStore.getState().phase)) return
+        if (useHub.getState().prefs.view !== 'station') setPrefs({ view: 'station' })
+        if (st.mode !== 'command') st.setMode('command')
+        st.select(null, false)
+        st.fly('overview')
       }
     }
     window.addEventListener('keydown', onKey)
