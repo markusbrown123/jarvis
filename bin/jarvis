@@ -271,11 +271,13 @@ behind() {
 
 # The newest version of this branch: pull it, install what changed, restart.
 # Never over local changes (JARVIS's or yours) — those are shown, not lost.
+# Files git doesn't track (.env, backups/) don't count: they can't be lost by
+# moving forward, and if the update brings a file of the same name git stops.
 update() {
   cd "$DIR" || return 1
-  if [ -n "$(git status --porcelain)" ]; then
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     echo "There are changes here that aren't committed (JARVIS's or yours):"
-    git status --short | head -20
+    git status --short --untracked-files=no | head -20
     echo "Keep them with git stash (or commit them), then run jarvis update again."
     return 1
   fi
