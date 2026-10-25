@@ -10,15 +10,21 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DATA_DIR } from './store.mjs'
+import { BASE_PROJECTS, STREAMS } from './streams.mjs'
 
 const FILE = join(DATA_DIR, 'ideas.json')
 export const STATES = ['new', 'developing', 'building', 'done', 'parked']
-export const PROJECTS = ['jarvis', 'automaton', 'roblox', 'finance', 'other']
+export const PROJECTS = ['jarvis', 'automaton', 'roblox', 'finance', ...BASE_PROJECTS, 'other']
 const MAX = 300
 
 let ideas = []
+let seeded = false
 try {
-  if (existsSync(FILE)) ideas = JSON.parse(readFileSync(FILE, 'utf8')).ideas ?? []
+  if (existsSync(FILE)) {
+    const saved = JSON.parse(readFileSync(FILE, 'utf8'))
+    ideas = saved.ideas ?? []
+    seeded = Boolean(saved.seeded)
+  }
 } catch {
   ideas = []
 }
@@ -26,9 +32,35 @@ const listeners = new Set()
 
 function save() {
   // Whole file, then a rename: a crash mid-write never leaves half a list.
-  writeFileSync(`${FILE}.tmp`, JSON.stringify({ ideas }, null, 2))
+  writeFileSync(`${FILE}.tmp`, JSON.stringify({ ideas, seeded }, null, 2))
   renameSync(`${FILE}.tmp`, FILE)
   for (const fn of listeners) fn(list())
+}
+
+// The streams of work (streams.mjs) go on the board once, the first time, each pointing at its
+// base — so the board starts with what he's building, and "Build with Claude Code" works on
+// any of them. Delete one and it stays deleted.
+if (!seeded) {
+  const now = Date.now()
+  STREAMS.forEach((st, i) => {
+    ideas.push({
+      id: `idea-base-${st.id}`,
+      title: st.name,
+      text: `${st.name}: ${st.line}.`,
+      notes: `Base: bases/${st.id}/BRIEF.md — what it is, how it works, the first milestones and the rules. Read it first.`,
+      project: st.project,
+      state: 'developing',
+      source: 'bases',
+      createdAt: now - i,
+      updatedAt: now - i,
+    })
+  })
+  seeded = true
+  try {
+    save()
+  } catch {
+    /* the board still works in memory; it'll try again at the next change */
+  }
 }
 
 export const list = () => [...ideas].sort((a, b) => b.updatedAt - a.updatedAt)

@@ -22,6 +22,10 @@ run headless as a library.
 - **The desk** — beside talking to JARVIS: a real Claude Code terminal in any of
   your project folders, and an Ideas board he develops with you and can hand
   to Claude Code to build.
+- **The streams of work** — six things you're building (real estate video
+  walkthroughs, a YouTube channel, client websites, Roblox for kids, MNQ
+  trading and the portfolio, an AI influencer), each with a base in
+  [bases/](bases/README.md) that JARVIS reads, so he knows where each stands.
 - **The command center** — Roblox studio (queue, galleries), Automaton (site
   pipeline, public checks), Finance (research data, services, expenses), jobs,
   Needs Markus, usage, memory. [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md)

@@ -227,6 +227,8 @@ export type FinanceProject = {
   data?: { masterHub: MasterHubData; scout: ScoutData }
   charts: { symbol: string; label: string }[]
   quantView: { name: string | null; url: string | null }
+  /** Where Markus trades and charts: links only, nothing here is connected. */
+  links?: { label: string; url: string }[]
   note: string
   updatedAt: number
 }

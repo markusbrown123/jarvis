@@ -24,8 +24,9 @@ import { fileURLToPath } from 'node:url'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { cwdFor } from './runner.mjs'
 import * as hub from './store.mjs'
+import { BASE_PROJECTS } from './streams.mjs'
 
-export const PROJECTS = ['jarvis', 'automaton', 'roblox', 'finance', 'other']
+export const PROJECTS = ['jarvis', 'automaton', 'roblox', 'finance', ...BASE_PROJECTS, 'other']
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const MAX_LINES = 800
 const MAX_SESSIONS = 8

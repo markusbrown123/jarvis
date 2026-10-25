@@ -41,8 +41,14 @@ const DEFAULTS = {
       { symbol: 'CME_MINI:MNQ1!', label: 'Micro Nasdaq (MNQ)' },
       { symbol: 'CME:MBT1!', label: 'Micro Bitcoin (MBT)' },
     ],
-    // The service Markus calls "Quant View". Unknown until he names it.
-    quantView: { name: null, url: null },
+    // The service Markus calls "Quant View": QuantVue, which he trades MNQ with.
+    quantView: { name: 'QuantVue', url: 'https://www.quantvue.io/' },
+    // Where he trades and charts, for a click from the Finance page. Links only: nothing here is connected.
+    links: [
+      { label: 'QuantVue', url: 'https://www.quantvue.io/' },
+      { label: 'Tradovate web trader', url: 'https://trader.tradovate.com/welcome' },
+      { label: 'TradingView · MNQ chart', url: 'https://www.tradingview.com/chart/X8WHphqV/' },
+    ],
     refreshMinutes: 1,
   },
 }

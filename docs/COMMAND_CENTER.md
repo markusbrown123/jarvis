@@ -199,6 +199,16 @@ Sat at the desk in the station (Talk), two tabs sit beside the conversation
   `POST /api/ideas/:id` (update), `/api/ideas/:id/delete`; updates on
   `/api/stream` as `ideas`.
 
+## The streams of work
+
+Six things Markus is building, each with a **base** in `bases/` (see `bases/README.md`): real estate AI video walkthroughs, a faceless YouTube automation channel, high-end client websites (Automaton), Roblox games and servers for kids, MNQ trading and the portfolio through QuantVue (Finance — monitoring only), and an AI virtual influencer, always labelled as AI. A base's `BRIEF.md` says what it is, how it works, the first milestones, the rules and the status.
+
+- JARVIS knows them: a short list is in his prompt, `streams` gives each one's status, and `stream_brief` reads the whole brief before he advises on or starts work on one.
+- The three new ones (`realestate`, `youtube`, `influencer`) are projects of their own: Ideas, desk Claude Code sessions and background jobs can target them, and run in `bases/<project>` with that folder's `CLAUDE.md`. They show under Jarvis Core in the station. The other three are the existing Automaton, Roblox and Finance projects.
+- The Ideas board starts with one idea per stream, pointing at its base (once; delete one and it stays deleted).
+- Finance: QuantVue is Quant View, and the page lists where Markus trades (QuantVue, Tradovate, the TradingView MNQ chart) as links. Nothing is connected: no orders, no invented positions or P&L.
+- Rules in every brief hold, and a few are fixed: nothing is sent, posted, published, deployed or paid without Markus; the influencer is always disclosed as AI and stays inside Instagram's rules; a Roblox game for kids doesn't lean on them to spend.
+
 ## Building JARVIS himself
 
 Ask him to add to or change himself — a gesture, a project, a page — and it

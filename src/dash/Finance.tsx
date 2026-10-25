@@ -246,6 +246,8 @@ function Markets() {
   const f = s?.projects.finance
   if (!f) return <Empty title="Checking finance services…" />
   const symbol = prefs.chartSymbol ?? f.charts[0]?.symbol ?? 'CME_MINI:MNQ1!'
+  // Quant View's own card already links it.
+  const otherLinks = (f.links ?? []).filter((l) => l.url !== f.quantView.url)
   return (
     <>
       <p className="muted small">Checked {ago(f.updatedAt)}</p>
@@ -349,6 +351,25 @@ function Markets() {
               </form>
             )}
           </section>
+
+          {otherLinks.length > 0 && (
+            <section className="card">
+              <header className="card-head">
+                <h3>Where you trade</h3>
+              </header>
+              <p>
+                {otherLinks.map((l, i) => (
+                  <span key={l.url}>
+                    {i > 0 && ' · '}
+                    <a href={l.url} target="_blank" rel="noreferrer">
+                      {l.label} ↗
+                    </a>
+                  </span>
+                ))}
+              </p>
+              <p className="muted">Links only. JARVIS can't see or change anything in them; he never places an order.</p>
+            </section>
+          )}
 
           <section className="card">
             <header className="card-head">

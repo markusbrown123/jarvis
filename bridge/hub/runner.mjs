@@ -19,6 +19,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import * as hub from './store.mjs'
 import * as memory from './memory.mjs'
 import { expand, loadConfig } from './config.mjs'
+import { BASE_PROJECTS, baseDir } from './streams.mjs'
 
 const MAX_RUNNING = 3
 
@@ -32,6 +33,8 @@ export function cwdFor(project) {
     return repo && existsSync(join(repo, cfg.roblox.studioPath)) ? join(repo, cfg.roblox.studioPath) : repo ?? homedir()
   }
   if (project === 'finance') return pick(cfg.finance.services.flatMap((s) => s.repoCandidates ?? [])) ?? homedir()
+  // The newer streams work in their base (bases/<project>), inside JARVIS's own repo.
+  if (BASE_PROJECTS.includes(project)) return baseDir(project)
   return homedir()
 }
 

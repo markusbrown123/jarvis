@@ -21,6 +21,7 @@ import { startFinance } from './finance.mjs'
 import * as ledger from './expenses.mjs'
 import * as memory from './memory.mjs'
 import * as ideas from './ideas.mjs'
+import { BASE_PROJECTS } from './streams.mjs'
 
 const MAX_BODY = 1024 * 1024
 
@@ -338,7 +339,7 @@ export function startHub({ runner, phone, code } = {}) {
         const body = JSON.parse(await readBody(req))
         const title = String(body.title ?? '').trim().slice(0, 120)
         const instructions = String(body.instructions ?? '').trim().slice(0, 8000)
-        const project = ['roblox', 'automaton', 'finance', 'other'].includes(body.project) ? body.project : 'other'
+        const project = ['roblox', 'automaton', 'finance', ...BASE_PROJECTS, 'other'].includes(body.project) ? body.project : 'other'
         if (!title || !instructions) return json(res, cors, 400, { error: 'Give the job a title and instructions.' })
         try {
           return json(res, cors, 200, { ok: true, ...runner.start({ title, project, instructions }) })

@@ -29,3 +29,6 @@ public/mediapipe/
 
 # Blender's Python module for tools/blender (see console.py)
 .bpy/
+
+# Output of project bases (bases/*/CLAUDE.md sessions)
+bases/*/out/

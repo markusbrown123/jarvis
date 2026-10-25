@@ -18,6 +18,7 @@ import * as ledger from './expenses.mjs'
 import * as memory from './memory.mjs'
 import * as ideas from './ideas.mjs'
 import * as builds from './builds.mjs'
+import * as streams from './streams.mjs'
 import { loadConfig, saveConfig } from './config.mjs'
 
 const ok = (text) => ({ content: [{ type: 'text', text }] })
@@ -183,7 +184,7 @@ export function hubServer({ emit, runner, phone, sources, code }) {
         'Start a long piece of work as a background job (research, reading a codebase, writing a report, a multi-step check) so the conversation stays free. It runs as its own agent in that project\'s folder with the same read/write permissions as you, and shows on the dashboard with live progress. Say briefly that it has started; do not wait for it. Never use it for sending messages, deploying, publishing or payments.',
         {
           title: z.string().describe('Short title shown on the dashboard'),
-          project: z.enum(['roblox', 'automaton', 'finance', 'other']),
+          project: z.enum(['roblox', 'automaton', 'finance', ...streams.BASE_PROJECTS, 'other']),
           instructions: z.string().describe('Complete, standalone instructions for the job'),
           notify: z.enum(['phone', 'urgent']).optional().describe('Text Markus\'s phone the result even if he is at the dashboard ("phone"), or also raise an urgent alert if it fails ("urgent"). Use when he asks to be told when it is done.'),
         },
@@ -274,6 +275,21 @@ export function hubServer({ emit, runner, phone, sources, code }) {
           } catch (err) {
             return ok(`Not changed: ${err.message}`)
           }
+        },
+      ),
+      tool(
+        'streams',
+        'The streams of work Markus and you are doing, each with its status from its base: real estate AI video walkthroughs, the YouTube automation channel, high-end client websites (Automaton), Roblox games for kids, MNQ trading and the portfolio (Finance, monitoring only), and the AI virtual influencer. Use for "what are we working on", "where are we with …", "what\'s next". For the detail of one, stream_brief.',
+        {},
+        async () => ok(streams.STREAMS.map((s) => `${s.id} · ${s.name} — ${s.line}. Status: ${streams.status(s.id)}`).join('\n')),
+      ),
+      tool(
+        'stream_brief',
+        'The full brief for one stream: what it is, how it works, the first milestones, the rules, its status. Read it before advising on or starting work on that stream. id: ' + streams.STREAMS.map((s) => s.id).join(' | '),
+        { id: z.enum(streams.STREAMS.map((s) => s.id)) },
+        async ({ id }) => {
+          const b = streams.brief(id)
+          return ok(b ? b.text : `No brief written for ${id}.`)
         },
       ),
       tool(
@@ -400,7 +416,7 @@ export function hubServer({ emit, runner, phone, sources, code }) {
       tool(
         'learn_lesson',
         'Write down a lesson so you never repeat a mistake. Use it whenever Markus corrects you, says you got something wrong, or something you tried failed — and when a job or approach worked notably well. State the rule to follow next time, concretely ("Before quoting Automaton numbers, call hub_project — I guessed once and was wrong"). project: automaton, finance, roblox, jarvis or general.',
-        { lesson: z.string(), project: z.enum(['automaton', 'finance', 'roblox', 'jarvis', 'general']).optional() },
+        { lesson: z.string(), project: z.enum(['automaton', 'finance', 'roblox', 'jarvis', ...streams.BASE_PROJECTS, 'general']).optional() },
         async ({ lesson, project }) => {
           try {
             const f = memory.remember({ text: lesson, topic: project && project !== 'general' ? `lesson:${project}` : 'lesson', source: 'jarvis' })

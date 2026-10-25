@@ -333,6 +333,7 @@ async function refresh(cfg) {
     data: { masterHub, scout },
     charts: cfg.charts,
     quantView: cfg.quantView,
+    links: cfg.links ?? [],
     note: 'Research and monitoring. No broker or execution connection exists; nothing here can place an order.',
   })
 

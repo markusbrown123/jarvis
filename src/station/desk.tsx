@@ -18,6 +18,9 @@ const PROJECTS: [string, string][] = [
   ['automaton', 'Automaton'],
   ['roblox', 'Roblox'],
   ['finance', 'Finance'],
+  ['realestate', 'Real estate videos'],
+  ['youtube', 'YouTube channel'],
+  ['influencer', 'AI influencer'],
   ['other', 'Home folder'],
 ]
 const projectName = (p: string) => PROJECTS.find(([id]) => id === p)?.[1] ?? p
