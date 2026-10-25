@@ -140,10 +140,12 @@ Memory only; the Activity log stays the durable record.
 | Area | What it shows |
 |---|---|
 | Top bar | JARVIS's real input state, command-center link, model, 5-hour allowance |
-| Left | Station · Overview · Roblox · Finance · Automaton · Needs Markus · Jobs · Terminal · Activity · Settings, plus active jobs |
+| Left | Station · Overview · Projects · Roblox · Finance · Automaton · Needs Markus · Jobs · Terminal · Activity · Settings, plus active jobs |
 | Overview | Constellation of live project state around the core, and a strip: running, changed, latest render, needs you, allowance |
 | Right | Needs Markus queue: what, why, where, what's ready, how it's verified, what resumes |
 | Bottom | Transcript · the voice visualizer (centred; under the core on the overview) · text box, Talk / Finish / Stop talking / Cancel reply / Mic, talk mode |
+| Behind the pages | The living backdrop (`src/backdrop/`): a procedural scene, a new one each time the page loads, with the projects built into it — Roblox games as towers, Automaton leads as lights, running jobs as streams, the allowance as a fuel rail, a beacon for what needs you. **B** next scene (shift-B back), **N** the knowledge graph over it. Settings → Appearance turns it off; not on a phone. |
+| Voice view (`I`) | The burst (`src/station/burst.ts`, `src/scene/BurstView.tsx`): a hollow core with filaments and comets that swell with his voice and spin up while he thinks or speaks, three node clusters lit by real counts (magenta Roblox, violet jobs, green Automaton), and tags floating on it with the live figures. Settings → Appearance switches back to the crystal core. |
 | `Voice view` / `I` | Immersive view: nebula, filaments, live words |
 
 Colours mean one thing everywhere: violet working, amber needs you, red

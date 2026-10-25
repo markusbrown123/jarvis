@@ -32,6 +32,10 @@ type Prefs = {
   autoStart: boolean
   /** Say important things out loud when they land (hub/announce.ts). */
   announce: boolean
+  /** The living backdrop behind the dashboard pages (backdrop/Backdrop.tsx). */
+  backdrop: boolean
+  /** What the voice view shows: the burst (scene/BurstView.tsx) or the crystal core. */
+  voiceVisual: 'burst' | 'core'
   layoutVersion: number
 }
 
@@ -54,6 +58,9 @@ const DEFAULT_PREFS: Prefs = {
   graphics: TOUCH ? 'low' : 'ultra',
   autoStart: true,
   announce: true,
+  // A full-screen shader behind the pages: not on a phone's GPU.
+  backdrop: !TOUCH,
+  voiceVisual: 'burst',
   layoutVersion: 2,
 }
 

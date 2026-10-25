@@ -379,7 +379,8 @@ const KEY = 'jarvis.graph'
 type Saved = { on: boolean; hidden: Partial<Record<Cat, boolean>> }
 function load(): Saved {
   const q = new URLSearchParams(location.search).get('graph')
-  let s: Saved = { on: true, hidden: {} }
+  // Off until asked for (N): behind the dashboard its labels crowd the pages' own.
+  let s: Saved = { on: false, hidden: {} }
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) s = { ...s, ...(JSON.parse(raw) as Partial<Saved>) }

@@ -215,7 +215,8 @@ export function Backdrop() {
       if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT' || el?.isContentEditable) return
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
       const key = e.key.toLowerCase()
-      if (key === 'g') useGraph.getState().toggle()
+      // N, not G: G is hand control (App.tsx).
+      if (key === 'n') useGraph.getState().toggle()
       else if (key === 'b') show.current(scene + (e.shiftKey ? -1 : 1))
     }
     window.addEventListener('keydown', onKey)
@@ -263,7 +264,7 @@ export function Backdrop() {
         <p className="bd-tag" key={tag.n}>
           <b>{tag.name}</b>
           <span>{LEGEND}</span>
-          <span className="bd-key">B · next scene · G · knowledge graph</span>
+          <span className="bd-key">B · next scene · N · knowledge graph</span>
         </p>
       )}
     </div>

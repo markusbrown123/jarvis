@@ -3,6 +3,8 @@ import { useStore } from '../store'
 import { useHub, connectHub, type View } from '../hub/client'
 import { ago, JOB_LABEL, tone } from '../hub/format'
 import { CoreView } from '../scene/CoreView'
+import { BurstView } from '../scene/BurstView'
+import { Backdrop } from '../backdrop/Backdrop'
 import { Blades } from '../ui/Blades'
 import { Effects } from '../ui/Effects'
 import { Pointer } from '../ui/Pointer'
@@ -350,6 +352,7 @@ function Palette() {
 function Immersive() {
   useTick(250)
   const setPrefs = useHub((s) => s.setPrefs)
+  const voiceVisual = useHub((s) => s.prefs.voiceVisual)
   const turns = useStore((s) => s.turns)
   const caption = useStore((s) => s.caption)
   const phase = useStore((s) => s.phase)
@@ -357,7 +360,7 @@ function Immersive() {
   const live = phase === 'listening' || phase === 'waking'
   return (
     <div className="immersive">
-      <CoreView mode="immersive" />
+      {voiceVisual === 'burst' ? <BurstView /> : <CoreView mode="immersive" />}
       <button className="btn btn-quiet immersive-close" onClick={() => setPrefs({ immersive: false })} title="Back to the dashboard (Esc)">
         Dashboard
       </button>
@@ -458,6 +461,8 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
   // Gone into one of the desk's screens: its page is up, with the room still
   // loaded (and paused) underneath to come back out to.
   const inScreen = screen?.phase === 'on' && !station
+  // The living backdrop behind the pages; not behind a desk screen or the voice view, which have their own.
+  const showBackdrop = prefs.backdrop && !inScreen && !prefs.immersive
   return (
     <>
       {(station || screen) && (
@@ -466,7 +471,8 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
         </div>
       )}
       {!station && (
-        <div className={`dash ${inScreen ? 'dash-screen' : ''} ${prefs.navCollapsed ? 'nav-collapsed' : ''} ${prefs.needsCollapsed ? 'needs-collapsed' : ''} ${prefs.reducedMotion ? 'reduced' : ''}`}>
+        <div className={`dash ${inScreen ? 'dash-screen' : ''} ${prefs.navCollapsed ? 'nav-collapsed' : ''} ${prefs.needsCollapsed ? 'needs-collapsed' : ''} ${prefs.reducedMotion ? 'reduced' : ''} ${showBackdrop ? 'with-backdrop' : ''}`}>
+          {showBackdrop && <Backdrop />}
           <TopBar />
           <NavRail />
           <main className="workspace">{prefs.immersive ? null : view}</main>

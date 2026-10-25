@@ -231,6 +231,17 @@ export function Settings() {
             <input type="checkbox" checked={prefs.needsCollapsed} onChange={(e) => setPrefs({ needsCollapsed: e.target.checked })} />
             Collapse the Needs Markus panel
           </label>
+          <label className="check">
+            <input type="checkbox" checked={prefs.backdrop} onChange={(e) => setPrefs({ backdrop: e.target.checked })} />
+            Living backdrop behind the pages — a new scene each time, your projects built into it (B next scene, N knowledge graph)
+          </label>
+          <label className="field">
+            <span>Voice view</span>
+            <select className="input" value={prefs.voiceVisual} onChange={(e) => setPrefs({ voiceVisual: e.target.value as typeof prefs.voiceVisual })}>
+              <option value="burst">The burst — filaments and node clusters lit by your projects</option>
+              <option value="core">The crystal core</option>
+            </select>
+          </label>
           <button className="btn" onClick={() => setPrefs({ immersive: true })}>
             Open the immersive voice view
           </button>
