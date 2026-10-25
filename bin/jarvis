@@ -254,7 +254,14 @@ remote() {
     return 1
   fi
   ready || start_servers || return 1
-  if ! "$ts" serve --bg --https=5173 http://127.0.0.1:5173 >/dev/null || ! "$ts" serve --bg --https=8788 http://127.0.0.1:8788 >/dev/null; then
+  # The first time, Tailscale may need your OK to use Serve and HTTPS on your
+  # tailnet: it prints a link and waits until you've opened it and allowed it.
+  # So its output stays on screen — hidden, that looked like a blank, stuck
+  # terminal.
+  echo "Sharing JARVIS on your tailnet (tailscale serve)..."
+  echo "If Tailscale shows a link below, open it, sign in and allow it; this carries on by itself once you have."
+  echo
+  if ! "$ts" serve --bg --https=5173 http://127.0.0.1:5173 || ! "$ts" serve --bg --https=8788 http://127.0.0.1:8788; then
     echo "tailscale serve didn't start. Turn on HTTPS certificates for your tailnet (admin console → DNS), then try again."
     return 1
   fi

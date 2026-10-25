@@ -82,7 +82,7 @@ if (what === 'remote-save') {
     if (!login) throw new Error("Couldn't tell which Tailscale account this Mac is signed in to.")
     mkdirSync(DATA, { recursive: true })
     writeFileSync(join(DATA, 'remote.json'), JSON.stringify({ host, login, at: Date.now() }, null, 2) + '\n', { mode: 0o600 })
-    console.log(`\nOn your iPhone (Tailscale on, signed in as ${login}), open in Safari:\n\n    https://${host}:5173\n\nTap to start him, allow the microphone, and talk. Share → Add to Home Screen keeps it one tap away.\nOnly ${login} is let in, through Tailscale; nothing is open to the internet. Undo with: jarvis remote off\n`)
+    console.log(`\nOn your iPhone (Tailscale on, signed in as ${login}), open in Safari:\n\n    https://${host}:5173\n\nThen Share → Add to Home Screen: JARVIS gets his own app icon. Open him from there, tap the lock, allow the microphone, and talk.\nOnly ${login} is let in, through Tailscale; nothing is open to the internet. Undo with: jarvis remote off\n`)
   } catch (err) {
     console.error(`  ${err.message}`)
     process.exit(1)
