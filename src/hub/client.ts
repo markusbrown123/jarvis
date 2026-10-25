@@ -172,6 +172,7 @@ export const hubActions = {
   checkItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/check`),
   snoozeItem: (id: string, hours = 4) => post(`/api/items/${encodeURIComponent(id)}/snooze?hours=${hours}`),
   startItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/start`),
+  doneItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/done`),
   cancelItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/cancel`),
   reopenItem: (id: string) => post(`/api/items/${encodeURIComponent(id)}/reopen`),
   cancelJob: (id: string) => post(`/api/jobs/${encodeURIComponent(id)}/cancel`),

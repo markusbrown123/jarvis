@@ -541,20 +541,16 @@ kbd {
   font-size: 12.5px;
   line-height: 1.35;
   color: #e8f8ff;
-  /* Two lines then clip — a HUD row, not a paragraph. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  /* Fully visible: wrap rather than clip. */
+  overflow-wrap: anywhere;
 }
 
 .hud-sub {
   font-size: 10.5px;
   line-height: 1.35;
   opacity: 0.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .hud-tag {
@@ -1762,6 +1758,40 @@ kbd {
   background: #ff4d4d;
   box-shadow: 0 0 8px #ff4d4d;
   animation: handsPulse 1.6s ease-in-out infinite;
+}
+.hands-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--accent, #19c4c4) 90%, white);
+  border: 1px solid color-mix(in srgb, var(--accent, #19c4c4) 30%, transparent);
+  background: color-mix(in srgb, var(--accent, #19c4c4) 10%, rgba(2, 8, 12, 0.8));
+  backdrop-filter: blur(8px);
+}
+.hands-toggle:hover { border-color: color-mix(in srgb, var(--accent, #19c4c4) 70%, transparent) }
+.hands-toggle.is-on::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4d4d;
+  box-shadow: 0 0 8px #ff4d4d;
+  animation: handsPulse 1.6s ease-in-out infinite;
+}
+.hands-toggle-fixed {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 96;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hands-toggle.is-on::before { animation: none }
 }
 @keyframes handsPulse {
   0%, 100% { opacity: 1 }

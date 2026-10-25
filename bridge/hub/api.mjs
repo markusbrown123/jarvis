@@ -299,7 +299,7 @@ export function startHub({ runner, phone } = {}) {
         return json(res, cors, 200, { ok: true, applied: n })
       }
 
-      let m = path.match(/^\/api\/items\/([^/]+)\/(check|snooze|start|cancel|reopen)$/)
+      let m = path.match(/^\/api\/items\/([^/]+)\/(check|snooze|start|cancel|reopen|done)$/)
       if (req.method === 'POST' && m) {
         const id = decodeURIComponent(m[1])
         const item = hub.getItem(id)
@@ -319,6 +319,7 @@ export function startHub({ runner, phone } = {}) {
         }
         if (action === 'start') hub.upsertItem({ id, state: 'in_progress' }, { fromSource: false })
         if (action === 'cancel') hub.upsertItem({ id, state: 'canceled' }, { fromSource: false })
+        if (action === 'done') hub.upsertItem({ id, state: 'resolved', doneByUser: true }, { fromSource: false })
         if (action === 'reopen') hub.upsertItem({ id, state: 'open', snoozedUntil: null }, { fromSource: false })
         return json(res, cors, 200, { ok: true, item: hub.getItem(id) })
       }

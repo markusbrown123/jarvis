@@ -20,7 +20,19 @@ import * as hub from './store.mjs'
 import * as memory from './memory.mjs'
 import { expand, loadConfig } from './config.mjs'
 
-const MAX_RUNNING = 3
+const DEFAULT_MAX_RUNNING = 8
+const HARD_CEILING = 24
+// Runaway guard: even under the concurrency cap, starts per minute are limited,
+// so a loop that starts, fails and restarts jobs can't churn through sessions.
+const START_WINDOW_MS = 60_000
+const START_BURST = 16
+
+/** JARVIS_MAX_JOBS, clamped to 1..HARD_CEILING; anything unparseable falls back to the default. */
+export function maxRunning(env = process.env) {
+  const n = Math.floor(Number(env.JARVIS_MAX_JOBS))
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_MAX_RUNNING
+  return Math.min(n, HARD_CEILING)
+}
 
 /** Where a job for this project should run: its local repo if there is one. */
 function cwdFor(project) {
@@ -37,12 +49,20 @@ function cwdFor(project) {
 
 export function createRunner({ model, effort, canUseTool, mcpServers }) {
   const running = new Map()
+  const recentStarts = []
 
   function start({ title, project = 'other', instructions, notify = null }) {
     const live = [...running.keys()].filter((id) => hub.getJob(id)?.state === 'running').length
-    if (live >= MAX_RUNNING) {
-      throw new Error(`${live} background jobs are already running; wait for one or cancel one first.`)
+    const limit = maxRunning()
+    if (live >= limit) {
+      throw new Error(`${live} background jobs are already running (limit ${limit}, set JARVIS_MAX_JOBS to change); wait for one or cancel one first.`)
     }
+    const nowMs = Date.now()
+    while (recentStarts.length && nowMs - recentStarts[0] > START_WINDOW_MS) recentStarts.shift()
+    if (recentStarts.length >= START_BURST) {
+      throw new Error(`${recentStarts.length} background jobs were started in the last minute; wait a bit before starting more.`)
+    }
+    recentStarts.push(nowMs)
     const id = `jarvis:${Date.now().toString(36)}`
     const cwd = cwdFor(project)
     const abort = new AbortController()

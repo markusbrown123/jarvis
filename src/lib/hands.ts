@@ -1,12 +1,24 @@
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 import { OneEuroPoint } from './oneEuro'
 import { holdCamera, releaseCamera } from './camera'
+import {
+  PINCH_OFF,
+  PINCH_ON,
+  Trackpad,
+  type CursorState,
+  type PadMode,
+  type PinchKind,
+  type TpOut,
+} from './trackpad'
 
 /**
  * Hands.
  *
  * Your hand appears on screen as a skeleton — every joint, every finger — and
- * the tip of your index finger is the cursor. Pinch thumb to finger to press.
+ * works like a trackpad: moving the hand moves a cursor by how far the hand
+ * moved, and a pinch is the only click there is. The gesture map and every
+ * decision about it live in trackpad.ts; this file measures the hand and
+ * dispatches the events.
  *
  * Drawing the whole hand rather than a floating dot is not decoration. You
  * cannot see your own hand against the screen, so with only a dot you are
@@ -53,6 +65,7 @@ const MODEL_URL =
 export const WRIST = 0
 const THUMB_MCP = 2
 export const THUMB_TIP = 4
+const INDEX_MCP = 5
 const INDEX_PIP = 6
 export const INDEX_TIP = 8
 const MIDDLE_MCP = 9
@@ -105,22 +118,6 @@ const CURSOR_BETA = 0.012
 const SKELETON_MIN_CUTOFF = 2.4
 const SKELETON_BETA = 0.02
 
-/**
- * Pinch thresholds, as a fraction of hand span rather than an absolute.
- *
- * The raw gap between two fingertips is meaningless alone: it halves when you
- * lean back and doubles when you lean in, so a fixed threshold means the
- * interface only works at one distance from the camera. Dividing by the span
- * from wrist to middle knuckle — a length that shrinks with the same
- * perspective — makes it a property of the hand's shape rather than its
- * distance, which is what a pinch actually is.
- *
- * Two thresholds, not one: it takes a tighter pinch to start a press than to
- * keep one, so the press cannot flicker on the boundary.
- */
-const PINCH_ON = 0.40
-const PINCH_OFF = 0.60
-
 /** A finger counts as extended when its tip is this much further from the
  *  wrist than its middle joint. Ratio rather than a y-comparison, so it still
  *  works with your hand rotated or upside down. */
@@ -136,46 +133,29 @@ const EXTEND_RATIO = 1.12
 const GESTURE_HOLD_MS = 200
 
 /**
- * A pinch has to survive this long before it presses.
+ * Landmark confidence gating.
  *
- * Pinch used to be exempt from any hold at all, on the reasoning that a press
- * is the one gesture where latency is felt. True, but it made every transition
- * between poses a hazard: going from a framing L to a point, or from a fist to
- * an open hand, takes the fingers through arrangements that momentarily read as
- * a pinch. Each of those fired a press — grabbing a blade you were not touching
- * and dropping it somewhere you did not choose.
- *
- * Seventy milliseconds is four frames. It is comfortably below the threshold at
- * which a press feels delayed, and comfortably above the one or two frames a
- * hand spends passing through a shape on its way to another one.
+ * A detection is only used when the model is sure it is a hand and the points
+ * that matter — thumb, index, middle, index knuckles — are inside the picture.
+ * MediaPipe happily extrapolates fingertips beyond the frame edge, and a hand
+ * leaving the frame is exactly when those numbers are invented. A frame that
+ * fails the gate is treated as unseen, and a hand unseen for longer than the
+ * grace period is dropped, which lets go of anything it was holding.
  */
-const PINCH_CONFIRM_MS = 70
+const MIN_HAND_SCORE = 0.6
+const FRAME_EDGE = 0.01
+const LOST_GRACE_MS = 150
 
 /**
- * After the finger pose changes, presses are ignored for this long.
+ * Fully spread, not just "four fingers up".
  *
- * The confirm window above catches a pinch that flickers. This catches the
- * other half of the problem: a pose that genuinely settles into something
- * pinch-shaped for a moment while the hand is still rearranging itself. Both
- * are needed, because they fail in opposite directions.
+ * A pinch with the other three fingers extended also has four fingers up, so
+ * the finger count alone would clutch in the middle of a click. The thumb being
+ * well away from the index finger is what an open palm has and a pinch does
+ * not. Two thresholds so the clutch does not flicker on its boundary.
  */
-const POSE_SETTLE_MS = 220
-
-/** Below this many pixels of travel, a press was a click rather than a drag. */
-const CLICK_SLOP = 20
-
-/**
- * How far back a press aims.
- *
- * A pinch takes about this long from "hand open, pointing at the thing" to
- * "fingers touching", and the fingertip travels several centimetres over that
- * time — so the position at the instant the press fires is not the position you
- * aimed from. The trail below keeps a short history and the press hit-tests
- * where the cursor was this long ago.
- */
-const AIM_LAG_MS = 190
-/** Nothing older than this is kept; two frames' worth of slack over the lag. */
-const TRAIL_MS = 500
+const OPEN_GAP_ON = 1.0
+const OPEN_GAP_OFF = 0.85
 
 export type Gesture = 'point' | 'pinch' | 'frame' | 'open' | 'fist' | 'peace' | 'none'
 export type Side = 'left' | 'right'
@@ -261,14 +241,18 @@ export type Hand = {
   id: number
   /** Every joint, in viewport pixels, smoothed and mirrored. */
   points: { x: number; y: number }[]
-  /** Cursor position — your index fingertip. */
+  /** The pad's cursor in viewport px — moved by the hand, not at the fingertip. */
   x: number
   y: number
-  /** Where the cursor was before the fingers began closing, which is what a
-   *  press is aimed at. See the note where it is set. */
-  aimX: number
-  aimY: number
+  /** Thumb and index are pinched: a press, a drag, or in scroll mode a scroll. */
   pinched: boolean
+  pinchKind: PinchKind
+  mode: PadMode
+  cursor: CursorState
+  /** 0..1, a thumb+middle pinch closing on a right click. */
+  rightProgress: number
+  /** The latest click-like event, for the overlay to flash. */
+  flash: { kind: 'click' | 'double' | 'right' | 'mode'; at: number } | null
   /** 0..1, how closed the pinch is. Drives the reticle's tightening ring. */
   closeness: number
   gesture: Gesture
@@ -322,12 +306,30 @@ type Filters = {
 
 const filters = new Map<number, Filters>()
 
-/** Recent cursor positions per hand, so a press can aim from before the pinch. */
-const trails = new Map<number, { x: number; y: number; at: number }[]>()
-/** When the fingers first closed, per hand — see PINCH_CONFIRM_MS. */
-const pinchSince = new Map<number, number>()
-/** When the finger pose last changed, per hand — see POSE_SETTLE_MS. */
-const poseChangedAt = new Map<number, number>()
+/** One trackpad per hand slot. Outlives the hand, so the cursor stays put while you reposition. */
+const pads = new Map<number, Trackpad>()
+/** When each slot last had a confident detection — see LOST_GRACE_MS. */
+const lastSeenAt = new Map<number, number>()
+/** When each hand was last pinching, so an open hand that has just let go of a drag is not read as a scroll. */
+const lastPinchAt = new Map<number, number>()
+
+function padFor(id: number, w: number, h: number): Trackpad {
+  let p = pads.get(id)
+  if (!p) {
+    p = new Trackpad(w, h)
+    pads.set(id, p)
+  }
+  return p
+}
+
+function confident(marks: { x: number; y: number }[], score: number | undefined): boolean {
+  if (score !== undefined && score < MIN_HAND_SCORE) return false
+  for (const k of [THUMB_TIP, INDEX_TIP, MIDDLE_TIP, INDEX_MCP, INDEX_PIP]) {
+    const m = marks[k]
+    if (m.x < FRAME_EDGE || m.x > 1 - FRAME_EDGE || m.y < FRAME_EDGE || m.y > 1 - FRAME_EDGE) return false
+  }
+  return true
+}
 
 function filtersFor(id: number): Filters {
   let f = filters.get(id)
@@ -382,32 +384,23 @@ function patchPointerCapture() {
 type Press = {
   /** What took the press, so the release and any click agree on their target. */
   captured: Element | null
-  wasPinched: boolean
-  /** Where the press began — for telling a click from a drag. */
-  downX: number
-  downY: number
+  /** What a scroll is applied to, latched at the pinch so it cannot wander. */
+  scrollEl: Element | null
+  /** A pointerdown has been sent and not yet closed. */
+  down: boolean
 }
 
 const presses = new Map<number, Press>()
 
-function fire(
-  el: Element | null,
-  type: string,
-  h: Hand,
-  pressed: boolean,
-  /** Defaults to the live cursor; the press passes its latched aim point. */
-  at?: { x: number; y: number },
-) {
+function fire(el: Element | null, type: string, h: Hand, pressed: boolean) {
   if (!el) return
-  const px = at?.x ?? h.x
-  const py = at?.y ?? h.y
   el.dispatchEvent(
     new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
       composed: true,
-      clientX: px,
-      clientY: py,
+      clientX: h.x,
+      clientY: h.y,
       // Well clear of any id the browser might issue for a real pointer.
       pointerId: 9000 + h.id,
       pointerType: 'touch',
@@ -421,69 +414,132 @@ function fire(
   )
 }
 
-function emit(h: Hand) {
+function mouse(el: Element, type: string, h: Hand, init: MouseEventInit = {}) {
+  return el.dispatchEvent(
+    new MouseEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: h.x, clientY: h.y, ...init }),
+  )
+}
+
+/** Bare background: the 3D scene or the page itself, nothing a click could mean. */
+function isEmptyArea(el: Element | null): boolean {
+  return !el || el.tagName === 'CANVAS' || el === document.body || el === document.documentElement || el.id === 'root'
+}
+
+function scrollableAncestor(el: Element | null): Element | null {
+  for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+    const s = getComputedStyle(n)
+    if (/(auto|scroll|overlay)/.test(s.overflowY + s.overflowX) && (n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1)) return n
+  }
+  return document.scrollingElement
+}
+
+/**
+ * Scroll by (dx, dy) px, positive meaning down/right.
+ *
+ * A synthetic wheel event does not scroll anything on its own, so it is offered
+ * to the page first (anything that handles wheels can claim it) and otherwise
+ * applied by hand: to a blade's article through the same message the blade's
+ * own palm scroll uses, else to the nearest scrollable ancestor. Never sent to
+ * the 3D scene, which would read a wheel as a zoom — zoom has its own twist.
+ */
+function scrollAt(el: Element | null, h: Hand, dx: number, dy: number) {
+  if (!el || el.tagName === 'CANVAS') return
+  if (!mouseWheel(el, h, { deltaX: dx, deltaY: dy })) return
+  const frame = el instanceof HTMLIFrameElement ? el : (el.closest('.bl-slot')?.querySelector('iframe') ?? null)
+  if (frame?.contentWindow) {
+    frame.contentWindow.postMessage({ jarvis: 'scroll', dy }, '*')
+    return
+  }
+  scrollableAncestor(el)?.scrollBy(dx, dy)
+}
+
+function mouseWheel(el: Element, h: Hand, init: WheelEventInit) {
+  return el.dispatchEvent(
+    new WheelEvent('wheel', { bubbles: true, cancelable: true, composed: true, clientX: h.x, clientY: h.y, deltaMode: 0, ...init }),
+  )
+}
+
+/** Zoom as a ctrl+wheel, the convention for pinch-zoom; the 3D scene's orbit controls read it. */
+function zoomAt(el: Element | null, h: Hand, amount: number) {
+  if (el) mouseWheel(el, h, { deltaY: -amount, ctrlKey: true })
+}
+
+function emit(h: Hand, out: TpOut, pad: Trackpad, now: number) {
   let p = presses.get(h.id)
   if (!p) {
-    p = { captured: null, wasPinched: false, downX: h.x, downY: h.y }
+    p = { captured: null, scrollEl: null, down: false }
     presses.set(h.id, p)
   }
-
   const over = document.elementFromPoint(h.x, h.y)
+  let sent = false
 
-  if (h.pinched && !p.wasPinched) {
-    /**
-     * Press, aimed from where the hand was before the fingers closed.
-     *
-     * The fingertip travels several centimetres on its way to meeting the
-     * thumb — that is what a pinch is — so the position at the instant the
-     * press fires is not the position you were aiming from. Hit-testing the
-     * live point made a press land below whatever you had pointed at, which is
-     * why grabbing a title bar worked only when you happened to pinch straight
-     * down onto it.
-     */
-    const aim = { x: h.aimX, y: h.aimY }
-    const target = document.elementFromPoint(aim.x, aim.y) ?? over
-    p.captured = target
-    p.downX = aim.x
-    p.downY = aim.y
-    fire(target, 'pointerdown', h, true, aim)
-  } else if (!h.pinched && p.wasPinched) {
-    const target = p.captured ?? over
-    fire(target, 'pointerup', h, false)
-    // Only a press that ends roughly where it began is a click. One that
-    // travelled was a drag, and a drag that also clicked would close the very
-    // blade it had just finished moving.
-    const travelled = Math.hypot(h.x - p.downX, h.y - p.downY)
-    if (target && travelled < CLICK_SLOP && target === over) {
-      target.dispatchEvent(
-        new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          clientX: h.x,
-          clientY: h.y,
-        }),
-      )
+  for (const ev of out.events) {
+    if (ev.t === 'down') {
+      sent = true
+      if (out.mode === 'scroll') {
+        p.scrollEl = over
+        continue
+      }
+      // The cursor is held still from the first closing of the fingers, so the
+      // press lands exactly where the cursor was drawn.
+      p.captured = over
+      p.down = true
+      fire(over, 'pointerdown', h, true)
+    } else if (ev.t === 'up') {
+      sent = true
+      const target = p.captured ?? over
+      if (p.down) fire(target, 'pointerup', h, false)
+      p.captured = null
+      p.down = false
+      p.scrollEl = null
+      if (ev.dragged || !ev.clicks) continue
+      // A second quick pinch on bare background (or in scroll mode, anywhere)
+      // flips the mode instead of double-clicking nothing.
+      if (ev.clicks === 2 && (out.mode === 'scroll' || isEmptyArea(over))) {
+        h.mode = pad.toggleMode(now)
+        h.flash = { kind: 'mode', at: now }
+        continue
+      }
+      if (out.mode === 'scroll' || !target || target !== over) continue
+      mouse(target, 'click', h, { detail: ev.clicks })
+      if (ev.clicks === 2) mouse(target, 'dblclick', h, { detail: 2 })
+      h.flash = { kind: ev.clicks === 2 ? 'double' : 'click', at: now }
+    } else if (ev.t === 'right') {
+      // Mouse events only: a touch pointerdown on a blade would grab it.
+      if (over) {
+        mouse(over, 'mousedown', h, { button: 2, buttons: 2 })
+        mouse(over, 'mouseup', h, { button: 2 })
+        mouse(over, 'contextmenu', h, { button: 2 })
+      }
+      h.flash = { kind: 'right', at: now }
+    } else {
+      h.mode = ev.mode
+      h.flash = { kind: 'mode', at: now }
     }
-    p.captured = null
-  } else {
-    // While pressed, moves go to whatever took the press, so a drag survives
-    // the cursor sliding off the header it grabbed.
-    fire(h.pinched ? (p.captured ?? over) : over, 'pointermove', h, h.pinched)
   }
 
-  p.wasPinched = h.pinched
+  if (out.scrollX || out.scrollY) scrollAt(p.scrollEl ?? over, h, -out.scrollX, -out.scrollY)
+  if (out.zoom) zoomAt(over, h, out.zoom)
+
+  // While pressed, moves go to whatever took the press, so a drag survives the
+  // cursor sliding off the header it grabbed. Scroll mode sends no pointer moves
+  // while pinched: it is not dragging anything.
+  if (!sent && !(out.mode === 'scroll' && out.pinch === 'index')) {
+    fire(p.down ? (p.captured ?? over) : over, 'pointermove', h, p.down)
+  }
 }
 
 /** Let go of anything still held. A press that outlives its hand leaves
  *  whatever was being dragged stuck to a cursor that no longer exists. */
 function releasePress(id: number, at: { x: number; y: number }) {
   const p = presses.get(id)
-  if (!p?.wasPinched) return
+  if (!p) return
+  p.scrollEl = null
+  if (!p.down) return
   const ghost = { id, x: at.x, y: at.y } as Hand
   fire(p.captured, 'pointerup', ghost, false)
   fire(p.captured, 'pointercancel', ghost, false)
-  p.wasPinched = false
+  p.down = false
   p.captured = null
 }
 
@@ -573,9 +629,9 @@ async function ensureModel() {
       baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
       runningMode: 'VIDEO',
       numHands: 2,
-      minHandDetectionConfidence: 0.5,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
+      minHandDetectionConfidence: 0.6,
+      minHandPresenceConfidence: 0.6,
+      minTrackingConfidence: 0.55,
     })
     diag.ready = true
     return landmarker
@@ -605,9 +661,8 @@ function dropHand(i: number) {
   filters.get(i)?.joints.forEach((f) => f.reset())
   settling.delete(i)
   sideVote.delete(i)
-  trails.delete(i)
-  pinchSince.delete(i)
-  poseChangedAt.delete(i)
+  pads.get(i)?.lost()
+  lastPinchAt.delete(i)
 }
 
 /**
@@ -648,6 +703,7 @@ function loop(mine: number) {
   for (let k = 0; k < found.length && k < 2; k++) {
     const marks = found[k]
     if (!marks || marks.length < 21) continue
+    if (!confident(marks, labels[k]?.[0]?.score)) continue
 
     /**
      * Which hand this is.
@@ -681,6 +737,7 @@ function loop(mine: number) {
     const reach = Math.hypot(w, h)
     const i = slotFor(side, wristPx, seen, reach)
     seen.add(i)
+    lastSeenAt.set(i, now)
 
     const f = filtersFor(i)
 
@@ -691,15 +748,16 @@ function loop(mine: number) {
     )
 
     const span = dist(points[WRIST], points[MIDDLE_MCP]) || 1
-    const gap = dist(points[THUMB_TIP], points[INDEX_TIP]) / span
+    const gapIndex = dist(points[THUMB_TIP], points[INDEX_TIP]) / span
+    const gapMiddle = dist(points[THUMB_TIP], points[MIDDLE_TIP]) / span
 
+    const pad = padFor(i, w, h)
     let hand = hands.find((q) => q.id === i)
     if (!hand) {
       hand = {
-        id: i, points,
-        x: points[INDEX_TIP].x, y: points[INDEX_TIP].y,
-        aimX: points[INDEX_TIP].x, aimY: points[INDEX_TIP].y,
-        pinched: false, closeness: 0, gesture: 'none',
+        id: i, points, x: pad.x, y: pad.y,
+        pinched: false, pinchKind: 'none', mode: pad.mode, cursor: 'moving', rightProgress: 0, flash: null,
+        closeness: 0, gesture: 'none',
         fingers: { thumb: false, index: false, middle: false, ring: false, pinky: false },
         handedness: side, span,  // replaced by the vote below on the same frame
       }
@@ -707,76 +765,6 @@ function loop(mine: number) {
     }
     hand.points = points
     hand.span = span
-
-    /**
-     * Hysteresis, then confirmation, then a settling window.
-     *
-     * Three filters rather than one because they catch different things. The
-     * hysteresis stops a held pinch flickering on the boundary. The
-     * confirmation stops a pinch that lasts a frame or two on the way between
-     * poses. The settling window stops one that arrives while the hand is still
-     * rearranging after a deliberate change of gesture. A press has to get past
-     * all three, and an intentional pinch does so without noticing they exist.
-     */
-    const wantsPinch = hand.pinched ? gap < PINCH_OFF : gap < PINCH_ON
-    if (wantsPinch && !hand.pinched) {
-      pinchSince.set(i, pinchSince.get(i) ?? now)
-    } else if (!wantsPinch) {
-      pinchSince.delete(i)
-    }
-    const held = pinchSince.get(i)
-    const settledLongEnough = now - (poseChangedAt.get(i) ?? 0) > POSE_SETTLE_MS
-    const pinched = hand.pinched
-      ? wantsPinch
-      : wantsPinch && held !== undefined && now - held >= PINCH_CONFIRM_MS && settledLongEnough
-    hand.closeness = Math.max(0, Math.min(1, 1 - (gap - PINCH_ON) / (PINCH_OFF - PINCH_ON)))
-
-    /**
-     * Where the cursor sits: the index fingertip, and nothing else.
-     *
-     * It used to blend toward the midpoint between thumb and finger as the
-     * pinch closed, on the theory that the midpoint is what you are "really"
-     * aiming when you pinch. That was wrong, and wrong in the most annoying
-     * possible way: the cursor slid away from the target during the act of
-     * pressing it, so a press aimed at a title bar landed a centimetre below —
-     * sometimes on the blade, sometimes on nothing. It is a pointer that moves
-     * while you click, which no pointer may do.
-     */
-    const tip = points[INDEX_TIP]
-    const aimed = f.cursor.filter(tip.x, tip.y, at)
-    hand.x = aimed.x
-    hand.y = aimed.y
-
-    /**
-     * What the press is aimed at: where the cursor was a moment ago.
-     *
-     * This used to latch the position only while `closeness < 0.35`, which
-     * sounded like "while the hand is open" and is not. Closeness is measured
-     * against the pinch thresholds, so that condition demanded thumb and finger
-     * more than half a hand-span apart — further than anyone holds a hand they
-     * are pointing with. The aim point therefore froze at wherever the hand was
-     * FIRST seen and never moved again, so every pinch pressed at a stale point
-     * somewhere across the screen. Nothing could be focused, grabbed or closed.
-     *
-     * A trail has no such cliff: it always records, and the press simply reads
-     * back AIM_LAG_MS, which is the distance a fingertip covers on its way to
-     * meeting the thumb.
-     */
-    const trail = trails.get(i) ?? []
-    trail.push({ x: aimed.x, y: aimed.y, at: now })
-    while (trail.length > 1 && now - trail[0].at > TRAIL_MS) trail.shift()
-    trails.set(i, trail)
-
-    if (!pinched) {
-      const want = now - AIM_LAG_MS
-      // The newest sample that is still old enough; the oldest we have if the
-      // hand has only just appeared.
-      let pick = trail[0]
-      for (const p of trail) if (p.at <= want) pick = p
-      hand.aimX = pick.x
-      hand.aimY = pick.y
-    }
-    hand.pinched = pinched
 
     hand.fingers = {
       // The thumb never straightens the way the fingers do, so it is measured
@@ -788,20 +776,62 @@ function loop(mine: number) {
       ring: isExtended(points, RING_TIP, RING_PIP),
       pinky: isExtended(points, PINKY_TIP, PINKY_PIP),
     }
+
+    /**
+     * What drives the cursor: the middle of the index finger's base, not its tip.
+     *
+     * Only the movement of this point is used, so it never has to sit under the
+     * finger. It is chosen because it barely moves when the fingers close —
+     * a tip moves several centimetres on its way to the thumb, which is what
+     * made the old absolute cursor slide off its target while pressing it. The
+     * 1€ filter runs on the raw point; the skeleton's own smoothing on top of
+     * that would only add lag.
+     */
+    const anchor = f.cursor.filter(
+      (1 - (marks[INDEX_MCP].x + marks[INDEX_PIP].x) / 2) * w,
+      ((marks[INDEX_MCP].y + marks[INDEX_PIP].y) / 2) * h,
+      at,
+    )
+    const spread = hand.cursor === 'clutch' ? OPEN_GAP_OFF : OPEN_GAP_ON
+    const open = classify(hand.fingers, false) === 'open' && gapIndex > spread
+
+    /**
+     * Hysteresis, confirmation, settling and the trackpad rules all live in the
+     * pad; this is only the measurement going in and the decisions coming out.
+     */
+    const out = pad.step({
+      now, ax: anchor.x, ay: anchor.y, span, gapIndex, gapMiddle, open,
+      roll: Math.atan2(points[MIDDLE_MCP].y - points[WRIST].y, points[MIDDLE_MCP].x - points[WRIST].x),
+      vw: w, vh: h,
+    })
+    hand.x = out.x
+    hand.y = out.y
+    hand.pinchKind = out.pinch
+    hand.pinched = out.pinch === 'index'
+    hand.mode = out.mode
+    hand.cursor = out.state
+    hand.rightProgress = out.rightProgress
+    hand.closeness = Math.max(0, Math.min(1, 1 - (gapIndex - PINCH_ON) / (PINCH_OFF - PINCH_ON)))
+    if (hand.pinched) lastPinchAt.set(i, now)
+
     const wasGesture = hand.gesture
-    hand.gesture = stableGesture(i, classify(hand.fingers, pinched), now)
+    hand.gesture = stableGesture(i, classify(hand.fingers, hand.pinched), now)
     // A change of pose starts the settling window. Pinch is not counted: it is
     // the thing being protected, not a transition to recover from.
     if (hand.gesture !== wasGesture && hand.gesture !== 'pinch' && wasGesture !== 'pinch') {
-      poseChangedAt.set(i, now)
+      pad.noteTransition(now)
     }
     hand.handedness = votedSide(i, side)
 
-    emit(hand)
+    emit(hand, out, pad, now)
   }
 
   // Anything not seen this frame has left the picture.
-  for (const id of [0, 1]) if (!seen.has(id)) dropHand(id)
+  // A frame that fails the gate is not the end of a hand: it has to stay gone
+  // for LOST_GRACE_MS before whatever it was holding is let go.
+  for (const id of [0, 1]) {
+    if (!seen.has(id) && now - (lastSeenAt.get(id) ?? 0) > LOST_GRACE_MS) dropHand(id)
+  }
 
   diag.gesture = hands
     .map((q) => `${q.handedness === 'right' ? 'R' : 'L'}:${q.gesture}`)
@@ -840,8 +870,16 @@ export async function enableHands(): Promise<void> {
      * whichever started last blinded the other, and the symptom appeared in the
      * feature that had done nothing wrong.
      */
-    video = await holdCamera()
+    const stream = await holdCamera()
+    // Switched off while the camera or model was still starting: give the hold
+    // straight back instead of leaving a camera on that nothing is using.
+    if (mine !== generation) {
+      releaseCamera()
+      return
+    }
+    video = stream
     await ensureModel()
+    if (mine !== generation) return
 
     running = true
     diag.enabled = true
@@ -868,9 +906,10 @@ export function disableHands(): void {
   filters.clear()
   settling.clear()
   sideVote.clear()
-  trails.clear()
-  pinchSince.clear()
-  poseChangedAt.clear()
+  pads.clear()
+  lastSeenAt.clear()
+  lastPinchAt.clear()
+  palmFrom = null
   // Give the hold back rather than tearing the stream down: the camera blade
   // may still be showing it, and stopping the tracks would blank it.
   if (video) {
@@ -949,5 +988,57 @@ export function peaceScroll(): number | null {
   }
   return hand.y - peaceFrom.y
 }
+
+/** Vertical wobble of a resting palm that must not scroll, in pixels. */
+const PALM_DEAD_BAND = 14
+/** After letting go of a pinch, an open hand is not a scroll for this long. */
+const PALM_AFTER_PINCH_MS = 600
+
+let palmFrom: { id: number; y: number; anchor: number } | null = null
+
+/**
+ * An open palm moved up or down — how far the anchor has been dragged.
+ *
+ * Only counts while the palm is inside `inside` (the front blade's box), so a
+ * hand held open elsewhere on screen never scrolls anything, and not just after
+ * releasing a drag. The anchor trails the palm by a dead band: jitter inside
+ * the band gives nothing, and movement past it carries the anchor along, so a
+ * long scroll is not limited by how far the hand can travel.
+ *
+ * Returns null when nobody is holding the pose over the box, like peaceScroll.
+ */
+export function palmScroll(inside: DOMRect | null): number | null {
+  const now = performance.now()
+  const hand = hands.find(
+    (h) =>
+      h.gesture === 'open' &&
+      !h.pinched &&
+      now - (lastPinchAt.get(h.id) ?? -Infinity) > PALM_AFTER_PINCH_MS &&
+      h.points.length >= 21,
+  )
+  if (!hand || !inside) {
+    palmFrom = null
+    return null
+  }
+  // Centre of the palm: wrist plus the four knuckles, steadier than any fingertip.
+  const ys = [0, 5, 9, 13, 17].map((k) => hand.points[k])
+  const cx = ys.reduce((a, p) => a + p.x, 0) / ys.length
+  const cy = ys.reduce((a, p) => a + p.y, 0) / ys.length
+  if (cx < inside.left || cx > inside.right || cy < inside.top || cy > inside.bottom) {
+    palmFrom = null
+    return null
+  }
+  if (!palmFrom || palmFrom.id !== hand.id) {
+    palmFrom = { id: hand.id, y: cy, anchor: cy }
+    return 0
+  }
+  const off = cy - palmFrom.anchor
+  if (off > PALM_DEAD_BAND) palmFrom.anchor = cy - PALM_DEAD_BAND
+  else if (off < -PALM_DEAD_BAND) palmFrom.anchor = cy + PALM_DEAD_BAND
+  return palmFrom.anchor - palmFrom.y
+}
+
+/** Scroll mode on any hand, for the indicator. */
+export const padMode = (): PadMode => ([...pads.values()].some((p) => p.mode === 'scroll') ? 'scroll' : 'move')
 
 export const handsRunning = () => running

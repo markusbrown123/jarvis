@@ -288,7 +288,7 @@ export function upsertItem(patch, { fromSource = true } = {}) {
   let next = { ...(prev ?? { createdAt: now, state: 'open', priority: 'P2' }), ...patch, updatedAt: now }
   if (patch.state && !ITEM_STATES.has(patch.state)) return false
   if (fromSource && prev && !patch.state) next.state = prev.state
-  if (fromSource && prev && patch.state === 'open' && ['snoozed', 'in_progress', 'verifying'].includes(prev.state)) {
+  if (fromSource && prev && patch.state === 'open' && ['snoozed', 'in_progress', 'verifying', 'resolved', 'canceled'].includes(prev.state)) {
     next.state = prev.state
   }
   if (prev?.state === 'snoozed' && prev.snoozedUntil && prev.snoozedUntil < now) next.state = 'open'

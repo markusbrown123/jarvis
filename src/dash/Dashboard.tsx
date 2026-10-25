@@ -7,6 +7,7 @@ import { Blades } from '../ui/Blades'
 import { Effects } from '../ui/Effects'
 import { Pointer } from '../ui/Pointer'
 import { GestureGuide } from '../ui/GestureGuide'
+import { HandsToggle } from '../ui/HandsToggle'
 import { Diagnostics } from '../ui/Diagnostics'
 import { Intro, SoundLockHint } from '../ui/Intro'
 import { Overview } from './Overview'
@@ -44,7 +45,6 @@ function TopBar() {
   const setPalette = useHub((s) => s.setPalette)
   const st = inputState()
   const voice = useStore((s) => s.voice)
-  const gestures = useStore((s) => s.gestures)
   const looking = useStore((s) => s.looking)
   const model = useHub((s) => s.state?.usage.statusLine?.model)
   return (
@@ -58,7 +58,7 @@ function TopBar() {
       </div>
       <div className="topbar-mid">
         <span className="crumb">{NAV.find((n) => n.id === view)?.label}</span>
-        {(gestures || looking) && <span className="state-pill state-busy">{looking ? `Camera: ${looking}` : 'Camera on · G to stop'}</span>}
+        {looking ? <span className="state-pill state-busy">{`Camera: ${looking}`}</span> : <HandsToggle />}
       </div>
       <div className="topbar-right">
         <span className={`link-dot link-${link}`} title={link === 'live' ? 'Command center connected' : link === 'down' ? 'Command center disconnected — showing the last state' : 'Connecting'} />

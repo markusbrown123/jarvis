@@ -101,6 +101,11 @@ export function ItemCard({ item, full = false }: { item: Item; full?: boolean })
             </button>
           ),
         )}
+        {item.state !== 'resolved' && (
+          <button className="btn btn-primary" disabled={busy} onClick={() => act(() => hubActions.doneItem(item.id), 'Done')}>
+            Done
+          </button>
+        )}
         {item.state === 'open' && (
           <button className="btn btn-quiet" onClick={() => act(() => hubActions.startItem(item.id), 'Marked in progress')}>
             I’m on it
