@@ -59,6 +59,14 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
   const running = new Map()
   const recentStarts = []
 
+  // A job of ours still marked running from before a restart (jarvis update,
+  // restart, a reboot) can't be: its session went with the old bridge. Left
+  // as it was, it would read "running" for good and hold the autopilot up.
+  for (const j of Object.values(hub.snapshot().jobs)) {
+    if (j.worker === 'JARVIS background agent' && ['running', 'cancel_requested'].includes(j.state))
+      hub.upsertJob({ id: j.id, state: j.state === 'cancel_requested' ? 'canceled' : 'failed', stage: 'stopped: JARVIS restarted mid-run', updatedAt: Date.now() })
+  }
+
   /** `onDone(output)` is called with the job's final text when it finishes properly. */
   function start({ title, project = 'other', instructions, notify = null, onDone = null, autopilot = false }) {
     const live = [...running.keys()].filter((id) => hub.getJob(id)?.state === 'running').length

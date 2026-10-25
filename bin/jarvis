@@ -269,28 +269,35 @@ behind() {
   git -C "$DIR" rev-list --count "HEAD..origin/$branch" 2>/dev/null
 }
 
-# The newest version of this branch: pull it, install what changed, restart.
-# Never over local changes (JARVIS's or yours) — those are shown, not lost.
-# Files git doesn't track (.env, backups/) don't count: they can't be lost by
-# moving forward, and if the update brings a file of the same name git stops.
+# The newest version of this branch: bring it in, install what changed, restart.
+# Nothing here is lost on the way. Changes not committed yet (a note you added
+# to a project's brief, an edit JARVIS made to himself) are set aside and put
+# back on top; commits made here that GitHub doesn't have yet (a run of his
+# whose push was refused) are replayed on top of the new version. If that
+# can't be done cleanly, it stops and puts everything back as it was.
 update() {
   cd "$DIR" || return 1
-  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-    echo "There are changes here that aren't committed (JARVIS's or yours):"
-    git status --short --untracked-files=no | head -20
-    echo "Keep them with git stash (or commit them), then run jarvis update again."
-    return 1
-  fi
-  local branch n
+  local branch n mine dirty
   branch="$(git rev-parse --abbrev-ref HEAD)"
   n="$(behind)"
   if [ -z "$n" ]; then echo "Couldn't reach GitHub to check for updates."; return 1; fi
   if [ "$n" = 0 ]; then echo "Already up to date ($branch)."; return 0; fi
   echo "$n new change(s) on $branch:"
   git log --format='  %s' "HEAD..origin/$branch" | head -20
-  if ! git merge -q --ff-only "origin/$branch"; then
-    echo "Couldn't move forward cleanly (git says why above). Sort that out, or run: git pull"
+  mine="$(git rev-list --count "origin/$branch..HEAD" 2>/dev/null)"
+  dirty="$(git status --porcelain --untracked-files=no)"
+  if [ -n "$dirty" ]; then
+    echo "Keeping the changes here that aren't committed yet (put back on top):"
+    printf '%s\n' "$dirty" | head -10
+  fi
+  [ "${mine:-0}" != 0 ] && echo "Keeping $mine commit(s) made here that GitHub doesn't have yet (replayed on top)."
+  if ! git -c rebase.autoStash=true rebase -q "origin/$branch"; then
+    git rebase --abort >/dev/null 2>&1
+    echo "Couldn't bring it in cleanly (git says why above); everything is as it was. Ask Claude, or run: git status"
     return 1
+  fi
+  if git stash list | head -1 | grep -q "autostash"; then
+    echo "Your uncommitted changes clashed with the update: they're kept safe in git stash (git stash list)."
   fi
   if ready; then
     echo "Restarting JARVIS on the new version..."

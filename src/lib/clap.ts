@@ -61,7 +61,8 @@ const LEVELS = `registerProcessor('clap-level', class extends AudioWorkletProces
   }
 })`
 
-export type ClapListener = { stop: () => void }
+/** `listening` is false when it couldn't start (no microphone, no audio worklet): stop is then a no-op. */
+export type ClapListener = { stop: () => void; listening: boolean }
 
 export const diag = {
   listening: false,
@@ -92,7 +93,7 @@ export async function listenForClap(onClap: () => void, { minPeak = MIN_PEAK }: 
     stream = await getMic()
   } catch {
     diag.rejected = 'microphone unavailable'
-    return { stop: () => {} }
+    return { stop: () => {}, listening: false }
   }
 
   const ctx = new AudioContext()
@@ -107,7 +108,7 @@ export async function listenForClap(onClap: () => void, { minPeak = MIN_PEAK }: 
     // No audio worklets (an old browser, or a page that isn't a secure origin).
     diag.rejected = 'no audio worklet'
     void ctx.close()
-    return { stop: () => {} }
+    return { stop: () => {}, listening: false }
   } finally {
     URL.revokeObjectURL(url)
   }
@@ -184,6 +185,7 @@ export async function listenForClap(onClap: () => void, { minPeak = MIN_PEAK }: 
   diag.listening = true
 
   return {
+    listening: true,
     stop: () => {
       stopped = true
       diag.listening = false

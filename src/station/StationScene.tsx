@@ -322,7 +322,9 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       </ConsoleGuard>
       <Links />
       <Clusters />
-      <ProjectPads />
+      <ConsoleGuard what="project pads">
+        <ProjectPads />
+      </ConsoleGuard>
       <Foundry />
       <ConsoleGuard what="drones">
         <Suspense fallback={null}>

@@ -1009,7 +1009,7 @@ const hubApi = startHub({ runner, phone, code })
 // Cloud builds of JARVIS himself: watch the issues he filed (builds.mjs).
 startBuilds()
 startReview({ runner })
-startAutopilot({ runner })
+startAutopilot({ runner, writes: ALLOW_WRITES })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin

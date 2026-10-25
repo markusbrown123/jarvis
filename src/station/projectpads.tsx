@@ -68,8 +68,14 @@ function emblem(id: ProjectPadId) {
     g.lineTo(72, 106)
     g.stroke()
   } else if (id === 'youtube') {
+    // A rounded box by hand: roundRect is missing on older Safari.
     g.beginPath()
-    g.roundRect(14, 30, 100, 68, 18)
+    g.moveTo(32, 30)
+    g.arcTo(114, 30, 114, 98, 18)
+    g.arcTo(114, 98, 14, 98, 18)
+    g.arcTo(14, 98, 14, 30, 18)
+    g.arcTo(14, 30, 114, 30, 18)
+    g.closePath()
     g.stroke()
     g.beginPath()
     g.moveTo(54, 46)
@@ -110,7 +116,7 @@ function Wing({ pad }: { pad: ProjectPad }) {
   )
   useEffect(() => () => levels.forEach((l) => (l.geo.dispose(), l.edges.dispose())), [levels])
   const base = useMemo(() => {
-    const g = new THREE.LatheGeometry(
+    return new THREE.LatheGeometry(
       [
         [0, 0],
         [PROJECT_PAD, 0],
@@ -120,8 +126,8 @@ function Wing({ pad }: { pad: ProjectPad }) {
       ].map(([x, y]) => new THREE.Vector2(x, y)),
       96,
     )
-    return g
   }, [])
+  useEffect(() => () => base.dispose(), [base])
   const color = useMemo(() => new THREE.Color(pad.color), [pad.color])
   const mats = useMemo(
     () => ({

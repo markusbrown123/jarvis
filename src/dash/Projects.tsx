@@ -56,14 +56,17 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const say = useHub((x) => x.say)
+  /** Whether it went through: a note is only cleared once it's saved. */
   const act = async (f: () => Promise<unknown>, done: string) => {
     setBusy(true)
     try {
       await f()
       say(done)
       onChange()
+      return true
     } catch (err) {
       say((err as Error).message)
+      return false
     } finally {
       setBusy(false)
     }
@@ -122,7 +125,7 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
         onSubmit={(e) => {
           e.preventDefault()
           if (!note.trim()) return
-          void act(() => hubActions.projectNote(s.project, note), 'Noted in the brief').then(() => setNote(''))
+          void act(() => hubActions.projectNote(s.project, note), 'Noted in the brief').then((ok) => ok && setNote(''))
         }}
       >
         <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Tell JARVIS something about it (a choice, an answer)…" aria-label={`Note for ${s.name}`} />

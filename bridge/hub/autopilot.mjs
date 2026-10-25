@@ -14,7 +14,7 @@
  * its brief (note), so the next run has it.
  *
  * On its own it takes one project at a time, round-robin, a run starting at
- * least GAP after the last one finished (JARVIS_AUTOPILOT_GAP_MIN, default 120), never while three jobs are going,
+ * least GAP after the last one finished (JARVIS_AUTOPILOT_GAP_MIN, default 120), never while two jobs are going,
  * and not while the 5-hour allowance is past 70%. Each project can be
  * paused; JARVIS_NO_AUTOPILOT=1 turns the whole thing off. Every run, and
  * every result, shows on the Projects page and in Jobs.
@@ -46,14 +46,40 @@ const running = (project) => jobsOf(project).some((j) => j.state === 'running' |
 /** What's waiting on Markus for this project (open, from these runs). */
 const waiting = (project) => Object.values(hub.snapshot().items).filter((i) => i.id.startsWith(`${project}:need:`) && !['resolved', 'canceled'].includes(i.state))
 
+/** Take the "(waiting on Markus)" marks off a project's milestones, so runs look at them again. */
+function clearWaiting(project) {
+  const file = join(baseDir(project), 'BRIEF.md')
+  const body = readFileSync(file, 'utf8')
+  const fresh = body.replace(/ *\(waiting on Markus\) *$/gim, '')
+  if (fresh !== body) writeFileSync(file, fresh)
+}
+
+/**
+ * One of a project's needs done since last time (marked Done, answered,
+ * resolved — however it went): whatever there was waiting on Markus is worth
+ * another look, and the project isn't stuck any more.
+ */
+function settle(project) {
+  const open = waiting(project).map((i) => i.id)
+  const before = saved.openNeeds?.[project]
+  if (before && before.length === open.length && before.every((id) => open.includes(id))) return
+  saved.openNeeds = { ...saved.openNeeds, [project]: open }
+  if (before?.some((id) => !open.includes(id))) {
+    clearWaiting(project)
+    saved.blocked[project] = false
+  }
+  save()
+}
+
 /**
  * The milestone a run takes next: the first unticked one, passing over any a
- * run marked as waiting on Markus while he still has that project's needs
- * open — so one thing only he can give doesn't hold up the rest.
+ * run marked as waiting on Markus — so one thing only he can give doesn't
+ * hold up the rest. The marks come off when he answers (note) or one of the
+ * project's needs is done (settle).
  */
 function nextFor(project) {
-  const held = waiting(project).length > 0
-  return milestones(streamOf(project).id).find((m) => !m.done && !(m.waiting && held)) ?? null
+  settle(project)
+  return milestones(streamOf(project).id).find((m) => !m.done && !m.waiting) ?? null
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -67,7 +93,7 @@ Do this milestone: "${next}". Do the real work — write the files, scripts or d
 
 When you've finished or gone as far as you can:
 1. In BRIEF.md tick the milestone if it's done ("- [x]"). If it can't go further without Markus, leave it unticked and end its line with "${WAITING}" — the next run takes the next milestone instead of coming back to it until he's answered. Add any next steps you now see as unticked "- [ ]" items under First milestones, and replace the line under "## Status" with one line on where it stands, dated ${today()}.
-2. Save it — with the folder's full path, since a \`cd\` in one command carries into the next: \`git -C "${dir}" add .\`, then \`git -C "${dir}" commit -m "${s.id}: <what you did>"\`, then \`git -C "${dir}" pull --rebase\` and \`git -C "${dir}" push\`. Only this folder; never push to main, never force-push. If the push fails, say so.
+2. Save it — with the folder's full path, since a \`cd\` in one command carries into the next: \`git -C "${dir}" add .\`, then \`git -C "${dir}" commit -m "${s.id}: <what you did>" -- .\` (the \`-- .\` keeps the commit to this folder). Then, unless \`git -C "${dir}" rev-parse --abbrev-ref HEAD\` says main, \`git -C "${dir}" push\`. Don't pull, never push to main, never force-push. If the push is refused (GitHub has newer work), leave the commit here and say so: \`jarvis update\` brings the two together.
 3. End with a short plain summary for Markus: what you did, and what's next.
 4. Then, for each thing only Markus can do, one line exactly: "NEED: <short title> :: <what he needs to do, and why>".
 5. If none of the milestones left can move without him — this one or any later one — a last line: "BLOCKED".
@@ -75,9 +101,12 @@ When you've finished or gone as far as you can:
 Never post, publish, upload, send messages or email, sign up for anything or pay. Keep to the brief's rules.`
 
 /** What a run handed back: its NEED lines go on the Needs list. */
-function takeResult(project, output) {
+function takeResult(project, output, startedAt) {
   const s = streamOf(project)
-  saved.blocked[project] = /^\s*BLOCKED\s*$/m.test(output)
+  // BLOCKED was worked out before any answer Markus gave while it ran: that answer stands.
+  const answered = (saved.noteAt?.[project] ?? 0) > startedAt
+  saved.blocked[project] = /^\s*BLOCKED\s*$/m.test(output) && !answered
+  if (answered) clearWaiting(project)
   save()
   for (const [, title, what] of output.matchAll(/^\s*NEED:\s*(.+?)\s*::\s*(.+)$/gm)) {
     hub.upsertItem({
@@ -104,13 +133,14 @@ export function work(project, { runner, by = 'markus' } = {}) {
       started: false,
       why: milestones(s.id).some((m) => !m.done) ? `Everything left in ${s.name}'s brief is waiting on you (see Needs).` : `Every milestone in ${s.name}'s brief is done; add the next ones to it.`,
     }
+  const startedAt = Date.now()
   const { id } = runner.start({
     title: `${s.name}: ${next.text}`.slice(0, 120),
     project,
     instructions: BRIEF(s, next.text),
     notify: 'phone',
     autopilot: true,
-    onDone: (output) => takeResult(project, output),
+    onDone: (output) => takeResult(project, output, startedAt),
   })
   saved.lastAt[project] = Date.now()
   save()
@@ -124,13 +154,15 @@ export function note(project, text) {
   if (!s || !BASE_PROJECTS.includes(project)) throw new Error(`${project} has no base to note it in.`)
   const file = join(baseDir(project), 'BRIEF.md')
   const body = readFileSync(file, 'utf8')
-  const line = `- ${today()}: ${String(text).trim().slice(0, 1000)}`
+  // One line, so nothing in it can read as a heading or a milestone.
+  const line = `- ${today()}: ${String(text).replace(/\s+/g, ' ').trim().slice(0, 1000)}`
   // An answer from him may be what a milestone was waiting on: they're all worth another look.
-  const fresh = body.replace(/ *\(waiting on Markus\) *$/gim, '')
+  const fresh = body.replace(/ *\(waiting on Markus\) *$/gim, '').replace(/\n*$/, '\n')
   if (/^## From Markus$/m.test(fresh)) writeFileSync(file, fresh.replace(/^## From Markus\n/m, `## From Markus\n${line}\n`))
   else writeFileSync(file, `${fresh.replace(/\n*$/, '\n')}\n## From Markus\n${line}\n`)
-  // An answer from him: worth another run even if the last one was stuck.
+  // An answer from him: worth another run even if the last one was stuck (or ends stuck while this is new).
   saved.blocked[project] = false
+  saved.noteAt = { ...saved.noteAt, [project]: Date.now() }
   save()
   return line
 }
@@ -151,8 +183,9 @@ export function status() {
   )
 }
 
-export function start({ runner }) {
-  if (process.env.JARVIS_NO_AUTOPILOT) return
+export function start({ runner, writes = true }) {
+  // Read-only (jarvis --safe), a run could plan but not save anything: not worth an allowance on its own.
+  if (process.env.JARVIS_NO_AUTOPILOT || !writes) return
   const tick = () => {
     try {
       const jobs = Object.values(hub.snapshot().jobs)
