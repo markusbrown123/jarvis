@@ -20,11 +20,13 @@ Everything lands in `out/<listing_id>/`, which is git-ignored. So are
 | `motion.py` | shot plan | one clip per shot + `manifest.json` with billed seconds and cost. `--backend kenburns` is free and offline. |
 | `edit.py` | shot plan + clips | `walkthrough-16x9.mp4`, `walkthrough-9x16.mp4`, `thumbnail.jpg`. Trims model clips back to planned length. |
 | `qc.py` | shot plan + clips | `qc.json`: opening SSIM vs the source photo, drift, motion-spike ratio. |
-| `compare.py` | listing | all of the above per backend, plus side-by-side videos and `scorecard.md`. |
+| `compare.py` | listing | all of the above per backend, plus side-by-side videos and `scorecard.md`. `--shots 3 5 7` runs a cheap trial on a few shots; `--max-spend 4` caps the dollars. Finished shots are never re-paid. |
+| `review.py` | a `compare.py` output folder | `review/shot-NN.jpg` (source photo + frames across each model's clip) and `review/review.md`, the eyes-on checklist. `compare.py` calls it. |
+| `preflight.py` | listing + photo folder | Checks tools, keys and photos, prices a trial and a full run, prints the commands. Spends nothing. |
 
 ## Keys
 
-Read from the environment only, never from a file here:
+Read from the environment, else the macOS Keychain (generic password whose service is the variable name, e.g. `security add-generic-password -s FAL_KEY -a $USER -w`), never from a file here:
 
 - `FAL_KEY` — Seedance, Kling (`fal:*` backends)
 - `RUNWAYML_API_SECRET` — Runway (`runway:*` backends)

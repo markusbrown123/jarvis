@@ -24,6 +24,7 @@ import sys
 import edit
 import motion
 import qc
+import review
 import shotplan
 
 DEFAULT_BACKENDS = ["kenburns", "fal:seedance-2-fast", "fal:kling-3-pro",
@@ -106,11 +107,14 @@ def scorecard(plan: dict, entries: list[dict], outdir: pathlib.Path,
           f"{m['billed_total_s']:.0f}s{extra} | "
           f"${m['cost_usd']:.2f} | {delta} |")
     A("")
-    A("The fixed clip length is the thing to notice. A 30-second walkthrough "
-      "from 10 photos wants shots of about three seconds. Models that only "
-      "generate 5s or 10s clips bill 50s for those 30s — two thirds of the "
-      "spend is footage the edit trims off. Either pay it, or cut the "
-      "walkthrough to six 5-second shots instead of ten 3-second ones.")
+    A("Each model has a shortest clip it will generate (Seedance 4s, Kling "
+      "3s, Runway 2s) and bills whole seconds, so a plan with shots shorter "
+      "than that pays for footage the edit trims off. Shot lengths that "
+      "land on whole seconds at or above the minimum cost nothing extra.")
+    if plan.get("subset"):
+        A("")
+        A(f"*Trial run: shots {plan['subset']} only, not the full "
+          f"walkthrough. Costs below are for those shots.*")
     A("")
 
     A("## Quality")
@@ -184,6 +188,12 @@ def main() -> int:
     ap.add_argument("--backends", nargs="+", default=DEFAULT_BACKENDS)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--compare-shots", nargs="*", type=int, default=[3, 5])
+    ap.add_argument("--shots", nargs="+", type=int, default=None,
+                    help="only these shot numbers (a cheap trial of the paid "
+                         "models, e.g. --shots 3 5 7)")
+    ap.add_argument("--max-spend", type=float, default=None,
+                    help="dollars; no hosted backend pays for more than this "
+                         "in one run")
     args = ap.parse_args()
 
     if not shutil.which("ffmpeg"):
@@ -196,6 +206,12 @@ def main() -> int:
 
     print("shot plan")
     plan = shotplan.build(listing, pathlib.Path(args.photos))
+    if args.shots:
+        plan["shots"] = [s for s in plan["shots"] if s["index"] in args.shots]
+        plan["shot_count"] = len(plan["shots"])
+        plan["planned_duration_s"] = round(
+            sum(s["duration_s"] for s in plan["shots"]), 2)
+        plan["subset"] = sorted(args.shots)
     (outdir / "shotplan.json").write_text(json.dumps(plan, indent=2) + "\n")
     print(f"  {plan['shot_count']} shots, {plan['planned_duration_s']}s\n")
 
@@ -204,13 +220,16 @@ def main() -> int:
         mdl = motion.MODELS[backend]
         print(f"{mdl['label']}  [{backend}]")
         shot_dir = outdir / f"shots-{slug(backend)}"
-        manifest = motion.run(plan, backend, shot_dir, args.dry_run)
+        manifest = motion.run(plan, backend, shot_dir, args.dry_run,
+                              max_spend=args.max_spend)
 
         entry = {"backend": backend, "label": mdl["label"],
                  "shot_dir": str(shot_dir), "manifest": manifest}
         if not manifest["simulated"]:
             entry["edit"] = edit.build(plan, shot_dir, outdir / slug(backend))
             entry["qc"] = qc.run(plan, shot_dir)
+            if entry["edit"].get("ok") or entry["qc"]["measured"]:
+                review.strips(plan, entries + [entry], outdir)
         else:
             entry["edit"] = {"ok": False, "reason": "simulated, no clips"}
         entries.append(entry)

@@ -11,12 +11,12 @@ brief's first rule is that the property is shown as it is.
 Four backends are wired up in `motion.py`. Three are paid models; the
 fourth is the control.
 
-| Backend | Model | $/s | Clip lengths | Why it's on the list |
+| Backend | Model | $/s | Clip lengths (whole seconds) | Why it's on the list |
 |---|---|---:|---|---|
 | `kenburns` | ffmpeg `zoompan` | 0.00 | any | The control. Pan and zoom on the real photo. Cannot invent anything, costs nothing, runs offline. |
-| `runway:gen4-turbo` | Runway Gen-4 Turbo | 0.05 | 5s or 10s | Cheapest per second of the three. |
-| `fal:kling-3-pro` | Kling 3.0 Pro (1080p) | 0.112 | 5s or 10s | Cheap, 1080p, start/end-frame control. |
-| `fal:seedance-2-fast` | Seedance 2.0 Fast (720p) | 0.2419 | 3–12s | The one generally recommended for animating a *given* photo without restyling it; also the only one that can generate a 3s clip, which matters more than the headline price (below). |
+| `runway:gen4-turbo` | Runway Gen-4 Turbo | 0.05 | 2–10s | Cheapest per second and the shortest minimum clip. |
+| `fal:kling-3-pro` | Kling 3.0 Pro (1080p) | 0.112 | 3–15s | Cheap, 1080p, start/end-frame control. $0.168/s with audio on, which is the API default, so the request switches it off. |
+| `fal:seedance-2-fast` | Seedance 2.0 Fast (720p) | 0.2419 | 4–15s | The one generally recommended for animating a *given* photo without restyling it. Most expensive, and its 4s minimum pushes a ten-shot plan to 40s. |
 
 Also looked at and left out for now:
 
@@ -29,41 +29,37 @@ Also looked at and left out for now:
 - **Runway Gen-4.5** — $0.12/s, the flagship; same 5s/10s constraint as
   Turbo. The upgrade path from Turbo if Turbo's quality isn't there.
 
-## The thing that actually drives cost: fixed clip lengths
+## The thing that actually drives cost: the shortest clip
 
-A 30-second walkthrough from 10 photos wants shots of roughly three
-seconds. Most of these models do not generate three-second clips. Runway
-and Kling generate 5s or 10s, full stop — so ten shots bill **50 seconds**
-to produce 30 seconds of finished video. Two thirds of what you pay for is
-trimmed off in the edit.
+*Corrected 2026-10-25.* Earlier drafts of this file, from the public
+round-ups, said Runway and Kling only generate 5s or 10s clips and Seedance
+3-12s. The vendors' own schemas say otherwise: Runway Gen-4 Turbo takes any
+whole second 2-10 (changelog, 8 Oct 2025); Kling 3.0 Pro takes 3-15 and
+Seedance 2.0 Fast 4-15 (fal's OpenAPI schemas, which list `duration` as a
+string enum). So the "two thirds of the spend is thrown away" finding was
+wrong. The remaining waste is rounding up to whole seconds and Seedance's
+4s floor.
 
-What that does to a listing, at today's prices (`compare.py` computes this
-for whatever plan you give it):
+A 30-second plan of ten shots (2.7-3.3s each, rounded up), at today's
+prices (`compare.py` / `preflight.py` compute this for any plan):
 
 | Backend | Billed | Wasted | Cost per listing |
 |---|---:|---:|---:|
 | ffmpeg Ken Burns | 30s | — | $0.00 |
-| Runway Gen-4 Turbo | 50s | 20s | $2.50 |
-| Kling 3.0 Pro | 50s | 20s | $5.60 |
-| Seedance 2.0 Fast | 35s | 5s | $8.47 |
+| Runway Gen-4 Turbo | 35s | 5s | $1.75 |
+| Kling 3.0 Pro | 35s | 5s | $3.92 |
+| Seedance 2.0 Fast | 40s | 10s | $9.68 |
 
-Three things follow.
+What follows:
 
-1. **Seedance's per-second price is less bad than it looks, but it is
-   still the most expensive.** It bills 35s where the others bill 50s,
-   because it can generate 3-second clips — the 5s wasted is only the hero
-   shots rounding from 3.33s up to 4s. That closes the gap with Kling from
-   116% to 51%. It does not close it.
-2. **Rounding is free money left behind.** The plan currently asks for
-   2.67s and 3.33s shots. Snapping those to whole seconds would take
-   Seedance from 35 billed seconds to 30, saving $1.21 a listing for no
-   change anyone can see. Worth doing in `shotplan.py`.
-3. **The shot plan is the real pricing lever.** Six 5-second shots instead
-   of ten 3-second ones bills 30 seconds on Runway or Kling and wastes
-   nothing — $1.50 and $3.36 a listing, less than half. It also means
-   using six of the ten photos. Whether a six-shot walkthrough sells a
-   house as well as a ten-shot one is a question for the test listings,
-   not for a spreadsheet; `shotplan.py` can produce either.
+1. **Snap shots to whole seconds** (a milestone). Ten 3s shots bill 30s on
+   Runway and Kling: $1.50 and $3.36. Seedance cannot go under 4s a shot,
+   so for it the lever is fewer, longer shots: six 5s shots is 30s, $7.26.
+2. **The shot plan is still the real pricing lever**, and whether a
+   six-shot walkthrough sells a house as well as a ten-shot one is a
+   question for the test listings, not a spreadsheet.
+3. **Quality decides.** On cost alone Runway wins by a wide margin; the
+   quality half of the scorecard is the open question.
 
 Model generation also isn't free in time: these run roughly 1–3 minutes of
 wall clock per clip, so a listing is 10–30 minutes of waiting. Well inside
@@ -98,14 +94,22 @@ time of day or weather, no cuts. This is the cheapest available defence
 against the model inventing a feature the listing doesn't have — which
 would be both a bad video and, on an MLS, a real problem.
 
-## Caveat on these prices
+## What is verified, and what is not
 
-Every price here is from the public October 2026 pricing round-ups below,
-not from the vendors' own documentation. The sandbox this was built in
-can't reach several vendor domains. **Confirm the numbers against each
-vendor's pricing page before quoting a price to an agent**, and re-run
-`compare.py --dry-run`, which recomputes the whole cost table from the
-`MODELS` dict in `motion.py` — one place to edit.
+Checked on 2026-10-25 against the vendors' own pages: the fal endpoint ids
+and request fields for Seedance and Kling (their OpenAPI schemas: Seedance
+`bytedance/seedance-2.0/fast/image-to-video` with `image_url`; Kling
+`fal-ai/kling-video/v3/pro/image-to-video` with `start_image_url`, and no
+`resolution` field), the allowed durations for all three, Runway's $0.01 a
+credit and 5 credits a second, and Seedance's $0.2419/s.
+
+Not verified: Kling's $0.112/s comes from fal's published numbers as
+relayed by round-ups; Runway's `ratio` value `1280:720` and the
+`X-Runway-Version` header (`2024-11-06`) are as the code had them and could
+not be confirmed from the docs pages reachable here. **No paid request has
+ever been sent**, so the first trial (three shots, capped) is also the
+test that the requests are accepted. Confirm prices on each vendor's page
+before quoting an agent.
 
 Sources:
 - [Image and Video Generation API Pricing in October 2026 — developersdigest](https://www.developersdigest.tech/blog/image-video-generation-api-pricing-2026)
@@ -113,3 +117,6 @@ Sources:
 - [10 Best Image-to-Video APIs in 2026 — fal.ai](https://fal.ai/learn/tools/best-image-to-video-apis-2026)
 - [Seedance 2.0 vs. Veo 3.1 — fal.ai](https://fal.ai/learn/tools/seedance-2-0-vs-veo-3-1)
 - [AI Video Generation API Pricing in 2026 — apiframe.ai](https://apiframe.ai/blog/ai-video-api-pricing-2026)
+- [Seedance 2.0 Fast image-to-video — fal.ai](https://fal.ai/models/bytedance/seedance-2.0/fast/image-to-video/api)
+- [Kling Video v3 Pro image-to-video — fal.ai](https://fal.ai/models/fal-ai/kling-video/v3/pro/image-to-video/api)
+- [Runway API pricing](https://docs.dev.runwayml.com/guides/pricing/) and [API changelog](https://docs.dev.runwayml.com/api-details/api_changelog/)

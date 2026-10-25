@@ -36,14 +36,15 @@ MASTER_W, MASTER_H = 1920, 1080
 # ---------------------------------------------------------------------------
 # Model registry.
 #
-# price_per_s and the allowed durations are from the public pricing round-ups
-# cited in MODELS.md (October 2026). They have NOT been checked against each
-# vendor's own docs from this machine — the sandbox proxy blocks several of
-# those domains. Re-check before quoting a price to an agent.
+# Endpoint ids, request field names and allowed durations were checked on
+# 2026-10-25 against fal's own OpenAPI schemas
+# (fal.ai/api/openapi/queue/openapi.json?endpoint_id=<id>) and Runway's docs.
+# Prices: Seedance and Runway from the vendors' pages; Kling from fal's
+# published $0.112/s (audio off). Re-check before quoting an agent.
 #
-# `durations` is what the model will actually generate. It is the whole cost
-# story: a model that only does 5s clips bills 5s even when the shot plan
-# wants 2.67s, so a 30s walkthrough from 10 photos bills 50s, not 30s.
+# `durations` is what the model will actually generate. A shot shorter than
+# the model's minimum is billed at the minimum, so the shortest allowed clip
+# sets the cost floor of a many-shot walkthrough.
 # ---------------------------------------------------------------------------
 MODELS = {
     "kenburns": {
@@ -59,9 +60,10 @@ MODELS = {
     "fal:seedance-2-fast": {
         "label": "Seedance 2.0 Fast",
         "provider": "fal",
-        "endpoint": "https://fal.run/fal-ai/bytedance/seedance/v2/fast/image-to-video",
-        "price_per_s": 0.2419,
-        "durations": {"min": 3, "max": 12, "step": 1},
+        "endpoint": "https://fal.run/bytedance/seedance-2.0/fast/image-to-video",
+        "image_field": "image_url",
+        "price_per_s": 0.2419,       # 720p, audio generation off
+        "durations": {"min": 4, "max": 15, "step": 1},
         "resolution": "720p",
         "notes": "Start/end-frame control; the model usually recommended for "
                  "animating a product or interior photo without restyling it.",
@@ -70,26 +72,42 @@ MODELS = {
         "label": "Kling 3.0 Pro",
         "provider": "fal",
         "endpoint": "https://fal.run/fal-ai/kling-video/v3/pro/image-to-video",
-        "price_per_s": 0.112,       # 1080p, 0.8 units/s at $0.14/unit
-        "durations": {"choices": [5, 10]},
+        "image_field": "start_image_url",
+        "price_per_s": 0.112,        # audio off; $0.168/s with audio on
+        "durations": {"min": 3, "max": 15, "step": 1},
         "resolution": "1080p",
-        "notes": "Cheapest of the three per second, but fixed 5s/10s clips, "
-                 "so short shots are billed at 5s.",
+        "notes": "Whole seconds from 3 to 15. Audio is on by default at a "
+                 "higher rate, so the request switches it off.",
     },
     "runway:gen4-turbo": {
         "label": "Runway Gen-4 Turbo",
         "provider": "runway",
         "endpoint": "https://api.dev.runwayml.com/v1/image_to_video",
         "model_id": "gen4_turbo",
-        "price_per_s": 0.05,        # 5 credits/s
-        "durations": {"choices": [5, 10]},
+        "price_per_s": 0.05,        # 5 credits/s, $0.01 a credit
+        "durations": {"min": 2, "max": 10, "step": 1},
         "resolution": "720p",
-        "notes": "Lowest headline price. Fixed 5s/10s, so the same 5s floor "
-                 "applies.",
+        "notes": "Lowest price per second and the shortest minimum clip "
+                 "(any whole second from 2 to 10).",
     },
 }
 
 ENV_KEYS = {"fal": "FAL_KEY", "runway": "RUNWAYML_API_SECRET", "local": None}
+
+
+def get_key(provider: str) -> str:
+    """Environment first, then the macOS Keychain (service = the env name)."""
+    name = ENV_KEYS.get(provider)
+    if not name:
+        return ""
+    if os.environ.get(name):
+        return os.environ[name]
+    try:
+        r = subprocess.run(["security", "find-generic-password", "-s", name,
+                            "-w"], capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
 
 
 def billable_seconds(model: dict, wanted: float) -> float:
@@ -168,16 +186,24 @@ def data_uri(path: pathlib.Path) -> str:
     return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
 
 
+def backend_has_resolution(model: dict) -> bool:
+    """Seedance takes resolution/aspect_ratio; Kling's schema has neither."""
+    return model["image_field"] == "image_url"
+
+
 def build_request(key: str, model: dict, shot: dict, billed: float) -> dict:
     """The request body, built the same way for dry-run and for real."""
     if model["provider"] == "fal":
-        return {
+        body = {
             "prompt": shot["prompt"],
-            "image_url": "<data-uri of " + shot["file"] + ">",
-            "duration": int(billed),
-            "resolution": model["resolution"],
+            model["image_field"]: "<data-uri of " + shot["file"] + ">",
+            "duration": str(int(billed)),       # fal's enum is strings
             "generate_audio": False,
         }
+        if backend_has_resolution(model):
+            body["resolution"] = model["resolution"]
+            body["aspect_ratio"] = "16:9"
+        return body
     if model["provider"] == "runway":
         return {
             "model": model["model_id"],
@@ -212,14 +238,14 @@ def hosted_shot(key: str, model: dict, shot: dict, dst: pathlib.Path,
                 billed: float) -> dict:
     """Run one shot through a hosted model. Returns provider metadata."""
     provider = model["provider"]
-    api_key = os.environ.get(ENV_KEYS[provider], "")
+    api_key = get_key(provider)
     if not api_key:
         raise RuntimeError(f"{ENV_KEYS[provider]} is not set")
 
     body = build_request(key, model, shot, billed)
     img = data_uri(pathlib.Path(shot["path"]))
     if provider == "fal":
-        body["image_url"] = img
+        body[model["image_field"]] = img
         headers = {"Authorization": f"Key {api_key}"}
         res = post_json(model["endpoint"], body, headers)
         url = (res.get("video") or {}).get("url") or res.get("video_url")
@@ -248,7 +274,7 @@ def hosted_shot(key: str, model: dict, shot: dict, dst: pathlib.Path,
 
 # ---------------------------------------------------------------------------
 def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
-        portrait: bool = False) -> dict:
+        portrait: bool = False, max_spend: float | None = None) -> dict:
     if backend not in MODELS:
         raise SystemExit(f"unknown backend {backend!r}; "
                          f"one of: {', '.join(MODELS)}")
@@ -257,10 +283,10 @@ def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
     w, h = (1080, 1920) if portrait else (MASTER_W, MASTER_H)
 
     key_name = ENV_KEYS[model["provider"]]
-    have_key = model["provider"] == "local" or bool(os.environ.get(key_name or ""))
+    have_key = model["provider"] == "local" or bool(get_key(model["provider"]))
     simulate = dry_run or not have_key
 
-    entries, cost, wall = [], 0.0, 0.0
+    entries, cost, wall, spent = [], 0.0, 0.0, 0.0
     for shot in plan["shots"]:
         dst = outdir / f"shot-{shot['index']:02d}.mp4"
         billed = billable_seconds(model, shot["duration_s"])
@@ -281,8 +307,14 @@ def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
             entry["status"] = "dry-run"
             entry["request"] = build_request(backend, model, shot, billed)
             entry["output"] = None
+        elif dst.exists() and dst.stat().st_size > 0:
+            entry["status"] = "cached"          # already paid for; never twice
+        elif max_spend is not None and spent + shot_cost > max_spend + 1e-9:
+            entry["status"] = "over-cap"
+            entry["output"] = None
         else:
             try:
+                spent += shot_cost
                 entry.update(hosted_shot(backend, model, shot, dst, billed))
                 entry["status"] = "ok"
             except Exception as e:                       # keep the run going
@@ -309,6 +341,8 @@ def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
         "planned_total_s": round(sum(s["duration_s"] for s in plan["shots"]), 2),
         "billed_total_s": round(sum(e["billed_s"] for e in entries), 2),
         "cost_usd": round(cost, 4),
+        "spent_usd": round(spent, 4),
+        "max_spend_usd": max_spend,
         "generation_wall_s": round(wall, 2),
         "shots": entries,
     }
@@ -323,13 +357,17 @@ def main() -> int:
     ap.add_argument("--out")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--portrait", action="store_true")
+    ap.add_argument("--max-spend", type=float, default=None,
+                    help="stop paying for new shots once this many dollars "
+                         "have been spent in this run")
     args = ap.parse_args()
 
     plan = json.loads(pathlib.Path(args.plan).read_text())
     outdir = pathlib.Path(args.out or
                           pathlib.Path(args.plan).parent /
                           ("shots-" + args.backend.replace(":", "-")))
-    m = run(plan, args.backend, outdir, args.dry_run, args.portrait)
+    m = run(plan, args.backend, outdir, args.dry_run, args.portrait,
+            args.max_spend)
     tag = " (simulated — no key / dry run)" if m["simulated"] else ""
     print(f"\n{m['label']}: {m['billed_total_s']}s billed for "
           f"{m['planned_total_s']}s of clip, ${m['cost_usd']:.2f}{tag}")

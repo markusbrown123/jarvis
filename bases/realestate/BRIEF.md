@@ -16,8 +16,9 @@ One paying agent. Before that: three test listings, and a delivery time of under
 
 ## First milestones
 - [x] 10 photos of one property → a 30-second clip, from two or three models, compared — harness built and run; the free control clip is rendered, the three paid models are costed but need a key (see `MODELS.md`, `out/demo-001/scorecard.md`)
-- [ ] Re-run `compare.py` with `FAL_KEY` / `RUNWAYML_API_SECRET` set, on real photos, and fill in the quality half of the scorecard
-- [ ] Snap shot durations to whole seconds — saves ~$1.21 a listing on Seedance for no visible change
+- [ ] Re-run `compare.py` with `FAL_KEY` / `RUNWAYML_API_SECRET` set, on real photos, and fill in the quality half of the scorecard — everything short of the paid calls is ready (`preflight.py`, `--shots`/`--max-spend` trial, `review.py` strips); waiting on a key and on photos Markus has the right to use
+- [ ] Snap shot durations to whole seconds — ten 3s shots bill 30s not 35s: Kling $3.92 → $3.36, Runway $1.75 → $1.50 (Seedance's 4s minimum means fewer, longer shots instead)
+- [ ] Run the three-shot capped trial (`preflight.py` prints the command; about $0.60 Runway, $1.34 Kling, $2.90 Seedance) — also the first proof the paid requests are accepted
 - [ ] Render the 9:16 cut with its own camera move instead of centre-cropping the 16:9 one (`motion.py --portrait` already does this; `edit.py` doesn't use it yet)
 - [ ] `walkthrough` script: a folder of photos in, an MP4 out
 - [ ] A sample reel for outreach, from photos Markus has the right to use
@@ -31,4 +32,4 @@ One paying agent. Before that: three test listings, and a delivery time of under
 - Nothing is sent to an agent or posted without Markus.
 
 ## Status
-2026-10-25 — Pipeline stages 2–4 are written and run end to end: 10 photos → an exactly 30.00s clip in 16:9 and 9:16, plus a thumbnail. The free ffmpeg control is rendered and measured; Seedance, Kling and Runway are wired up and fully costed ($8.47 / $5.60 / $2.50 a listing) but need an API key to actually render. Next: a key, then re-run on real photos.
+2026-10-25 — Still waiting on keys and real photos for the paid-model quality half; prep done: vendor schemas checked (fixed wrong Seedance endpoint, Kling field name and clip lengths, so a 30 s listing is $1.75 / $3.92 / $9.68 not $2.50 / $5.60 / $8.47), trial/cap/resume/Keychain support and an eyes-on review sheet added.
