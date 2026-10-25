@@ -47,11 +47,15 @@ export function status(which) {
   return m?.[1].trim() ?? 'no status written'
 }
 
-/** A brief's milestones: its checklist lines, ticked or not. */
+/** What a run puts at the end of a milestone's line when it can't go further without Markus. */
+export const WAITING = '(waiting on Markus)'
+const WAITING_RE = /\s*\(waiting on Markus\)\s*$/i
+
+/** A brief's milestones: its checklist lines, ticked or not, and whether one is waiting on Markus. */
 export function milestones(which) {
   const b = brief(which)
   if (!b) return []
-  return [...b.text.matchAll(/^- \[( |x)\] (.+)$/gm)].map((m) => ({ done: m[1] === 'x', text: m[2].trim() }))
+  return [...b.text.matchAll(/^- \[( |x)\] (.+)$/gm)].map((m) => ({ done: m[1] === 'x', text: m[2].replace(WAITING_RE, '').trim(), waiting: m[1] !== 'x' && WAITING_RE.test(m[2]) }))
 }
 
 /** Every stream with its status, milestones and brief: the dashboard's Projects page. */

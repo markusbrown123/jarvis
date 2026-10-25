@@ -2671,6 +2671,9 @@ body.dash-mode .bl {
 .project-progress span { display: block; height: 100%; background: var(--violet); }
 .project-milestones { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
 .project-milestones li.done { color: var(--text); }
+.project-milestones li.waiting { color: var(--text); }
+.project-milestones li.waiting span,
+.project-milestones li.waiting em { color: var(--amber); font-style: normal; }
 .project-milestones li span { display: inline-block; width: 16px; color: var(--violet); }
 .project-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; font-size: 13px; }
 .project-card .item-actions { margin-top: auto; }

@@ -78,7 +78,7 @@ function ProjectLabel({ pad }: { pad: ProjectPad }) {
   const cinematic = mode !== 'command'
   const waiting = Boolean(ap && (ap.blocked || ap.waiting > 0))
   const word = live ? 'building now' : waiting ? 'needs you' : ap?.paused ? 'paused' : null
-  const next = stream?.milestones.find((m) => !m.done)?.text
+  const next = ap?.next ?? stream?.milestones.find((m) => !m.done)?.text
   return (
     <div
       ref={ref}

@@ -234,7 +234,7 @@ export type GallerySection = { id: string; title: string; note?: string; items: 
 export type Gallery = { game: string; revision: string | null; sections: GallerySection[]; counts: Record<string, number> }
 
 /** JARVIS building one of the base projects himself (bridge/hub/autopilot.mjs). */
-export type Autopilot = { paused: boolean; lastAt: number | null; waiting: number; blocked: boolean; off: boolean }
+export type Autopilot = { paused: boolean; lastAt: number | null; waiting: number; blocked: boolean; off: boolean; next: string | null }
 
 /** A stream of work from its base (bridge/hub/streams.mjs): the Projects page. */
 export type Stream = {
@@ -244,7 +244,7 @@ export type Stream = {
   line: string
   base: string | null
   status: string
-  milestones: { done: boolean; text: string }[]
+  milestones: { done: boolean; text: string; waiting?: boolean }[]
   brief: string
 }
 

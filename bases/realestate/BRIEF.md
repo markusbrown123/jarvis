@@ -16,7 +16,7 @@ One paying agent. Before that: three test listings, and a delivery time of under
 
 ## First milestones
 - [x] 10 photos of one property → a 30-second clip, from two or three models, compared — harness built and run; the free control clip is rendered, the three paid models are costed but need a key (see `MODELS.md`, `out/demo-001/scorecard.md`)
-- [ ] Re-run `compare.py` with `FAL_KEY` / `RUNWAYML_API_SECRET` set, on real photos, and fill in the quality half of the scorecard — everything short of the paid calls is ready (`preflight.py`, `--shots`/`--max-spend` trial, `review.py` strips); waiting on a key and on photos Markus has the right to use
+- [ ] Re-run `compare.py` with `FAL_KEY` / `RUNWAYML_API_SECRET` set, on real photos, and fill in the quality half of the scorecard — everything short of the paid calls is ready (`preflight.py`, `--shots`/`--max-spend` trial, `review.py` strips); waiting on a key and on photos Markus has the right to use (waiting on Markus)
 - [ ] Snap shot durations to whole seconds — ten 3s shots bill 30s not 35s: Kling $3.92 → $3.36, Runway $1.75 → $1.50 (Seedance's 4s minimum means fewer, longer shots instead)
 - [ ] Run the three-shot capped trial (`preflight.py` prints the command; about $0.60 Runway, $1.34 Kling, $2.90 Seedance) — also the first proof the paid requests are accepted
 - [ ] Render the 9:16 cut with its own camera move instead of centre-cropping the 16:9 one (`motion.py --portrait` already does this; `edit.py` doesn't use it yet)

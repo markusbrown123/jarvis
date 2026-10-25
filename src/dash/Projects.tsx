@@ -88,7 +88,9 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
               ? 'Paused — JARVIS leaves it until you say.'
               : ap.blocked
                 ? 'Waiting on you (below): the last run could not go further without you.'
-                : `JARVIS works on it in turn${ap.lastAt ? ` · last run ${ago(ap.lastAt)}` : ' · not run yet'}.`}
+                : ap.next
+                  ? `JARVIS works on it in turn${ap.lastAt ? ` · last run ${ago(ap.lastAt)}` : ' · not run yet'} · next: ${ap.next}`
+                  : 'Everything left is waiting on you (below).'}
         </p>
       )}
       {!writes && <p className="project-warn small">JARVIS is in read-only mode, so a run can plan but not write files. Start him with plain `jarvis` (write mode) for real building.</p>}
@@ -156,8 +158,9 @@ function StreamCard({ s, ap, links, writes, onChange }: { s: Stream; ap?: Autopi
           </div>
           <ul className="project-milestones">
             {s.milestones.map((m) => (
-              <li key={m.text} className={m.done ? 'done' : ''}>
-                <span aria-hidden>{m.done ? '✓' : '○'}</span> {m.text}
+              <li key={m.text} className={m.done ? 'done' : m.waiting ? 'waiting' : ''}>
+                <span aria-hidden>{m.done ? '✓' : m.waiting ? '⏸' : '○'}</span> {m.text}
+                {m.waiting && <em> · waiting on you</em>}
               </li>
             ))}
           </ul>
