@@ -48,7 +48,7 @@ const waiting = (project) => Object.values(hub.snapshot().items).filter((i) => i
 const today = () => new Date().toISOString().slice(0, 10)
 const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48)
 
-const BRIEF = (s, next) => `You're working on Markus's "${s.name}" project, in its base folder (this directory). JARVIS runs this on his own, as part of building it; Markus follows the progress on his Projects page.
+const BRIEF = (s, next, dir = baseDir(s.project)) => `You're working on Markus's "${s.name}" project, in its base folder (this directory). JARVIS runs this on his own, as part of building it; Markus follows the progress on his Projects page.
 
 Read BRIEF.md and CLAUDE.md first, and whatever earlier runs left in this folder.
 
@@ -56,7 +56,7 @@ Do the next unticked milestone: "${next}". Do the real work — write the files,
 
 When you've finished or gone as far as you can:
 1. In BRIEF.md tick the milestone if it's done ("- [x]"), add any next steps you now see as unticked "- [ ]" items under First milestones, and replace the line under "## Status" with one line on where it stands, dated ${today()}.
-2. Save it: from this folder, \`git add .\` then \`git commit -m "${s.id}: <what you did>"\`, then \`git pull --rebase\` and \`git push\`. Only this folder; never push to main, never force-push. If the push fails, say so.
+2. Save it — with the folder's full path, since a \`cd\` in one command carries into the next: \`git -C "${dir}" add .\`, then \`git -C "${dir}" commit -m "${s.id}: <what you did>"\`, then \`git -C "${dir}" pull --rebase\` and \`git -C "${dir}" push\`. Only this folder; never push to main, never force-push. If the push fails, say so.
 3. End with a short plain summary for Markus: what you did, and what's next.
 4. Then, for each thing only Markus can do, one line exactly: "NEED: <short title> :: <what he needs to do, and why>".
 5. If you couldn't move the milestone at all without him, a last line: "BLOCKED".

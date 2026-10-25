@@ -1,0 +1,22 @@
+# Output and working files — never in git
+out/
+cache/
+
+# Client and test photos. Photos live outside the repo (see BRIEF.md rules);
+# photos/ here is only a local working mount point.
+photos/
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.mp4
+*.mov
+*.wav
+*.mp3
+
+# Client listings. Only fixtures/ (fictional demo data) is tracked.
+listings/
+
+__pycache__/
+*.pyc
+.venv/
