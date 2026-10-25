@@ -208,7 +208,7 @@ Six things Markus is building, each with a **base** in `bases/` (see `bases/READ
 - JARVIS knows them: a short list is in his prompt, `streams` gives each one's status, and `stream_brief` reads the whole brief before he advises on or starts work on one.
 - The three new ones (`realestate`, `youtube`, `influencer`) are projects of their own: Ideas, desk Claude Code sessions and background jobs can target them, and run in `bases/<project>` with that folder's `CLAUDE.md`. They show under Jarvis Core in the station. The other three are the existing Automaton, Roblox and Finance projects.
 - **Projects** (nav, `P`) shows all six: status, the brief's milestones as they're ticked, and the brief itself; the three with pages of their own link to them.
-- **JARVIS builds the three new ones himself** (`autopilot.mjs`). Each run is a background job in the project's folder: it does the brief's next milestone for real (files, scripts, documents, research with sources), ticks it, rewrites the Status line, commits that folder and pushes. What only Markus can give — a choice, an account, photos, money — comes back as NEED lines on his Needs list; a run that couldn't move at all says BLOCKED and the project waits for him. Its card on Projects shows the run going now and the step it's on, the last run's result, what it's waiting on, **Work on it now**, **Pause**, and a line to tell JARVIS something (it goes into the brief, under "From Markus", for the next run). On his own he takes one project at a time, in turn, a run starting at least two hours after the last finished (`JARVIS_AUTOPILOT_GAP_MIN`), not with three jobs going or the 5-hour allowance past 70%. By voice: "work on the YouTube channel" (`project_work`), "for the YouTube channel, go with …" (`project_note`), "pause the influencer" (`project_autopilot`). `JARVIS_NO_AUTOPILOT=1` turns it off. Needs write mode (plain `jarvis`) to write files.
+- **JARVIS builds the three new ones himself** (`autopilot.mjs`). Each run is a background job in the project's folder: it does the brief's next milestone for real (files, scripts, documents, research with sources), ticks it, rewrites the Status line, commits that folder and pushes. What only Markus can give — a choice, an account, photos, money — comes back as NEED lines on his Needs list, and that milestone is marked "(waiting on Markus)" in the brief (⏸ waiting on you on Projects): later runs pass over it to the next one that can move, until he answers (a note) or marks one of that project's needs Done, which puts it back in play. Only when nothing left can move does a run say BLOCKED and the project wait for him. A run commits only its own folder and pushes it (never from main, and never pulling new code under the running JARVIS); if GitHub has newer work the push waits, and `jarvis update` brings the two together. A run left unfinished by a restart is marked stopped, not left "running". Its card on Projects shows the run going now and the step it's on, the last run's result, what it's waiting on, **Work on it now**, **Pause**, and a line to tell JARVIS something (it goes into the brief, under "From Markus", for the next run). On his own he takes one project at a time, in turn, a run starting at least two hours after the last finished (`JARVIS_AUTOPILOT_GAP_MIN`), not with two jobs going or the 5-hour allowance past 70%, and not at all in read-only mode (`jarvis --safe`), where a run couldn't save anything. By voice: "work on the YouTube channel" (`project_work`), "for the YouTube channel, go with …" (`project_note`), "pause the influencer" (`project_autopilot`). `JARVIS_NO_AUTOPILOT=1` turns it off. Needs write mode (plain `jarvis`) to write files.
 - The Ideas board starts with one idea per stream, pointing at its base (once; delete one and it stays deleted).
 - Finance: QuantVue is Quant View, and the page lists where Markus trades (QuantVue, Tradovate, the TradingView MNQ chart) as links. Nothing is connected: no orders, no invented positions or P&L.
 - Rules in every brief hold, and a few are fixed: nothing is sent, posted, published, deployed or paid without Markus; the influencer is always disclosed as AI and stays inside Instagram's rules; a Roblox game for kids doesn't lean on them to spend.
@@ -335,8 +335,19 @@ network. Set up once:
    login in `~/.jarvis/remote.json`, and prints the address
    (`https://<mac>.<tailnet>.ts.net:5173`). The serve setting persists, so every
    `jarvis` start after that works from the phone too.
-3. Open it in Safari on the iPhone, tap to start, allow the microphone.
-   Share → Add to Home Screen keeps it one tap away.
+3. Open it in Safari on the iPhone, then Share → **Add to Home Screen**: JARVIS
+   gets his own icon and opens full screen, like an app (no App Store; it
+   updates whenever JARVIS does). Allow the microphone the first time.
+
+The phone app opens on a **lock screen**: the time, and JARVIS's emblem in
+blue — rings of light round a glowing core, electricity crackling over them.
+Tap it (Safari needs a tap before he can speak or listen): it charges up,
+flashes, and dives through the core into the app (`ui/PhoneLock.tsx`). No
+flight in from the sea on the phone, and no clap or "Hey Jarvis" to start
+him behind the lock — the tap is the way in. If the Mac can't be reached
+(asleep, JARVIS not running, Tailscale off) the app says so on its own
+screen instead of Safari's error (`public/offline.html`, shown by a service
+worker that caches nothing else, so updates are never stale).
 
 Tailnet only — never Funnel, never the internet. The page finds the bridge on
 the same name; the bridge accepts a request that came through Tailscale's

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#01060c" />
+    <title>JARVIS — can't reach your Mac</title>
+    <link rel="icon" href="data:," />
+    <!-- Shown by sw.js when the Mac can't be reached. Self-contained: nothing here can load from the Mac. -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #01060c;
+        color: #e6f4ff;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        padding: calc(env(safe-area-inset-top) + 24px) 28px calc(env(safe-area-inset-bottom) + 24px);
+        box-sizing: border-box;
+        background: radial-gradient(60% 45% at 50% 42%, rgba(14, 116, 198, 0.3), transparent 70%), #01060c;
+        text-align: center;
+      }
+      main {
+        display: grid;
+        justify-items: center;
+        gap: 14px;
+        max-width: 360px;
+      }
+      svg {
+        width: min(56vw, 240px);
+        filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.5));
+      }
+      .ring {
+        fill: none;
+        stroke: #38bdf8;
+        transform-origin: 0 0;
+        animation: spin 30s linear infinite;
+      }
+      .ring.b {
+        animation-duration: 18s;
+        animation-direction: reverse;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      h1 {
+        margin: 6px 0 0;
+        font-size: 21px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      p {
+        margin: 0;
+        color: #9fb6cc;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      ul {
+        margin: 2px 0 6px;
+        padding: 0;
+        list-style: none;
+        color: #c7dcef;
+        font-size: 14.5px;
+        line-height: 1.7;
+      }
+      button {
+        margin-top: 6px;
+        padding: 12px 28px;
+        border: 1px solid rgba(56, 189, 248, 0.6);
+        border-radius: 999px;
+        background: rgba(56, 189, 248, 0.12);
+        color: #e0f2fe;
+        font: 600 16px system-ui, -apple-system, sans-serif;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ring {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg viewBox="-110 -110 220 220" aria-hidden="true">
+        <g class="ring"><circle r="100" pathLength="100" stroke-dasharray="22 11.33" stroke-width="5" stroke-linecap="round" /></g>
+        <g class="ring b"><circle r="78" pathLength="120" stroke-dasharray="7 3" stroke-width="7" opacity="0.5" /></g>
+        <circle r="60" fill="none" stroke="#bae6fd" stroke-width="1.5" />
+        <circle r="26" fill="#38bdf8" opacity="0.25" />
+      </svg>
+      <h1>Can't reach your Mac</h1>
+      <p>JARVIS runs on your Mac, and this phone can't get to it right now. Check:</p>
+      <ul>
+        <li>the Mac is awake and JARVIS is running (<code>jarvis</code>)</li>
+        <li>Tailscale is on, on this phone and on the Mac</li>
+        <li>remote access is set up (<code>jarvis remote</code>)</li>
+      </ul>
+      <button onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

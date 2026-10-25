@@ -1,0 +1,325 @@
+/* The phone's lock screen (PhoneLock.tsx): blue rings of light, electric arcs, a dive through the core. */
+
+.plock {
+  --blue: #38bdf8;
+  --ice: #bae6fd;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  justify-items: center;
+  padding: calc(env(safe-area-inset-top) + 28px) 24px calc(env(safe-area-inset-bottom) + 22px);
+  overflow: hidden;
+  color: #e6f4ff;
+  font-family:
+    'Barlow',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: #01060c;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* A deep blue field, a faint hex grid over it, and scanlines. */
+.plock-bg {
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(60% 45% at 50% 52%, rgba(14, 116, 198, 0.36), transparent 70%), radial-gradient(120% 80% at 50% 100%, rgba(30, 64, 175, 0.28), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48.5' viewBox='0 0 28 48.5'%3E%3Cpath d='M14 0l14 8.08v16.17L14 32.33 0 24.25V8.08zM14 32.33v16.17' fill='none' stroke='%2338bdf8' stroke-opacity='0.07' stroke-width='0.8'/%3E%3C/svg%3E"),
+    linear-gradient(#020a17, #01060c);
+  animation: plock-drift 18s ease-in-out infinite alternate;
+}
+.plock-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
+}
+@keyframes plock-drift {
+  to {
+    transform: translate3d(0, -14px, 0) scale(1.03);
+  }
+}
+
+.plock-clock {
+  position: relative;
+  text-align: center;
+}
+.plock-date {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ice);
+  opacity: 0.85;
+}
+.plock-time {
+  margin: 0;
+  font-family: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  font-size: clamp(64px, 22vw, 96px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #f0f9ff;
+  text-shadow: 0 0 24px rgba(56, 189, 248, 0.45);
+}
+
+/* The emblem. */
+.plock-emblem {
+  position: relative;
+  align-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(78vw, 46vh, 360px);
+  will-change: transform, opacity;
+}
+.plock-emblem svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.55));
+}
+.plock-ring {
+  fill: none;
+  stroke: var(--blue);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.plock-ticks path {
+  stroke-width: 1.4;
+  opacity: 0.7;
+}
+.plock-hair {
+  stroke-width: 0.6;
+  opacity: 0.35;
+}
+.plock-arcs circle {
+  stroke-width: 5;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.plock-dashes circle {
+  stroke-width: 6;
+  opacity: 0.45;
+}
+.plock-inner circle {
+  stroke: var(--ice);
+  stroke-width: 1.6;
+}
+.plock-segs circle {
+  stroke-width: 9;
+  opacity: 0.55;
+}
+.plock-hex {
+  fill: rgba(56, 189, 248, 0.06);
+  stroke: var(--ice);
+  stroke-width: 1.2;
+  opacity: 0.8;
+}
+.plock-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: plock-breathe 3.2s ease-in-out infinite;
+}
+.plock-bolts path {
+  fill: none;
+  stroke: #e0f7ff;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+.plock-ticks {
+  animation: plock-spin 60s linear infinite;
+}
+.plock-arcs {
+  animation: plock-spin 22s linear infinite reverse;
+}
+.plock-dashes {
+  animation: plock-spin 40s linear infinite;
+}
+.plock-segs {
+  animation: plock-spin 14s linear infinite reverse;
+}
+@keyframes plock-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes plock-breathe {
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+}
+.plock-name {
+  margin: 0;
+  font-family: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.6em;
+  padding-left: 0.6em;
+  color: var(--ice);
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
+}
+
+.plock-foot {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+/* A light sweeping across the hint, like the old slide to unlock. */
+.plock-hint {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  background: linear-gradient(90deg, rgba(186, 230, 253, 0.45) 0%, #ffffff 45%, rgba(186, 230, 253, 0.45) 60%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: plock-sweep 2.6s linear infinite;
+}
+@keyframes plock-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+.plock-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  margin: 0;
+  font:
+    400 12.5px 'IBM Plex Mono',
+    ui-monospace,
+    monospace;
+  color: #7f9ab5;
+  text-align: center;
+}
+.plock-status i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5a524;
+}
+.plock-status.ok i {
+  background: var(--blue);
+  box-shadow: 0 0 8px var(--blue);
+}
+
+.plock-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 50%, #ffffff 0%, rgba(186, 230, 253, 0.9) 18%, rgba(56, 189, 248, 0.5) 40%, transparent 72%);
+}
+
+/* Opening: it charges (the rings race, the core flares, a storm of arcs), then dives in. */
+.plock-opening {
+  cursor: default;
+  animation: plock-out 1.4s linear forwards;
+}
+.plock-opening .plock-clock,
+.plock-opening .plock-foot {
+  animation: plock-fade 0.25s ease-out forwards;
+}
+.plock-opening .plock-emblem {
+  animation: plock-dive 1.15s cubic-bezier(0.55, 0, 0.85, 0.3) forwards;
+}
+.plock-spinup {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+.plock-opening .plock-spinup {
+  animation: plock-spinup 1.15s cubic-bezier(0.5, 0, 1, 1) forwards;
+}
+@keyframes plock-spinup {
+  to {
+    transform: rotate(540deg);
+  }
+}
+.plock-opening .plock-core {
+  animation: plock-flare 0.6s ease-out forwards;
+}
+.plock-opening .plock-flash {
+  animation: plock-flash 1.4s ease-out forwards;
+}
+.plock-opening .plock-bg {
+  animation: plock-bgzoom 1.4s cubic-bezier(0.55, 0, 0.85, 0.3) forwards;
+}
+@keyframes plock-fade {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@keyframes plock-dive {
+  0% {
+    transform: scale(1);
+  }
+  22% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(9);
+    opacity: 0.2;
+  }
+}
+@keyframes plock-flare {
+  to {
+    transform: scale(2.4);
+  }
+}
+@keyframes plock-flash {
+  0%,
+  40% {
+    opacity: 0;
+  }
+  62% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes plock-bgzoom {
+  to {
+    transform: scale(1.6);
+  }
+}
+@keyframes plock-out {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: still rings, and a plain fade in place of the dive. */
+.plock-still .plock-ring,
+.plock-still .plock-core,
+.plock-still .plock-bg,
+.plock-still .plock-hint {
+  animation: none;
+}
+.plock-still.plock-opening,
+.plock-still.plock-opening .plock-emblem,
+.plock-still.plock-opening .plock-flash {
+  animation: plock-fade 0.35s ease-out forwards;
+}

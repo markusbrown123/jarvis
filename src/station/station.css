@@ -2,7 +2,8 @@
 
 .station {
   position: fixed;
-  inset: 0;
+  /* As a home-screen app on the phone, clear of the notch and the home bar (0 elsewhere). */
+  inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   /* Under the power-up screen (7) and palette/toasts, over nothing else. */
   z-index: 5;
   background: #050409;

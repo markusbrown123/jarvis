@@ -78,7 +78,8 @@ export function IntroFlight() {
   // With reduced motion there's no flight: straight to the desk.
   useEffect(() => {
     const st = useStation.getState()
-    if (useHub.getState().prefs.reducedMotion) setIntro('done')
+    // Nor on a phone: it opens with its own lock screen (ui/PhoneLock.tsx).
+    if (useHub.getState().prefs.reducedMotion || TOUCH) setIntro('done')
     else if (st.intro !== 'done' && st.mode !== 'talk') st.setMode('talk')
   }, [setIntro])
 
@@ -276,7 +277,7 @@ export function IntroOverlay() {
         const l = await listenForClap(() => setIntro('done'), { minPeak: 0.02 })
         if (gone) return l.stop()
         clap = l
-        setHears(true)
+        setHears(l.listening)
       })
     const t = setInterval(() => tick((n) => n + 1), 1000)
     return () => {

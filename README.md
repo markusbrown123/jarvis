@@ -10,8 +10,9 @@ run headless as a library.
 
 - **One command, `jarvis`** — starts everything in write mode, links your
   phone the first time, prints a status board, opens the window, and says when
-  a newer version is waiting. `jarvis update` pulls it, installs what changed
-  and restarts him (never over changes that aren't committed).
+  a newer version is waiting. `jarvis update` brings it in, installs what
+  changed and restarts him, carrying over anything not committed or not pushed
+  yet (and putting everything back if that can't be done cleanly).
 - **The Station** — a 3D Tony Stark house on a Malibu cliff under the real sky
   and weather: a GTA-style loading screen and fly-in from the sea, the estate,
   FPV drones and Dum-E doing the real work, your desk looking out to sea with
@@ -30,7 +31,8 @@ run headless as a library.
   pipeline, public checks), Finance (research data, services, expenses), jobs,
   Needs Markus, usage, memory. [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md)
 - **Your phone** — Telegram chat and voice notes, reports, urgent Pushover
-  alerts, and live voice from the iPhone over Tailscale (`jarvis remote`).
+  alerts, and live voice from the iPhone over Tailscale (`jarvis remote`) — as
+  a home-screen app with its own icon and a blue lock screen to tap into.
 
 **The only subscription you need is Claude Code.** No API keys, no OpenAI
 account, no cloud bill — the brain runs on your existing Claude Code login, and

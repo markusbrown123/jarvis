@@ -86,6 +86,8 @@ body.dash-mode::after {
     'convo convo convo';
   font-size: 15px;
   line-height: 1.45;
+  /* As a home-screen app on the phone it runs under the notch and the home bar: keep clear of them (0 elsewhere). */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background:
     radial-gradient(1200px 700px at 50% 45%, rgba(91, 33, 182, 0.16), transparent 70%),
     var(--g0);

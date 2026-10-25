@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { useHub, connectHub, type View } from '../hub/client'
+import { useHub, connectHub, type View, TOUCH } from '../hub/client'
 import { ago, JOB_LABEL, tone } from '../hub/format'
 import { CoreView } from '../scene/CoreView'
 import { BurstView } from '../scene/BurstView'
@@ -12,6 +12,7 @@ import { GestureGuide } from '../ui/GestureGuide'
 import { HandsToggle } from '../ui/HandsToggle'
 import { Diagnostics } from '../ui/Diagnostics'
 import { Intro, SoundLockHint } from '../ui/Intro'
+import { PhoneLock } from '../ui/PhoneLock'
 import { Overview } from './Overview'
 import { Projects } from './Projects'
 import { Roblox } from './Roblox'
@@ -506,7 +507,8 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
       <GestureGuide live={gestures} />
       <Diagnostics />
       <SoundLockHint />
-      <Intro onStart={onStart} />
+      {/* The phone gets a lock screen instead of the start screen; the Mac starts by itself. */}
+      {TOUCH ? <PhoneLock onStart={onStart} /> : <Intro onStart={onStart} />}
     </>
   )
 }

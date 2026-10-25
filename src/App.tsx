@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Dashboard } from './dash/Dashboard'
-import { useHub, hubActions, markPresent, type View } from './hub/client'
+import { useHub, hubActions, markPresent, TOUCH, type View } from './hub/client'
 import { useStore } from './store'
 import { useStation, type DeskTab } from './station/stationStore'
 import { startVoice, diag as voiceDiag, type Voice, type VoiceHandlers, type VoiceMode } from './lib/voice'
@@ -803,9 +803,13 @@ export default function App() {
    * Deliberately silent about failure. If the microphone is refused, or has not
    * been granted yet, the button is still right there; announcing an error
    * about a feature nobody asked for would be worse than quietly doing without.
+   *
+   * Not on a phone: there the lock screen's tap is the way in (ui/PhoneLock.tsx).
+   * Listening behind it would ask for the microphone the moment the app opens,
+   * and Safari won't let him speak until there's been a tap anyway.
    */
   useEffect(() => {
-    if (phase !== 'offline') return
+    if (phase !== 'offline' || TOUCH) return
     const live: { stop: () => void }[] = []
     let gone = false
     const keep = (l: { stop: () => void }) => {
