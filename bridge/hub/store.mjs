@@ -232,7 +232,9 @@ export function snapshot() {
     jobs[id] = { ...j, stale: Boolean(live && j.expectsHeartbeat && now - last > (j.staleAfterMs ?? STALE_MS)) }
   }
   const { seen: _seen, ...rest } = state
-  return { ...rest, jobs, serverTime: now }
+  // What he marked Done, newest first, so the Needs page can bring one back.
+  const done = dismissed.map(({ key, title, at }) => ({ key, title, at })).sort((a, b) => b.at - a.at)
+  return { ...rest, jobs, dismissed: done, serverTime: now }
 }
 
 function logEvent(ev) {
@@ -394,6 +396,20 @@ export function dismissItem(ref) {
   })
   changed()
   return item
+}
+
+/** Undo a Done: the item can come back (its source reports it again at its next check). */
+export function restoreDismissed(key) {
+  const n = dismissed.length
+  for (let i = dismissed.length - 1; i >= 0; i--) if (dismissed[i].key === key) dismissed.splice(i, 1)
+  if (dismissed.length === n) return false
+  try {
+    saveDismissed()
+  } catch (err) {
+    console.error('[hub] could not save dismissed items:', err.message)
+  }
+  changed()
+  return true
 }
 
 export function getJob(id) {

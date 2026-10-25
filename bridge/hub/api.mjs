@@ -310,6 +310,13 @@ export function startHub({ runner, phone, code } = {}) {
         return json(res, cors, 200, { ok: true, applied: n })
       }
 
+      // Undo a Done (store.mjs dismissItem): by its key, from the Needs page's done list.
+      if (req.method === 'POST' && path === '/api/dismissed/restore') {
+        const body = JSON.parse((await readBody(req)) || '{}')
+        const ok = hub.restoreDismissed(String(body.key ?? ''))
+        return json(res, cors, ok ? 200 : 404, ok ? { ok: true } : { error: 'Not on the done list.' })
+      }
+
       let m = path.match(/^\/api\/items\/([^/]+)\/(check|snooze|start|cancel|reopen|done)$/)
       if (req.method === 'POST' && m) {
         const id = decodeURIComponent(m[1])

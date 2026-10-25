@@ -2654,3 +2654,9 @@ body.dash-mode .bl {
   align-self: flex-start;
   margin-top: 4px;
 }
+
+/* Needs: what was marked Done, to bring one back */
+.needs-done { margin-top: 18px; color: var(--muted, #9aa3b8); }
+.needs-done summary { cursor: pointer; font-size: 13px; padding: 6px 0; }
+.needs-done ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.needs-done li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--line, rgba(255,255,255,0.08)); border-radius: 10px; }

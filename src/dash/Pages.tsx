@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useHub } from '../hub/client'
+import { hubActions, useHub } from '../hub/client'
 import { ago, clock } from '../hub/format'
 import { useStore, type TalkMode } from '../store'
 import { micLevel, micName } from '../lib/audio'
@@ -33,6 +33,33 @@ export function Needs() {
       <div className="needs-list">
         {items.length ? items.map((i) => <ItemCard key={i.id} item={i} full />) : <Empty title="Nothing needs you right now" />}
       </div>
+      {s?.dismissed && s.dismissed.length > 0 && (
+        <details className="needs-done">
+          <summary>Marked done ({s.dismissed.length}) — they stay off the list</summary>
+          <ul>
+            {s.dismissed.map((d) => (
+              <li key={d.key}>
+                <span>
+                  {d.title} <span className="muted">· {ago(d.at)}</span>
+                </span>
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    try {
+                      await hubActions.restoreDone(d.key)
+                      useHub.getState().say('Back on the list at its next check')
+                    } catch (err) {
+                      useHub.getState().say((err as Error).message)
+                    }
+                  }}
+                >
+                  Bring back
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   )
 }

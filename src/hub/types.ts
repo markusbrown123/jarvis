@@ -301,6 +301,8 @@ export type HubState = {
   presence?: { lastSeenAt?: number; phoneAt?: number }
   jobs: Record<string, Job>
   items: Record<string, Item>
+  /** What Markus marked Done (kept off the list for good), newest first. */
+  dismissed?: { key: string; title: string; at: number }[]
   projects: {
     roblox?: RobloxProject
     automaton?: AutomatonProject
