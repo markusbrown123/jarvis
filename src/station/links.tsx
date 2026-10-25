@@ -61,7 +61,7 @@ const LOOK: Record<LinkStyle, Omit<Look, 'color'> & { color?: string }> = {
   failed: { color: STATUS.error, speed: 0, dash: 6, opacity: 0.95, gap: 0.08, base: 0.35, flicker: true },
 }
 
-function flowMaterial(rail: number) {
+export function flowMaterial(rail: number) {
   return new THREE.ShaderMaterial({
     vertexShader: vert,
     fragmentShader: frag,

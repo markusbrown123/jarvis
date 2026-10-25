@@ -75,6 +75,29 @@ and the data's freshness when it isn't live.
 | **Needs Markus** | Open items (`state.items`) | One amber beacon per item, height and pulse by priority (P1 tallest, fastest) | Item: the dashboard's own item card — its real checks, "I'm on it", Snooze 4h | "Nothing needs you" — a dim ring |
 | **Jarvis Core** | Bridge link, `/health` (model, write mode, voice), mic, phone pairing, status-line allowance reading | An orb in JARVIS's current colour; one pylon per capability, ring colour = ok / warn / off / error | Capability: its detail, e.g. "3% of 5h left", "not paired" | Allowance shows "unavailable — no fresh status-line reading" rather than a number |
 
+## Projects he's building
+
+The three projects JARVIS builds himself (real estate walkthroughs, the
+YouTube channel, the AI influencer) stand on an outer ring of pads behind the
+stage, along the glass, mirrored like the six on it: YouTube straight out
+behind the desk, real estate on the left, the influencer on the right. A lit
+track on the floor joins them, and a pathway plugs each into the stage's edge.
+Source: each project's brief and autopilot (`/api/streams`, as on the Projects
+page) and the jobs feed.
+
+| What | Means |
+|---|---|
+| The build on a pad | One level per milestone in the project's brief: solid once done, a scaffold for the next, a faint outline for the rest — so it rises a level at a time as he works through them. The icon floats where the top will be |
+| Scanner ring and beam from the ceiling | A run of his is on that project now |
+| Pathway flowing out to it | Same: he's working on it |
+| Amber rim, pathway flowing back | It's waiting on you (its Needs are on the Needs list) |
+| Dim rim | Paused |
+| Label | Name, levels done of total, and in Command what he's doing or the next milestone |
+
+Click a pad to go over to it; click again, or its label, for the Projects page.
+Walking, face one and `E` opens it there. The drones' way out and the opening
+flight pass over the middle one.
+
 ## Connections
 
 | Link | Style → meaning |
@@ -137,6 +160,7 @@ In development, `window.__gl` reads the last frame's draw calls and triangles.
 | `floor.tsx` | Zone light on the stage; contact shadows |
 | `console.tsx` | The centre console: Blender model and baked textures, live lights, the four monitors |
 | `clusters.tsx` | The six zone structures |
+| `projectpads.tsx` | The project pads behind the stage: builds, track, pathways |
 | `links.tsx` | Pathways, arcs, packets |
 | `camera.tsx` | Orbit controls, flights, cinematic drift |
 | `walk.tsx` | Walk mode: first-person movement, collisions, E to use |

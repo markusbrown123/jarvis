@@ -10,11 +10,12 @@ import { useStation, type Mode } from './stationStore'
 import { typing } from './shared'
 import { useStationModel } from './model'
 import { useLiveEvents } from './events'
-import { ZONE, ZONES, type View as Focus } from './layout'
+import { ZONE, ZONES, type View as Focus, type ZoneId } from './layout'
 import { describe, termMatch } from './describe'
 import { Detail } from './Detail'
 import { DeskCode, DeskIdeas } from './desk'
 import { LabelLayer } from './labels'
+import { useStreamsLive } from '../hub/streams'
 import { IntroOverlay } from './intro'
 import './station.css'
 
@@ -189,8 +190,8 @@ function ViewBar() {
     <div className="st-viewbar" role="toolbar" aria-label="Station camera">
       {mode === 'command' &&
         presets.map((v) => (
-          <button key={v} className={view === v ? 'on' : ''} onClick={() => fly(v)} title={v === 'overview' ? 'See the whole station' : `Focus ${ZONE[v].label}`}>
-            {v === 'overview' ? 'Overview' : ZONE[v].label}
+          <button key={v} className={view === v ? 'on' : ''} onClick={() => fly(v)} title={v === 'overview' ? 'See the whole station' : `Focus ${ZONE[v as ZoneId].label}`}>
+            {v === 'overview' ? 'Overview' : ZONE[v as ZoneId].label}
           </button>
         ))}
       {mode !== 'talk' && mode !== 'walk' && (
@@ -497,6 +498,8 @@ export function Station() {
   const selected = useStation((s) => Boolean(s.selected))
   // Going into one of the desk's screens, or back out: the HUD steps aside.
   const screen = useStation((s) => s.screen?.phase ?? null)
+  // The projects he's building, for their pads (projectpads.tsx).
+  useStreamsLive()
   // J: Talk. F: Walk. C: Cinematic / Command. R: reset the view. L: Connections View.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

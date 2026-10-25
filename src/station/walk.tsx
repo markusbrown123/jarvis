@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useHub } from '../hub/client'
-import { CONSOLE_R, FOUNDRY, OBSTACLES, onIsland, walkable, ZONES } from './layout'
+import { CONSOLE_R, FOUNDRY, OBSTACLES, onIsland, PROJECT_PADS, walkable, ZONES } from './layout'
 import { SCREENS, useStation } from './stationStore'
 
 /**
@@ -192,16 +192,23 @@ export function WalkControls() {
       act.current = () => st.setMode('talk')
     } else {
       let best = Infinity
-      // The zones, and the build bay (which opens Jobs).
-      const spots = [...ZONES.map((z) => ({ x: z.pos[0], z: z.pos[2], label: z.label, id: z.id })), { x: FOUNDRY[0], z: FOUNDRY[2], label: 'the build bay', id: 'jobs' as const }]
+      // The zones, the build bay (which opens Jobs), and the projects he's building (their page).
+      const spots = [
+        ...[...ZONES.map((z) => ({ x: z.pos[0], z: z.pos[2], label: z.label, id: z.id })), { x: FOUNDRY[0], z: FOUNDRY[2], label: 'the build bay', id: 'jobs' as const }].map((z) => ({
+          ...z,
+          hint: `open ${z.label}`,
+          go: () => st.select({ kind: 'zone', id: z.id, zone: z.id }),
+        })),
+        ...PROJECT_PADS.map((p) => ({ x: p.pos[0], z: p.pos[2], hint: `${p.label} · open it on the Projects page`, go: () => useHub.getState().setPrefs({ view: 'projects' }) })),
+      ]
       for (const z of spots) {
         const dx = z.x - pos.x
         const dz = z.z - pos.z
         const dist = Math.hypot(dx, dz)
         if (dist < 3 && dist < best && (dx * fx + dz * fz) / dist > 0.5) {
           best = dist
-          hint = `E  ·  open ${z.label}`
-          act.current = () => st.select({ kind: 'zone', id: z.id, zone: z.id })
+          hint = `E  ·  ${z.hint}`
+          act.current = z.go
         }
       }
     }

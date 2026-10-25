@@ -72,8 +72,9 @@ const CONSOLE_DROP = V(0, 2.45, 0.35)
 /** Whoever's sat at the desk: where the cameras look when there's nothing else. */
 const SUBJECT = V(CHAIR[0], 1.2, CHAIR[2])
 const BAY_DROP = V(FOUNDRY[0], 3.0, FOUNDRY[2] + 1.0)
-const DOOR_IN = V(0, 3.0, -12.5)
-const DOOR_OUT = V(0, 3.0, -18.5)
+// High in the open bay: over the project build that stands in front of it (layout.ts PROJECT_PADS).
+const DOOR_IN = V(0, 3.7, -12.5)
+const DOOR_OUT = V(0, 3.7, -18.5)
 const OUTSIDE = V(0, 2.6, -27)
 
 function zonePoint(z: ZoneId, y = 1.95, r = 4.05) {

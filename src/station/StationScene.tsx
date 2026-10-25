@@ -8,6 +8,7 @@ import { useHub, type Graphics } from '../hub/client'
 import { useStore } from '../store'
 import { ZoneLight } from './floor'
 import { Clusters } from './clusters'
+import { ProjectPads } from './projectpads'
 import { Foundry } from './foundry'
 import { Drones } from './drones'
 import { Robot } from './robot'
@@ -321,6 +322,7 @@ export function StationScene({ graphics }: { graphics: Graphics }) {
       </ConsoleGuard>
       <Links />
       <Clusters />
+      <ProjectPads />
       <Foundry />
       <ConsoleGuard what="drones">
         <Suspense fallback={null}>

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useHub, hubActions, type Autopilot, type Stream } from '../hub/client'
+import { refreshStreams, useStreamsLive } from '../hub/streams'
 import type { Job } from '../hub/types'
 import { ago } from '../hub/format'
 import { useStation } from '../station/stationStore'
@@ -193,28 +194,10 @@ function StreamCard({ s, ap, links, writes, onChange }: { s: Stream; ap?: Autopi
   )
 }
 
-type Data = { streams: Stream[]; links: { label: string; url: string }[]; autopilot: Record<string, Autopilot> }
-
 export function Projects() {
-  const [data, setData] = useState<Data | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+  const { data, err } = useStreamsLive()
   const writes = useHub((x) => x.code.writes)
-  // A run finishing ticks milestones in its brief: read them again when one does.
-  const finished = useHub((x) => Object.values(x.state?.jobs ?? {}).filter((j) => j.autopilot && j.state !== 'running').length)
-  const [nonce, setNonce] = useState(0)
-  useEffect(() => {
-    let live = true
-    hubActions
-      .streams()
-      .then((d) => live && (setData(d), setErr(null)))
-      .catch((e: Error) => live && setErr(e.message))
-    const t = setTimeout(() => setNonce((n) => n + 1), 30000)
-    return () => {
-      live = false
-      clearTimeout(t)
-    }
-  }, [finished, nonce])
-  const refresh = () => setNonce((n) => n + 1)
+  const refresh = () => void refreshStreams()
   return (
     <div className="view">
       <header className="view-head">

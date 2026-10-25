@@ -36,8 +36,8 @@ const SHOTS: Shot[] = [
   { dur: 2.8, from: { pos: [-150, 66, -112], look: [20, -4, 30], fov: 36 }, to: { pos: [-118, 52, -88], look: [16, -3, 26], fov: 38 } },
   // The terrace and the pool.
   { dur: 2.4, from: { pos: [-20, 8, -44], look: [0, 1.5, -12], fov: 42 }, to: { pos: [-8, 4.6, -32], look: [0, 2.2, -11], fov: 45 } },
-  // In through the open glass.
-  { dur: 2.2, from: { pos: [-2.5, 3.3, -24.5], look: [0, 2.3, -10], fov: 46 }, to: { pos: [0, 2.7, -13.6], look: [-1, 2.2, -6], fov: 50 } },
+  // In through the open glass, over the project builds, the desk ahead.
+  { dur: 2.2, from: { pos: [-2.5, 3.3, -24.5], look: [0, 2.3, -10], fov: 46 }, to: { pos: [0, 3.9, -11.6], look: [-0.6, 1.6, -4.4], fov: 50 } },
   // Round the stage, past the drones and the build bay, to the chair.
   { dur: 2.6, from: { pos: [-5.4, 3.3, -7.2], look: [-0.5, 1.5, -3.2], fov: 50 }, via: [{ pos: [-6.6, 3.1, 0.2], look: [0, 1.3, -1.6], fov: 46 }], to: 'seat', ease: 'out' },
 ]

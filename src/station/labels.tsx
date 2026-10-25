@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { CONSOLE_R, HOUSE, linkAnchor, ZONE, ZONES, type ZoneId } from './layout'
+import { useHub } from '../hub/client'
+import { CONSOLE_R, HOUSE, linkAnchor, PROJECT_PADS, ZONE, ZONES, type ProjectPad, type ZoneId } from './layout'
 import { SCREENS, useStation } from './stationStore'
 import { describe } from './describe'
+import { useProjectPad } from './projectpads'
 
 /**
  * Labels over the 3D room, in the page rather than the scene: crisp text,
@@ -64,6 +66,34 @@ function ZoneLabel({ id }: { id: ZoneId }) {
       </span>
       {!cinematic && zm && <span className="st-label-head">{zm.headline}</span>}
       {!cinematic && zm && zm.freshness.kind !== 'live' && <span className={`st-label-fresh f-${zm.freshness.kind}`}>{zm.freshness.text}</span>}
+    </div>
+  )
+}
+
+/** A project JARVIS is building: its name, how far its build has got, and what it's doing. */
+function ProjectLabel({ pad }: { pad: ProjectPad }) {
+  const { stream, ap, live, done, total } = useProjectPad(pad.id)
+  const mode = useStation((s) => s.mode)
+  const ref = useAnchor(`project-${pad.id}`, [pad.pos[0], 2.75, pad.pos[2]], () => (live ? 3 : 2))
+  const cinematic = mode !== 'command'
+  const waiting = Boolean(ap && (ap.blocked || ap.waiting > 0))
+  const word = live ? 'building now' : waiting ? 'needs you' : ap?.paused ? 'paused' : null
+  const next = stream?.milestones.find((m) => !m.done)?.text
+  return (
+    <div
+      ref={ref}
+      className={`st-label st-label-${live ? 'active' : waiting ? 'attention' : 'idle'} ${cinematic ? 'cine' : ''}`}
+      style={{ '--zc': pad.color } as CSSProperties}
+      onClick={() => useHub.getState().setPrefs({ view: 'projects' })}
+      title={`${pad.label}: open it on the Projects page`}
+    >
+      <span className="st-label-name">
+        <i className="st-label-dot" />
+        {pad.label}
+        {total > 0 && <em>{`${done}/${total}`}</em>}
+        {!cinematic && word && <em>{word}</em>}
+      </span>
+      {!cinematic && <span className="st-label-head">{live ? live.replace(/^[^:]*:\s*/, '') : next ? `next: ${next}` : stream ? 'every milestone done' : 'reading the brief…'}</span>}
     </div>
   )
 }
@@ -137,6 +167,9 @@ export function LabelLayer() {
     <div className="st-labels" aria-hidden={mode !== 'command'}>
       {ZONES.map((z) => (
         <ZoneLabel key={z.id} id={z.id} />
+      ))}
+      {PROJECT_PADS.map((p) => (
+        <ProjectLabel key={p.id} pad={p} />
       ))}
       {connections && mode === 'command' && linkIds.split('|').filter(Boolean).map((id) => <LinkLabel key={id} id={id} />)}
       <Tooltip />

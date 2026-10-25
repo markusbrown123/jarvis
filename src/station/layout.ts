@@ -48,6 +48,28 @@ export const ZONES: Zone[] = [
 
 export const ZONE: Record<ZoneId, Zone> = Object.fromEntries(ZONES.map((z) => [z.id, z])) as Record<ZoneId, Zone>
 
+/**
+ * The projects JARVIS builds himself (bridge/hub/autopilot.mjs): an outer
+ * ring of three pads on the floor behind the stage, along the glass, mirrored
+ * about the room's axis like the six on the stage — one straight out behind
+ * the desk, one either side. What stands on each grows a level for every
+ * milestone done (projectpads.tsx). The drones' way out and the intro's
+ * flight in pass over the middle one.
+ */
+export type ProjectPadId = 'realestate' | 'youtube' | 'influencer'
+export type ProjectPad = { id: ProjectPadId; label: string; role: string; color: string; pos: [number, number, number] }
+export const PROJECT_RING = 10.5
+export const PROJECT_PAD = 1.15
+const wing = (deg: number): [number, number, number] => {
+  const a = (deg * Math.PI) / 180
+  return [+(PROJECT_RING * Math.sin(a)).toFixed(3), 0, +(-PROJECT_RING * Math.cos(a)).toFixed(3)]
+}
+export const PROJECT_PADS: ProjectPad[] = [
+  { id: 'realestate', label: 'Real estate', role: 'AI video walkthroughs', color: '#a3e635', pos: wing(-36) },
+  { id: 'youtube', label: 'YouTube', role: 'faceless channel', color: '#fb7185', pos: wing(0) },
+  { id: 'influencer', label: 'Influencer', role: 'AI character, labelled', color: '#e879f9', pos: wing(36) },
+]
+
 export const STATUS = {
   ok: '#4ade80',
   warn: '#f5a524',
@@ -79,12 +101,22 @@ export function seatCamera(aspect: number): { pos: [number, number, number]; tar
 }
 
 /** Camera presets: where the camera sits and what it looks at. */
-export type View = 'overview' | ZoneId
+export type View = 'overview' | ZoneId | ProjectPadId
 export function cameraFor(view: View, aspect: number): { pos: [number, number, number]; target: [number, number, number] } {
   // Narrow windows pull back so the island still fits between the panels.
   const k = Math.max(1, 1.6 / aspect)
-  if (view === 'overview') return { pos: [0, 12.4 * k, 17.6 * k], target: [0, 0.2, 0.6] }
-  const z = ZONE[view]
+  // Far enough back, and looking far enough in, that the project pads behind the stage are in it too.
+  if (view === 'overview') return { pos: [0, 14.5 * k, 19.5 * k], target: [0, 0.2, -0.6] }
+  const pad = PROJECT_PADS.find((p) => p.id === view)
+  if (pad) {
+    // From the stage, swung a little to the side so the build bay's crane
+    // isn't in the way, looking out at it with the sea behind.
+    const [x, , z] = pad.pos
+    const a = Math.atan2(-x, -z) + (x > 0.5 ? 0.42 : -0.42)
+    const back = 6.4 * k
+    return { pos: [x + Math.sin(a) * back, 4 + k, z + Math.cos(a) * back], target: [x, 1.1, z] }
+  }
+  const z = ZONE[view as ZoneId]
   const a = (z.angle * Math.PI) / 180
   // From the front, swung out towards the zone's own side, so every zone —
   // back ones too — is seen from the room with the reactor beside it.
@@ -192,6 +224,7 @@ export const OBSTACLES: [number, number, number][] = [
   [ESTATE.wings[0][0], ESTATE.wings[0][1], 9.1],
   [ESTATE.wings[1][0], ESTATE.wings[1][1], 11.0],
   ...ZONES.map((z): [number, number, number] => [z.pos[0], z.pos[2], 1.35]),
+  ...PROJECT_PADS.map((p): [number, number, number] => [p.pos[0], p.pos[2], PROJECT_PAD + 0.05]),
   [FOUNDRY[0], FOUNDRY[2], FOUNDRY_R],
   [DUME[0], DUME[2], 0.42],
   // The six drone docks in the floor behind the build bay (drones.tsx DOCK_R, DOCK_DEG).
