@@ -11,7 +11,8 @@
  * lives in their own repos.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -58,10 +59,51 @@ export function milestones(which) {
   return [...b.text.matchAll(/^- \[( |x)\] (.+)$/gm)].map((m) => ({ done: m[1] === 'x', text: m[2].replace(WAITING_RE, '').trim(), waiting: m[1] !== 'x' && WAITING_RE.test(m[2]) }))
 }
 
+/**
+ * When each milestone was done, newest first: read from the brief's own git
+ * history (the commit a "- [x]" line first appears in), so there's a record
+ * from the start, not just from when this was added — and one ticked but not
+ * committed yet counts from now. Cached until the brief changes.
+ */
+const histCache = new Map()
+export function history(which) {
+  const file = join(BASES, which, 'BRIEF.md')
+  if (!existsSync(file)) return []
+  const key = statSync(file).mtimeMs
+  const hit = histCache.get(which)
+  if (hit?.key === key) return hit.list
+  const seen = new Map()
+  const norm = (t) =>
+    t
+      .replace(/\s*\(waiting on Markus\)\s*$/i, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .slice(0, 48)
+  try {
+    const log = execFileSync('git', ['-C', REPO, 'log', '--reverse', '--format=@@%ct', '-p', '--', `bases/${which}/BRIEF.md`], { encoding: 'utf8', maxBuffer: 8 << 20, timeout: 5000 })
+    let at = 0
+    for (const line of log.split('\n')) {
+      if (line.startsWith('@@') && /^@@\d+$/.test(line)) at = Number(line.slice(2)) * 1000
+      const m = line.match(/^\+- \[x\] (.+)$/)
+      if (m && !seen.has(norm(m[1]))) seen.set(norm(m[1]), at)
+    }
+  } catch {
+    /* not a git checkout, or git missing: what's ticked now still shows below */
+  }
+  const list = milestones(which)
+    .filter((m) => m.done)
+    .map((m) => ({ text: m.text, at: seen.get(norm(m.text)) ?? Date.now() }))
+    .sort((a, b) => b.at - a.at)
+  histCache.set(which, { key, list })
+  return list
+}
+
 /** Every stream with its status, milestones and brief: the dashboard's Projects page. */
 export function all() {
   return STREAMS.map((s) => {
     const b = brief(s.id)
-    return { ...s, base: BASE_PROJECTS.includes(s.project) ? `bases/${s.id}` : null, status: status(s.id), milestones: milestones(s.id), brief: b?.text ?? '' }
+    const base = BASE_PROJECTS.includes(s.project)
+    return { ...s, base: base ? `bases/${s.id}` : null, status: status(s.id), milestones: milestones(s.id), history: base ? history(s.id) : [], brief: b?.text ?? '' }
   })
 }

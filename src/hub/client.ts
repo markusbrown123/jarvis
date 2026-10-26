@@ -245,6 +245,8 @@ export type Stream = {
   base: string | null
   status: string
   milestones: { done: boolean; text: string; waiting?: boolean }[]
+  /** When each milestone was done, newest first (from the brief's git history). */
+  history: { text: string; at: number }[]
   brief: string
 }
 

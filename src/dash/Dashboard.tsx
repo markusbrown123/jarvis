@@ -14,6 +14,7 @@ import { Diagnostics } from '../ui/Diagnostics'
 import { Intro, SoundLockHint } from '../ui/Intro'
 import { PhoneLock } from '../ui/PhoneLock'
 import { PhoneTabBar } from './PhoneTabBar'
+import { PhoneHome } from './PhoneHome'
 import { Overview } from './Overview'
 import { Projects } from './Projects'
 import { Roblox } from './Roblox'
@@ -29,6 +30,7 @@ import { VoiceWave } from './VoiceWave'
 import { ItemCard } from './shared'
 import { inputState, openItems, useMedia, useTick } from './state'
 import './dash.css'
+import './phone.css'
 
 const NAV: { id: View; label: string; key: string }[] = [
   { id: 'station', label: 'Station', key: '0' },
@@ -498,10 +500,15 @@ export function Dashboard({ onStart }: { onStart: () => void }) {
       case 'settings':
         return <Settings />
       default:
-        return <Overview />
+        // The phone's Home is its own: progress at a glance (PhoneHome.tsx).
+        return phone ? <PhoneHome /> : <Overview />
     }
   })()
 
+  // A new page opens at its top, not wherever the last one was scrolled to.
+  useEffect(() => {
+    document.querySelector('.workspace')?.scrollTo(0, 0)
+  }, [prefs.view])
   const station = prefs.view === 'station' && !prefs.immersive
   // Gone into one of the desk's screens: its page is up, with the room still
   // loaded (and paused) underneath to come back out to.

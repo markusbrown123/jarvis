@@ -3023,3 +3023,255 @@ body.dash-mode .bl {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------ progress */
+/* A project's build (progress.tsx): its tower, its levels as a bar, and its steps. */
+
+.tower {
+  display: block;
+  overflow: visible;
+}
+.tower-ground {
+  fill: color-mix(in srgb, var(--c) 14%, transparent);
+}
+.tower-level polygon {
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+.tower-done {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c) 55%, transparent));
+}
+.tower-done .f-top {
+  fill: color-mix(in srgb, var(--c) 82%, white);
+  stroke: color-mix(in srgb, var(--c) 55%, white);
+}
+.tower-done .f-front {
+  fill: color-mix(in srgb, var(--c) 78%, black);
+  stroke: color-mix(in srgb, var(--c) 70%, white);
+}
+.tower-done .f-right {
+  fill: color-mix(in srgb, var(--c) 52%, black);
+  stroke: color-mix(in srgb, var(--c) 60%, transparent);
+}
+.tower-done .f-left {
+  fill: color-mix(in srgb, var(--c) 36%, black);
+  stroke: color-mix(in srgb, var(--c) 50%, transparent);
+}
+.tower-next polygon {
+  fill: color-mix(in srgb, var(--c) 10%, transparent);
+  stroke: var(--c);
+  stroke-dasharray: 3 2;
+}
+.tower-live .tower-next {
+  animation: tower-pulse 1.3s ease-in-out infinite;
+}
+.tower-waiting polygon {
+  fill: rgba(245, 165, 36, 0.08);
+  stroke: var(--amber);
+  stroke-dasharray: 3 2;
+}
+.tower-todo polygon {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c) 26%, transparent);
+}
+.tower-beam {
+  stroke: var(--c);
+  stroke-width: 1.6;
+  stroke-dasharray: 4 6;
+  opacity: 0.75;
+  animation: tower-beam 0.6s linear infinite;
+}
+.tower-fresh {
+  animation: tower-rise 0.8s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+@keyframes tower-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes tower-beam {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+@keyframes tower-rise {
+  from {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+}
+
+.levelbar {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+}
+.levelbar span {
+  flex: 1;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.levelbar .lb-done {
+  background: var(--c);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.levelbar .lb-next {
+  background: color-mix(in srgb, var(--c) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 70%, transparent);
+}
+.levelbar .lb-live {
+  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--c) 60%, transparent) 0 3px, transparent 3px 7px);
+  background-size: 10px 10px;
+  animation: lb-stripe 0.7s linear infinite;
+}
+.levelbar .lb-wait {
+  background: rgba(245, 165, 36, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(245, 165, 36, 0.6);
+}
+@keyframes lb-stripe {
+  to {
+    background-position: 10px 0;
+  }
+}
+
+.steps {
+  list-style: none;
+  margin: 12px 0 4px;
+  padding: 0;
+}
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  padding: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.step::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 22px;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.step:last-child::before {
+  display: none;
+}
+.step-done::before {
+  background: color-mix(in srgb, var(--c) 50%, transparent);
+}
+.step-node {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: var(--g1);
+  color: #0b0b10;
+  font: 700 12px var(--body);
+}
+.step-done .step-node {
+  border-color: var(--c);
+  background: var(--c);
+}
+.step-next .step-node {
+  border-color: var(--c);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 16%, transparent), 0 0 12px color-mix(in srgb, var(--c) 70%, transparent);
+}
+.step-wait .step-node {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.step-done .step-text {
+  color: var(--text);
+  opacity: 0.8;
+}
+.step-next .step-text {
+  color: var(--text);
+  font-weight: 600;
+}
+.step-todo .step-text {
+  color: var(--faint);
+}
+.step-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+  color: var(--c);
+  font: 600 10.5px var(--mono);
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.step-wait .step-tag {
+  background: rgba(245, 165, 36, 0.15);
+  color: var(--amber);
+}
+.step-detail {
+  display: -webkit-box;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 12.5px;
+  font-weight: 400;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.step-next .step-detail {
+  color: var(--muted);
+}
+
+.project-rise {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0 12px;
+  padding: 10px 14px 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: radial-gradient(80% 120% at 0% 100%, color-mix(in srgb, var(--c) 10%, transparent), transparent 70%), rgba(255, 255, 255, 0.02);
+}
+.project-level {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font: 500 15px var(--head);
+}
+.project-level b {
+  color: var(--text);
+  font: 700 24px var(--head);
+}
+.project-level span {
+  margin-left: auto;
+  color: var(--c);
+  font: 600 15px var(--mono);
+}
+.project-last {
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tower-live .tower-next,
+  .tower-beam,
+  .tower-fresh,
+  .levelbar .lb-live {
+    animation: none;
+  }
+}

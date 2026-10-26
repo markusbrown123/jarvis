@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useHub, hubActions, type Autopilot, type Stream } from '../hub/client'
 import { refreshStreams, useStreamsLive } from '../hub/streams'
 import type { Job } from '../hub/types'
 import { ago } from '../hub/format'
 import { useStation } from '../station/stationStore'
 import { Chip, Empty, ItemCard } from './shared'
+import { BuildTower, LevelBar, MilestoneSteps, colorOf } from './progress'
 import { openItems, useTick } from './state'
 
 /**
@@ -141,34 +142,37 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
 function StreamCard({ s, ap, links, writes, onChange }: { s: Stream; ap?: Autopilot; links: { label: string; url: string }[]; writes: boolean; onChange: () => void }) {
   const [open, setOpen] = useState(false)
   const go = useHub((x) => x.setPrefs)
+  const live = useHub((x) => Object.values(x.state?.jobs ?? {}).some((j) => j.project === s.project && j.autopilot && j.state === 'running'))
   const done = s.milestones.filter((m) => m.done).length
+  const total = s.milestones.length
   const page = PAGE[s.project]
   const started = done > 0 || !/^not started/i.test(s.status)
+  const color = colorOf(s.project)
+  const last = s.history?.[0]
   return (
-    <section className="card project-card">
+    <section className="card project-card" id={`project-${s.project}`}>
       <header className="card-head">
         <h3>{s.name}</h3>
-        <Chip tone={started ? 'ok' : 'idle'}>{ap ? 'JARVIS builds it' : started ? 'running' : 'not started'}</Chip>
+        <Chip tone={live ? 'work' : started ? 'ok' : 'idle'}>{live ? 'building now' : ap ? 'JARVIS builds it' : started ? 'running' : 'not started'}</Chip>
       </header>
       <p className="project-line">{s.line}</p>
+      {total > 0 && (
+        <div className="project-rise" style={{ '--c': color } as CSSProperties} aria-label={`${done} of ${total} milestones done`}>
+          <BuildTower steps={s.milestones} color={color} live={live} size={84} />
+          <div className="project-rise-info">
+            <p className="project-level">
+              <b>Level {done}</b> of {total}
+              <span>{Math.round((done / total) * 100)}%</span>
+            </p>
+            <LevelBar steps={s.milestones} color={color} live={live} />
+            <p className="project-last">{last ? `Last done ${ago(last.at)}: ${last.text.split(' — ')[0]}` : 'Nothing done yet: the first level is next.'}</p>
+          </div>
+        </div>
+      )}
       <p className="project-status">
         <span className="muted">Status</span> {s.status}
       </p>
-      {s.milestones.length > 0 && (
-        <>
-          <div className="project-progress" aria-label={`${done} of ${s.milestones.length} milestones done`}>
-            <span style={{ width: `${(done / s.milestones.length) * 100}%` }} />
-          </div>
-          <ul className="project-milestones">
-            {s.milestones.map((m) => (
-              <li key={m.text} className={m.done ? 'done' : m.waiting ? 'waiting' : ''}>
-                <span aria-hidden>{m.done ? '✓' : m.waiting ? '⏸' : '○'}</span> {m.text}
-                {m.waiting && <em> · waiting on you</em>}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      {total > 0 && <MilestoneSteps steps={s.milestones} color={color} live={live} />}
       {s.project === 'finance' && links.length > 0 && (
         <p className="project-links">
           {links.map((l) => (
