@@ -2759,7 +2759,7 @@ body.dash-mode .bl {
 .project-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; font-size: 13px; }
 .project-card .item-actions { margin-top: auto; }
 .project-brief { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--muted); background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0; max-height: 420px; overflow: auto; }
-@media (max-width: 640px) { .projects-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .projects-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .project-build { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 .project-live { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: rgba(124, 139, 255, 0.08); border: 1px solid rgba(124, 139, 255, 0.3); }
@@ -3259,7 +3259,7 @@ body.dash-mode .bl {
   color: var(--c);
   font: 600 15px var(--mono);
 }
-.project-last {
+.project-lastdone {
   margin: 8px 0 0;
   overflow: hidden;
   color: var(--muted);

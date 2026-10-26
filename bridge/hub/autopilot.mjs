@@ -1,6 +1,7 @@
 /**
- * JARVIS building Markus's newer projects himself (the bases with a working
- * folder: streams.mjs BASE_PROJECTS).
+ * JARVIS building Markus's projects himself (streams.mjs BUILT): the newer
+ * ones with a base folder, and Automaton's client sites, whose runs work in
+ * bases/sites and only read the Automaton repos.
  *
  * Each run is a background job in the project's base folder: it reads the
  * brief, does the next unticked milestone as far as it can without Markus,
@@ -13,9 +14,11 @@
  * waits for him rather than guessing. What he says about a project goes into
  * its brief (note), so the next run has it.
  *
- * On its own it takes one project at a time, round-robin, a run starting at
- * least GAP after the last one finished (JARVIS_AUTOPILOT_GAP_MIN, default 120), never while two jobs are going,
- * and not while the 5-hour allowance is past 70%. Each project can be
+ * On its own it runs them side by side, each in its own lane: a project's
+ * next run starts at least GAP after its own last one finished
+ * (JARVIS_AUTOPILOT_GAP_MIN, default 120), one new start a tick so the
+ * allowance is read between them, Markus's focus first when several are due,
+ * and none while the 5-hour allowance is past 70%. Each project can be
  * paused; JARVIS_NO_AUTOPILOT=1 turns the whole thing off. Every run, and
  * every result, shows on the Projects page and in Jobs.
  */
@@ -23,11 +26,11 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as hub from './store.mjs'
-import { BASE_PROJECTS, STREAMS, WAITING, baseDir, milestones } from './streams.mjs'
+import { BUILT, STREAMS, WAITING, baseDir, milestones } from './streams.mjs'
 
 const FILE = join(hub.DATA_DIR, 'autopilot.json')
 const GAP = Math.max(1, Number(process.env.JARVIS_AUTOPILOT_GAP_MIN) || 120) * 60000
-const TICK = 10 * 60000
+const TICK = 5 * 60000
 const MAX_ALLOWANCE = 70
 
 const read = () => {
@@ -125,7 +128,7 @@ function takeResult(project, output, startedAt) {
 /** Run the next milestone of one project now. Returns what happened, in words. */
 export function work(project, { runner, by = 'markus' } = {}) {
   const s = streamOf(project)
-  if (!s || !BASE_PROJECTS.includes(project)) return { started: false, why: `${project} isn't one JARVIS builds himself.` }
+  if (!s || !BUILT.includes(project)) return { started: false, why: `${project} isn't one JARVIS builds himself.` }
   if (running(project)) return { started: false, why: `Already working on ${s.name}.` }
   const next = nextFor(project)
   if (!next)
@@ -138,6 +141,8 @@ export function work(project, { runner, by = 'markus' } = {}) {
     title: `${s.name}: ${next.text}`.slice(0, 120),
     project,
     instructions: BRIEF(s, next.text),
+    // In its base, wherever the project's other jobs run (Automaton's in its repo).
+    cwd: baseDir(project),
     notify: 'phone',
     autopilot: true,
     onDone: (output) => takeResult(project, output, startedAt),
@@ -151,7 +156,7 @@ export function work(project, { runner, by = 'markus' } = {}) {
 /** Markus's word on a project, into its brief for the next run. */
 export function note(project, text) {
   const s = streamOf(project)
-  if (!s || !BASE_PROJECTS.includes(project)) throw new Error(`${project} has no base to note it in.`)
+  if (!s || !BUILT.includes(project)) throw new Error(`${project} has no base to note it in.`)
   const file = join(baseDir(project), 'BRIEF.md')
   const body = readFileSync(file, 'utf8')
   // One line, so nothing in it can read as a heading or a milestone.
@@ -168,7 +173,7 @@ export function note(project, text) {
 }
 
 export function setPaused(project, paused) {
-  if (!BASE_PROJECTS.includes(project)) throw new Error(`${project} isn't one JARVIS builds himself.`)
+  if (!BUILT.includes(project)) throw new Error(`${project} isn't one JARVIS builds himself.`)
   saved.paused[project] = Boolean(paused)
   save()
 }
@@ -176,7 +181,7 @@ export function setPaused(project, paused) {
 /** Each base project's autopilot, for the Projects page. */
 export function status() {
   return Object.fromEntries(
-    BASE_PROJECTS.map((p) => [
+    BUILT.map((p) => [
       p,
       { paused: Boolean(saved.paused[p]), lastAt: saved.lastAt[p] ?? null, waiting: waiting(p).length, blocked: Boolean(saved.blocked[p] && waiting(p).length), off: Boolean(process.env.JARVIS_NO_AUTOPILOT), next: nextFor(p)?.text ?? null },
     ]),
@@ -188,18 +193,14 @@ export function start({ runner, writes = true }) {
   if (process.env.JARVIS_NO_AUTOPILOT || !writes) return
   const tick = () => {
     try {
-      const jobs = Object.values(hub.snapshot().jobs)
-      if (jobs.filter((j) => j.state === 'running').length >= 2) return
-      if (jobs.some((j) => j.autopilot && j.state === 'running')) return
-      const last = Math.max(0, ...jobs.filter((j) => j.autopilot).map((j) => j.updatedAt ?? 0))
-      if (Date.now() - last < GAP) return
       const used = hub.snapshot().usage?.windows?.five_hour?.usedPct
       if (typeof used === 'number' && used > MAX_ALLOWANCE) return
-      // The one that's waited longest, that isn't paused or stuck waiting on him.
+      const jobs = Object.values(hub.snapshot().jobs)
+      // Each project's own lane: GAP after its last run finished, whatever the others are doing.
+      const lastEnd = (p) => Math.max(0, ...jobs.filter((j) => j.autopilot && j.project === p).map((j) => j.updatedAt ?? 0))
       const stuck = (p) => saved.blocked[p] && waiting(p).length > 0
-      const next = BASE_PROJECTS.filter((p) => !saved.paused[p] && !stuck(p) && nextFor(p)).sort(
-        (a, b) => (saved.lastAt[a] ?? 0) - (saved.lastAt[b] ?? 0),
-      )[0]
+      // In BUILT's order, Markus's focus first; one start a tick.
+      const next = BUILT.find((p) => !saved.paused[p] && !stuck(p) && !running(p) && Date.now() - lastEnd(p) >= GAP && nextFor(p))
       if (next) work(next, { runner, by: 'autopilot' })
     } catch (err) {
       console.warn('[hub] autopilot:', err.message)

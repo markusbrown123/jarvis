@@ -314,8 +314,8 @@ export function hubServer({ emit, runner, phone, sources, code }) {
       ),
       tool(
         'project_work',
-        `Work on one of the projects you build yourself, now: a background job does the next milestone in its brief, in its folder, and it shows on the Projects page. project: ${streams.BASE_PROJECTS.join(' | ')}. Use for "work on the YouTube channel", "build the real estate one", "get going on the projects" (one at a time).`,
-        { project: z.enum(streams.BASE_PROJECTS) },
+        `Work on one of the projects you build yourself, now: a background job does the next milestone in its brief, in its folder, and it shows on the Projects page. project: ${streams.BUILT.join(' | ')}. Use for "work on the YouTube channel", "build the real estate one", "work on the client sites", "get going on the projects" (one call per project).`,
+        { project: z.enum(streams.BUILT) },
         async ({ project }) => {
           const r = autopilot.work(project, { runner })
           return ok(r.started ? `Working on it now: ${r.milestone}. It shows on the Projects page and reaches your phone when it's done.` : r.why)
@@ -323,8 +323,8 @@ export function hubServer({ emit, runner, phone, sources, code }) {
       ),
       tool(
         'project_note',
-        `Put what Markus said about one of these projects into its brief, so the next run builds on it: a choice he made, an answer to something it needed, a change of direction. project: ${streams.BASE_PROJECTS.join(' | ')}. Use his words.`,
-        { project: z.enum(streams.BASE_PROJECTS), note: z.string() },
+        `Put what Markus said about one of these projects into its brief, so the next run builds on it: a choice he made, an answer to something it needed, a change of direction. project: ${streams.BUILT.join(' | ')}. Use his words.`,
+        { project: z.enum(streams.BUILT), note: z.string() },
         async ({ project, note }) => {
           try {
             autopilot.note(project, note)
@@ -336,8 +336,8 @@ export function hubServer({ emit, runner, phone, sources, code }) {
       ),
       tool(
         'project_autopilot',
-        `Pause or resume your own work on one of these projects (you work on them in turn by yourself). project: ${streams.BASE_PROJECTS.join(' | ')}.`,
-        { project: z.enum(streams.BASE_PROJECTS), on: z.boolean() },
+        `Pause or resume your own work on one of these projects (you work on them side by side by yourself). project: ${streams.BUILT.join(' | ')}.`,
+        { project: z.enum(streams.BUILT), on: z.boolean() },
         async ({ project, on }) => {
           autopilot.setPaused(project, !on)
           return ok(on ? 'Back on: I will keep working on it.' : 'Paused: I will leave it until you say.')

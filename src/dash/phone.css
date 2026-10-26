@@ -358,7 +358,7 @@
 /* The skyline: a tower per project on a lit ground line. */
 .skyline {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   align-items: end;
   gap: 4px;
   margin: 0 -14px;

@@ -8,14 +8,16 @@ import { inputState, openItems, useTick } from './state'
 
 /**
  * The phone's Home: how things are moving, at a glance. JARVIS and his state;
- * the three projects he builds as a skyline of towers, a level per milestone
+ * the four projects he builds as a skyline of towers, a level per milestone
  * done (the same builds as their pads in the station); what's moved this
  * week; and the milestones done lately, newest first. Levels done since you
  * last opened it rise into place, and say so.
  */
 
+// Markus's focus first: real estate and the client sites.
 const PROJECTS = [
   { id: 'realestate', label: 'Real estate' },
+  { id: 'automaton', label: 'Sites' },
   { id: 'youtube', label: 'YouTube' },
   { id: 'influencer', label: 'Influencer' },
 ]
@@ -139,7 +141,7 @@ export function PhoneHome() {
         <div className="skyline">
           {projects.map((p) => (
             <button key={p.id} className="sky" onClick={() => open('projects', `project-${p.id}`)} style={{ '--c': colorOf(p.id) } as CSSProperties}>
-              <BuildTower steps={p.steps} color={colorOf(p.id)} live={Boolean(p.live)} rose={rose(p.id, p.done)} size={104} />
+              <BuildTower steps={p.steps} color={colorOf(p.id)} live={Boolean(p.live)} rose={rose(p.id, p.done)} size={84} />
               <span className="sky-name">{p.label}</span>
               <span className="sky-level">
                 Lv <b>{p.done}</b>/{p.steps.length || '–'}

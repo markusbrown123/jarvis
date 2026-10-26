@@ -12,11 +12,11 @@ import { openItems, useTick } from './state'
  * Projects: the six streams of work, from their bases (bases/<id>/BRIEF.md,
  * served by streams.mjs).
  *
- * The three newer ones JARVIS builds himself (autopilot.mjs): each card shows
+ * The four JARVIS builds himself (autopilot.mjs): each card shows
  * the run going now and the step it's on, what the last run did, what it's
  * waiting on Markus for, and the brief's milestones as they're ticked — with
  * Work on it now, Pause, and a line to tell JARVIS something about it. The
- * three with pages of their own (Roblox, Automaton, Finance) link to them.
+ * ones with pages of their own (Roblox, Automaton, Finance) link to them.
  */
 
 const PAGE: Record<string, 'roblox' | 'automaton' | 'finance'> = { roblox: 'roblox', automaton: 'automaton', finance: 'finance' }
@@ -52,6 +52,8 @@ const summary = (out = '') =>
 
 function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; writes: boolean; onChange: () => void }) {
   useTick(5000)
+  const go = useHub((x) => x.setPrefs)
+  const page = PAGE[s.project]
   const { live, last, runs } = useRuns(s.project)
   const items = openItems(useHub((x) => x.state?.items), false).filter((i) => i.project === s.project)
   const [note, setNote] = useState('')
@@ -93,7 +95,7 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
               : ap.blocked
                 ? 'Waiting on you (below): the last run could not go further without you.'
                 : ap.next
-                  ? `JARVIS works on it in turn${ap.lastAt ? ` · last run ${ago(ap.lastAt)}` : ' · not run yet'} · next: ${ap.next}`
+                  ? `JARVIS works on it alongside the others${ap.lastAt ? ` · last run ${ago(ap.lastAt)}` : ' · not run yet'} · next: ${ap.next}`
                   : 'Everything left is waiting on you (below).'}
         </p>
       )}
@@ -120,6 +122,11 @@ function Building({ s, ap, writes, onChange }: { s: Stream; ap: Autopilot; write
         <button className="btn" disabled={busy} onClick={() => act(() => hubActions.projectPause(s.project, !ap.paused), ap.paused ? 'Back on' : 'Paused')}>
           {ap.paused ? 'Resume' : 'Pause'}
         </button>
+        {page && (
+          <button className="btn" onClick={() => go({ view: page })}>
+            Open {page[0].toUpperCase() + page.slice(1)}
+          </button>
+        )}
       </div>
       <form
         className="project-note"
@@ -165,7 +172,7 @@ function StreamCard({ s, ap, links, writes, onChange }: { s: Stream; ap?: Autopi
               <span>{Math.round((done / total) * 100)}%</span>
             </p>
             <LevelBar steps={s.milestones} color={color} live={live} />
-            <p className="project-last">{last ? `Last done ${ago(last.at)}: ${last.text.split(' — ')[0]}` : 'Nothing done yet: the first level is next.'}</p>
+            <p className="project-lastdone">{last ? `Last done ${ago(last.at)}: ${last.text.split(' — ')[0]}` : 'Nothing done yet: the first level is next.'}</p>
           </div>
         </div>
       )}
@@ -214,7 +221,7 @@ export function Projects() {
         <div>
           <h1>Projects</h1>
           <p className="muted">
-            Everything you're building. JARVIS builds the newer three himself, a step at a time, and shows each run here; the others have pages of their own. Say "Jarvis, where are we with …" for any of them.
+            Everything you're building. JARVIS builds four himself, side by side, a step at a time, and shows each run here; the others have pages of their own. Say "Jarvis, where are we with …" for any of them.
           </p>
         </div>
       </header>

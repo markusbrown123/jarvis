@@ -11,7 +11,7 @@ import type { CSSProperties } from 'react'
 export type Step = { done: boolean; text: string; waiting?: boolean }
 
 /** The project colours, as on the station's pads. */
-export const PROJECT_COLOR: Record<string, string> = { realestate: '#a3e635', youtube: '#fb7185', influencer: '#e879f9' }
+export const PROJECT_COLOR: Record<string, string> = { realestate: '#a3e635', automaton: '#22d3ee', youtube: '#fb7185', influencer: '#e879f9' }
 export const colorOf = (project: string) => PROJECT_COLOR[project] ?? '#38bdf8'
 
 /** Which step is next: the first not done and not waiting on Markus, else the first not done. */

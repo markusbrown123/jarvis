@@ -68,7 +68,7 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
   }
 
   /** `onDone(output)` is called with the job's final text when it finishes properly. */
-  function start({ title, project = 'other', instructions, notify = null, onDone = null, autopilot = false }) {
+  function start({ title, project = 'other', instructions, notify = null, onDone = null, autopilot = false, cwd: at = null }) {
     const live = [...running.keys()].filter((id) => hub.getJob(id)?.state === 'running').length
     const limit = maxRunning()
     if (live >= limit) {
@@ -81,7 +81,7 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
     }
     recentStarts.push(nowMs)
     const id = `jarvis:${Date.now().toString(36)}`
-    const cwd = cwdFor(project)
+    const cwd = at ?? cwdFor(project)
     const abort = new AbortController()
     const now = Date.now()
     hub.upsertJob({

@@ -1,0 +1,9 @@
+# Output and working files — never in git
+out/
+cache/
+node_modules/
+.env*
+
+# Leads' and clients' details stay out of git (see BRIEF.md rules)
+leads/
+clients/

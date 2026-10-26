@@ -22,6 +22,13 @@ const BASES = join(REPO, 'bases')
 /** Hub projects whose working folder is a base. */
 export const BASE_PROJECTS = ['realestate', 'youtube', 'influencer']
 
+/**
+ * The projects JARVIS builds himself (autopilot.mjs), in Markus's order of
+ * focus: the bases, and Automaton's client sites, whose runs work in
+ * bases/sites and only read the Automaton repos.
+ */
+export const BUILT = ['realestate', 'automaton', 'youtube', 'influencer']
+
 export const STREAMS = [
   { id: 'realestate', name: 'Real estate AI video walkthroughs', project: 'realestate', line: 'listing photos into video walkthroughs with a voiceover, sold to agents' },
   { id: 'youtube', name: 'YouTube faceless automation channel', project: 'youtube', line: 'a channel run by a pipeline: topic, script, voice, visuals, edit, held for his review' },
@@ -31,8 +38,8 @@ export const STREAMS = [
   { id: 'influencer', name: 'AI virtual influencer', project: 'influencer', line: 'an AI character on Instagram, labelled as AI' },
 ]
 
-/** A base project's working folder. */
-export const baseDir = (project) => join(BASES, project)
+/** A built project's working folder: its base (the client sites' is bases/sites). */
+export const baseDir = (project) => join(BASES, STREAMS.find((s) => s.project === project)?.id ?? project)
 
 /** The brief for a stream (by id or by its hub project), or null. */
 export function brief(which) {
@@ -103,7 +110,7 @@ export function history(which) {
 export function all() {
   return STREAMS.map((s) => {
     const b = brief(s.id)
-    const base = BASE_PROJECTS.includes(s.project)
+    const base = BUILT.includes(s.project)
     return { ...s, base: base ? `bases/${s.id}` : null, status: status(s.id), milestones: milestones(s.id), history: base ? history(s.id) : [], brief: b?.text ?? '' }
   })
 }
