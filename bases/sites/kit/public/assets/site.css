@@ -1287,6 +1287,11 @@ p {
   position: relative;
   z-index: 1;
 }
+/* Terms and Privacy sit in a line of small print; padding gives them a 24 px tap height without changing the line. */
+.foot-legal .link {
+  display: inline-block;
+  padding-block: 0.3rem;
+}
 .foot-name {
   grid-row: 4;
   margin: 0;

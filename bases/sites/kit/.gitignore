@@ -4,3 +4,4 @@ node_modules
 .taste-skill/
 .design-refs/
 .playwright-cli/
+.site-audit/
