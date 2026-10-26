@@ -14,9 +14,10 @@ Premium client websites that come with the selling built in: a bot that answers 
 
 ## First milestones
 - [ ] Where it stands — read `automaton-` (`PIPELINE.md`, `AI_TASK_BOARD.md`, the builder, the Netlify functions), `auto` and `premium-client-redesigns`, and write `STATE.md` here: what a client site goes through today from lead to delivery, what works, what's half-built, and the three changes that would most help land premium clients
-- [ ] Meetings: discovery calls booked straight from automaton.llc — compare Cal.com and Calendly (price, embed, webhooks, calendar sync) in `MEETINGS.md`, then build the booking section and its confirmation page here, ready to drop into the site; the scheduler account is Markus's
-- [ ] Lead bot: a chat assistant for automaton.llc that answers from a written FAQ (services, price ranges, timelines), qualifies the lead and offers a call — its model calls go through a server function, never a key in the page; tested here against a local copy of the page
-- [ ] Follow-up automation: when a lead comes in or books, the next steps drafted — a reply, a reminder before the call, a Needs item for Markus — as a Netlify function ready for review; drafts only, nothing sent
+- [x] Meetings: discovery calls booked straight from automaton.llc — Cal.com, for the reasons in `MEETINGS.md`; the kit's pages and widget carry the booking link and its webhook brings each booking in (`kit/`); live once Markus makes the Cal.com account
+- [x] Lead bot: a chat assistant for automaton.llc that answers from a written FAQ (services, price ranges, timelines), qualifies the lead and offers a call — the site kit (`kit/`): assistant, widget and lead capture, the facts in `kit/sites/automaton.mjs`, the key only in the server function
+- [x] Follow-up automation: when a lead comes in or books, a reply drafted onto Markus's Needs list — JARVIS reads the kit's feed (`bridge/hub/sitekit.mjs`) and drafts it; nothing sent
+- [ ] A reminder drafted the day before each booked call, for Markus to send
 - [ ] Premium site playbook: the `website-standards` loop as a checklist, and one showcase rebuild of a real client site from `premium-client-redesigns` to that bar, rendered at phone, tablet and desktop
 - [ ] Packages and proposal: three tiers (a site; a site with the bot and booking; a site with the bot, booking and follow-up), what's in each, and a one-page proposal template — the prices are Markus's call
 - [ ] Bot, booking and follow-up added to the client site template, so each premium site can ship with them
@@ -29,7 +30,7 @@ Premium client websites that come with the selling built in: a bot that answers 
 - Leads' and clients' details stay out of git.
 
 ## Status
-2026-10-26 — JARVIS starts building it: the milestones above, a run at a time alongside the other projects. The live site, pipeline and leads are on the Automaton page.
+2026-10-26 — The site kit is built and tested: the assistant, booking, leads, and JARVIS drafting the replies; Automaton Premium has its page. Waiting on Markus to put it live (Netlify, Cal.com, the keys: `kit/README.md`). Next: where it stands, the playbook, the packages.
 
 ## From Markus
 - 2026-10-26: Focus on real estate and premium client websites, with setting up bots, meetings and automation.
