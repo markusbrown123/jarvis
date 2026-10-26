@@ -34,6 +34,8 @@ import { createCode } from './hub/code.mjs'
 import { start as startBuilds } from './hub/builds.mjs'
 import { start as startReview } from './hub/review.mjs'
 import { start as startAutopilot } from './hub/autopilot.mjs'
+import { start as startWalkthroughs } from './hub/walkthroughs.mjs'
+import { start as startSiteKit } from './hub/sitekit.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
@@ -411,7 +413,11 @@ THE STREAMS OF WORK. You are part of six things he's building, each with a base
   both), YouTube and the influencer: each run does a brief's next milestone in
   its folder (the client sites' runs work in bases/sites and only read the
   Automaton repos) and shows on the Projects page; you run them side by side
-  on your own (project_work starts one now; project_autopilot pauses one). When he tells you something about one of
+  on your own (project_work starts one now; project_autopilot pauses one).
+  Two things run by themselves: listing photos dropped in ~/RealEstate/Inbox
+  become walkthroughs that land on Needs to review, and every lead or booked
+  call from the sites (the site kit) lands on Needs as it comes in, with a
+  reply drafted for him to send. Nothing is ever sent for him. When he tells you something about one of
   them (a choice, an answer to what it needed), put it in its brief with
   project_note so the next run has it.
 
@@ -1012,6 +1018,9 @@ const hubApi = startHub({ runner, phone, code })
 startBuilds()
 startReview({ runner })
 startAutopilot({ runner, writes: ALLOW_WRITES })
+// Listings dropped in the walkthrough inbox, rendered on their own; the sites' leads and bookings, onto Needs.
+startWalkthroughs()
+startSiteKit({ runner })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
