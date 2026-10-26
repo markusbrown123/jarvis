@@ -5,6 +5,7 @@ Backends:
   kenburns   ffmpeg zoompan. No API, no cost, runs anywhere. The control.
   fal:<slug> an image-to-video model through fal.run (Seedance, Kling, Veo…).
   runway     Runway Gen-4 / Gen-4.5 through the Runway developer API.
+  higgsfield:<model>  Higgsfield's own image-to-video (DoP) through its API.
 
 Every backend writes shot-NN.mp4 plus a manifest.json with what it cost and
 how long it took, so the comparison is like-for-like.
@@ -90,9 +91,43 @@ MODELS = {
         "notes": "Lowest price per second and the shortest minimum clip "
                  "(any whole second from 2 to 10).",
     },
+    # Higgsfield: the request shape, auth and status lifecycle are from its
+    # official SDKs (@higgsfield/client 0.2.6, higgsfield-client 0.2.0, read
+    # 2026-10-26): `Authorization: Key <id>:<secret>`, photos uploaded through
+    # a presigned URL, POST /v1/image2video/dop, then poll the status_url
+    # (queued, in_progress, completed; failed and nsfw are refunded). It bills
+    # credits per clip, and what a credit costs depends on the plan, so the
+    # dollar price per clip comes from HF_USD_PER_CLIP; with it unset nothing
+    # is sent, so no run is ever uncosted. Clip length is the model's own
+    # (edit.py trims to the plan).
+    "higgsfield:dop-turbo": {
+        "label": "Higgsfield DoP Turbo",
+        "provider": "higgsfield",
+        "path": "/v1/image2video/dop",
+        "model_id": "dop-turbo",
+        "price_per_s": None,
+        "price_per_clip_env": "HF_USD_PER_CLIP",
+        "durations": None,
+        "resolution": "model default",
+        "notes": "Higgsfield's camera-motion model, fast tier. One key also "
+                 "reaches the other models in its catalogue (cloud.higgsfield.ai).",
+    },
+    "higgsfield:dop-standard": {
+        "label": "Higgsfield DoP Standard",
+        "provider": "higgsfield",
+        "path": "/v1/image2video/dop",
+        "model_id": "dop-standard",
+        "price_per_s": None,
+        "price_per_clip_env": "HF_USD_PER_CLIP_STANDARD",
+        "durations": None,
+        "resolution": "model default",
+        "notes": "DoP's best-quality tier; slower and dearer than Turbo.",
+    },
 }
 
-ENV_KEYS = {"fal": "FAL_KEY", "runway": "RUNWAYML_API_SECRET", "local": None}
+ENV_KEYS = {"fal": "FAL_KEY", "runway": "RUNWAYML_API_SECRET",
+            "higgsfield": "HF_KEY", "local": None}
+HF_BASE = os.environ.get("HF_BASE_URL", "https://api.higgsfield.ai")
 
 
 def get_key(provider: str) -> str:
@@ -102,12 +137,27 @@ def get_key(provider: str) -> str:
         return ""
     if os.environ.get(name):
         return os.environ[name]
+    # Higgsfield's SDKs also take the id and secret separately.
+    if provider == "higgsfield" and os.environ.get("HF_API_KEY") and \
+            os.environ.get("HF_API_SECRET"):
+        return f"{os.environ['HF_API_KEY']}:{os.environ['HF_API_SECRET']}"
     try:
         r = subprocess.run(["security", "find-generic-password", "-s", name,
                             "-w"], capture_output=True, text=True, timeout=10)
         return r.stdout.strip() if r.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired):
         return ""
+
+
+def shot_price(model: dict, billed: float) -> float | None:
+    """Dollars for one shot, or None when the price isn't known."""
+    env = model.get("price_per_clip_env")
+    if env:
+        try:
+            return round(float(os.environ[env]), 4)
+        except (KeyError, ValueError):
+            return None
+    return round(billed * model["price_per_s"], 4)
 
 
 def billable_seconds(model: dict, wanted: float) -> float:
@@ -212,6 +262,13 @@ def build_request(key: str, model: dict, shot: dict, billed: float) -> dict:
             "duration": int(billed),
             "ratio": "1280:720",
         }
+    if model["provider"] == "higgsfield":
+        return {
+            "model": model["model_id"],
+            "prompt": shot["prompt"],
+            "input_images": [{"type": "image_url",
+                              "image_url": "<uploaded copy of " + shot["file"] + ">"}],
+        }
     raise ValueError(model["provider"])
 
 
@@ -234,6 +291,19 @@ def download(url: str, dst: pathlib.Path) -> None:
         f.write(r.read())
 
 
+def hf_upload(path: pathlib.Path, headers: dict) -> str:
+    """Put a photo where Higgsfield can read it; returns its URL there."""
+    mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+    slot = post_json(f"{HF_BASE}/files/generate-upload-url",
+                     {"content_type": mime}, headers, timeout=60)
+    req = urllib.request.Request(
+        slot["upload_url"], data=path.read_bytes(), method="PUT",
+        headers=slot.get("upload_headers") or {"Content-Type": mime})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        r.read()
+    return slot["public_url"]
+
+
 def hosted_shot(key: str, model: dict, shot: dict, dst: pathlib.Path,
                 billed: float) -> dict:
     """Run one shot through a hosted model. Returns provider metadata."""
@@ -253,6 +323,27 @@ def hosted_shot(key: str, model: dict, shot: dict, dst: pathlib.Path,
             raise RuntimeError(f"no video in fal response: {list(res)}")
         download(url, dst)
         return {"provider_response_keys": sorted(res)}
+
+    if provider == "higgsfield":
+        headers = {"Authorization": f"Key {api_key}",
+                   "User-Agent": "automaton-walkthrough/1.0"}
+        body["input_images"][0]["image_url"] = hf_upload(
+            pathlib.Path(shot["path"]), headers)
+        req = post_json(HF_BASE + model["path"], body, headers, timeout=120)
+        rid = req["request_id"]
+        status_url = req.get("status_url") or f"{HF_BASE}/requests/{rid}/status"
+        for _ in range(240):
+            time.sleep(5)
+            st = get_json(status_url, headers)
+            if st.get("status") == "completed":
+                url = (st.get("video") or {}).get("url")
+                if not url:
+                    raise RuntimeError(f"no video in higgsfield response: {list(st)}")
+                download(url, dst)
+                return {"request_id": rid}
+            if st.get("status") in ("failed", "nsfw", "canceled"):
+                raise RuntimeError(f"higgsfield request {rid}: {st['status']}")
+        raise RuntimeError(f"higgsfield request {rid} timed out")
 
     # Runway: create a task, then poll it.
     body["promptImage"] = img
@@ -286,12 +377,15 @@ def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
     have_key = model["provider"] == "local" or bool(get_key(model["provider"]))
     simulate = dry_run or not have_key
 
-    entries, cost, wall, spent = [], 0.0, 0.0, 0.0
+    entries, cost, wall, spent, unpriced = [], 0.0, 0.0, 0.0, 0
     for shot in plan["shots"]:
         dst = outdir / f"shot-{shot['index']:02d}.mp4"
         billed = billable_seconds(model, shot["duration_s"])
-        shot_cost = round(billed * model["price_per_s"], 4)
-        cost += shot_cost
+        shot_cost = shot_price(model, billed)
+        if shot_cost is None:
+            unpriced += 1
+        else:
+            cost += shot_cost
         entry = {
             "index": shot["index"], "file": shot["file"], "room": shot["room"],
             "move": shot["move"], "planned_s": shot["duration_s"],
@@ -309,6 +403,11 @@ def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
             entry["output"] = None
         elif dst.exists() and dst.stat().st_size > 0:
             entry["status"] = "cached"          # already paid for; never twice
+        elif shot_cost is None:
+            entry["status"] = "unpriced"        # never send what isn't costed
+            entry["error"] = (f"set {model['price_per_clip_env']} to the dollar "
+                              "price of one clip on your plan")
+            entry["output"] = None
         elif max_spend is not None and spent + shot_cost > max_spend + 1e-9:
             entry["status"] = "over-cap"
             entry["output"] = None
@@ -324,9 +423,10 @@ def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
         entry["elapsed_s"] = round(time.time() - t0, 2)
         wall += entry["elapsed_s"]
         entries.append(entry)
+        price = "price ?" if shot_cost is None else f"${shot_cost:.4f}"
         print(f"  shot {shot['index']:>2} {shot['room']:<16} "
               f"{entry['status']:<8} {entry['billed_s']:>4.1f}s billed "
-              f"${shot_cost:.4f}  {entry['elapsed_s']:>6.1f}s")
+              f"{price}  {entry['elapsed_s']:>6.1f}s")
 
     manifest = {
         "backend": backend,
@@ -334,13 +434,16 @@ def run(plan: dict, backend: str, outdir: pathlib.Path, dry_run: bool,
         "provider": model["provider"],
         "resolution": model["resolution"],
         "price_per_s_usd": model["price_per_s"],
+        "price_per_clip_usd": (shot_price(model, 0)
+                               if model.get("price_per_clip_env") else None),
         "simulated": simulate,
         "key_present": have_key,
         "portrait": portrait,
         "shot_count": len(entries),
         "planned_total_s": round(sum(s["duration_s"] for s in plan["shots"]), 2),
         "billed_total_s": round(sum(e["billed_s"] for e in entries), 2),
-        "cost_usd": round(cost, 4),
+        # None when the price isn't known (set the model's price variable).
+        "cost_usd": None if unpriced else round(cost, 4),
         "spent_usd": round(spent, 4),
         "max_spend_usd": max_spend,
         "generation_wall_s": round(wall, 2),
@@ -369,8 +472,9 @@ def main() -> int:
     m = run(plan, args.backend, outdir, args.dry_run, args.portrait,
             args.max_spend)
     tag = " (simulated — no key / dry run)" if m["simulated"] else ""
+    cost = "price unknown" if m["cost_usd"] is None else f"${m['cost_usd']:.2f}"
     print(f"\n{m['label']}: {m['billed_total_s']}s billed for "
-          f"{m['planned_total_s']}s of clip, ${m['cost_usd']:.2f}{tag}")
+          f"{m['planned_total_s']}s of clip, {cost}{tag}")
     return 0
 
 

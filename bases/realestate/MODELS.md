@@ -8,8 +8,8 @@ brief's first rule is that the property is shown as it is.
 
 ## The shortlist
 
-Four backends are wired up in `motion.py`. Three are paid models; the
-fourth is the control.
+Six backends are wired up in `motion.py`. Five are paid models; one is
+the control.
 
 | Backend | Model | $/s | Clip lengths (whole seconds) | Why it's on the list |
 |---|---|---:|---|---|
@@ -17,6 +17,8 @@ fourth is the control.
 | `runway:gen4-turbo` | Runway Gen-4 Turbo | 0.05 | 2–10s | Cheapest per second and the shortest minimum clip. |
 | `fal:kling-3-pro` | Kling 3.0 Pro (1080p) | 0.112 | 3–15s | Cheap, 1080p, start/end-frame control. $0.168/s with audio on, which is the API default, so the request switches it off. |
 | `fal:seedance-2-fast` | Seedance 2.0 Fast (720p) | 0.2419 | 4–15s | The one generally recommended for animating a *given* photo without restyling it. Most expensive, and its 4s minimum pushes a ten-shot plan to 40s. |
+| `higgsfield:dop-turbo` | Higgsfield DoP Turbo | per clip | the model's own | Markus's pick. Higgsfield's camera-motion model, built for exactly this ask; one key also reaches the rest of its catalogue. |
+| `higgsfield:dop-standard` | Higgsfield DoP Standard | per clip | the model's own | DoP's best-quality tier, for the hero shots if Turbo falls short. |
 
 Also looked at and left out for now:
 
@@ -120,3 +122,41 @@ Sources:
 - [Seedance 2.0 Fast image-to-video — fal.ai](https://fal.ai/models/bytedance/seedance-2.0/fast/image-to-video/api)
 - [Kling Video v3 Pro image-to-video — fal.ai](https://fal.ai/models/fal-ai/kling-video/v3/pro/image-to-video/api)
 - [Runway API pricing](https://docs.dev.runwayml.com/guides/pricing/) and [API changelog](https://docs.dev.runwayml.com/api-details/api_changelog/)
+
+## Higgsfield
+
+Wired up 2026-10-26 from Higgsfield's **official SDKs** — the Node package
+`@higgsfield/client` 0.2.6 and the Python package `higgsfield-client` 0.2.0,
+read from npm and PyPI — because its docs site wasn't reachable from the
+machine that did the work. What the SDKs settle:
+
+- **Auth**: `Authorization: Key <key id>:<key secret>` against
+  `https://api.higgsfield.ai`. Keys come from cloud.higgsfield.ai. Here they
+  are read from `HF_KEY` (`id:secret`), or `HF_API_KEY` + `HF_API_SECRET`,
+  or the Keychain service `HF_KEY` — never a file.
+- **Photos**: uploaded first — `POST /files/generate-upload-url` with the
+  content type returns an `upload_url` (PUT the bytes, no API key on that
+  request) and the `public_url` the model reads.
+- **Generation**: `POST /v1/image2video/dop` with `{"model": "dop-turbo" |
+  "dop-lite" | "dop-standard", "prompt", "input_images": [{"type":
+  "image_url", "image_url"}]}` returns a `request_id` and `status_url`.
+- **Status**: poll the `status_url` — `queued`, `in_progress`, `completed`
+  (with `video.url`), `failed` and `nsfw` (both refunded), `canceled`.
+
+What they don't settle, and the first real run must:
+
+- **Price.** Higgsfield bills credits per clip, and what a credit costs
+  depends on the plan. Set `HF_USD_PER_CLIP` (and `HF_USD_PER_CLIP_STANDARD`)
+  to the dollar price of one clip on Markus's plan. Until it's set, the
+  harness costs Higgsfield as "?" and **never calls it**, so no run is ever
+  uncosted or past its `--max-spend` cap.
+- **Clip length and resolution** are the model's own; `edit.py` trims each
+  clip to the shot plan, so a longer clip costs nothing extra in the cut.
+- **Other models through the same key** (Kling, Seedance and others in its
+  catalogue at cloud.higgsfield.ai/explore) take their own endpoint and
+  fields; add one as a backend once its schema is read from the console.
+
+Tested against a stand-in server speaking the same protocol: upload,
+generate, poll, download, the cap, the unpriced refusal, a wrong key, and a
+re-run that doesn't re-pay finished shots.
+

@@ -27,8 +27,8 @@ import qc
 import review
 import shotplan
 
-DEFAULT_BACKENDS = ["kenburns", "fal:seedance-2-fast", "fal:kling-3-pro",
-                    "runway:gen4-turbo"]
+DEFAULT_BACKENDS = ["kenburns", "higgsfield:dop-turbo", "fal:seedance-2-fast",
+                    "fal:kling-3-pro", "runway:gen4-turbo"]
 
 
 def slug(backend: str) -> str:
@@ -93,7 +93,7 @@ def scorecard(plan: dict, entries: list[dict], outdir: pathlib.Path,
         mdl = motion.MODELS[e["backend"]]
         d = mdl.get("durations")
         if not d:
-            dur = "any"
+            dur = "model's own" if mdl.get("price_per_clip_env") else "any"
         elif "choices" in d:
             dur = " or ".join(f"{c}s" for c in d["choices"])
         else:
@@ -102,15 +102,25 @@ def scorecard(plan: dict, entries: list[dict], outdir: pathlib.Path,
         if m["billed_total_s"] > m["planned_total_s"] + 0.01:
             waste = m["billed_total_s"] - m["planned_total_s"]
             extra = f" ({waste:.0f}s of it thrown away)"
-        delta = "—" if m["cost_usd"] == 0 else f"+${m['cost_usd']:.2f}"
-        A(f"| {e['label']} | {m['price_per_s_usd']:.4f} | {dur} | "
-          f"{m['billed_total_s']:.0f}s{extra} | "
-          f"${m['cost_usd']:.2f} | {delta} |")
+        if m["price_per_s_usd"] is not None:
+            rate = f"{m['price_per_s_usd']:.4f}"
+        elif m.get("price_per_clip_usd") is not None:
+            rate = f"${m['price_per_clip_usd']:.2f}/clip"
+        else:
+            rate = "per clip, not set"
+        cost = "?" if m["cost_usd"] is None else f"${m['cost_usd']:.2f}"
+        delta = ("—" if m["cost_usd"] == 0 else "?" if m["cost_usd"] is None
+                 else f"+${m['cost_usd']:.2f}")
+        A(f"| {e['label']} | {rate} | {dur} | "
+          f"{m['billed_total_s']:.0f}s{extra} | {cost} | {delta} |")
     A("")
     A("Each model has a shortest clip it will generate (Seedance 4s, Kling "
       "3s, Runway 2s) and bills whole seconds, so a plan with shots shorter "
       "than that pays for footage the edit trims off. Shot lengths that "
-      "land on whole seconds at or above the minimum cost nothing extra.")
+      "land on whole seconds at or above the minimum cost nothing extra. "
+      "Higgsfield bills credits per clip; its dollar price is whatever "
+      "`HF_USD_PER_CLIP` says one clip costs on Markus's plan, and with "
+      "that unset it is costed as ? and never called.")
     if plan.get("subset"):
         A("")
         A(f"*Trial run: shots {plan['subset']} only, not the full "

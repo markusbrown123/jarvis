@@ -39,7 +39,7 @@ def main() -> int:
     problems += not ok
 
     print("\nkeys (environment or Keychain service of the same name)")
-    for prov in ("fal", "runway"):
+    for prov in ("higgsfield", "fal", "runway"):
         have = bool(motion.get_key(prov))
         print(f"  {motion.ENV_KEYS[prov]:<22} {'present' if have else 'not set'}")
 
@@ -69,15 +69,20 @@ def main() -> int:
     heroes = [s["index"] for s in plan["shots"] if s.get("hero")][:3]
     trial = args.trial_shots or heroes or [s["index"] for s in plan["shots"]][:3]
 
-    print("\ncost (whole seconds billed, audio off)")
+    print("\ncost (whole seconds billed, audio off; Higgsfield per clip at HF_USD_PER_CLIP)")
     print(f"  {'':<24}{'trial ' + str(trial):<22}full walkthrough")
     for b, m in motion.MODELS.items():
         if m["provider"] == "local":
             continue
         def total(idx=None):
-            return sum(motion.billable_seconds(m, s["duration_s"]) * m["price_per_s"]
-                       for s in plan["shots"] if idx is None or s["index"] in idx)
-        print(f"  {m['label']:<24}${total(trial):<21.2f}${total():.2f}")
+            prices = [motion.shot_price(m, motion.billable_seconds(m, s["duration_s"]))
+                      for s in plan["shots"] if idx is None or s["index"] in idx]
+            return None if None in prices else sum(prices)
+        t, f = total(trial), total()
+        if t is None:
+            print(f"  {m['label']:<24}{'price not set (' + m['price_per_clip_env'] + ')':<43}")
+        else:
+            print(f"  {m['label']:<24}${t:<21.2f}${f:.2f}")
 
     shots = " ".join(map(str, trial))
     print(f"""
@@ -88,7 +93,7 @@ next
   2. open out/<listing_id>/review/shot-NN.jpg and out/<listing_id>/compare-shot-NN.mp4
   3. only if a model is worth it, the full run (finished shots are never re-paid):
        python3 compare.py --listing {args.listing} --photos {args.photos} \\
-           --backends kenburns fal:kling-3-pro --max-spend 8
+           --backends kenburns higgsfield:dop-turbo --max-spend 8
 """)
     return 0
 
