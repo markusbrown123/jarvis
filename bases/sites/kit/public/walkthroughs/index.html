@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Listing walkthroughs: your photos, as a video tour</title>
+<meta name="description" content="Send a listing's photos, get back a smooth video walkthrough in 16:9 and 9:16. The camera moves; the rooms stay exactly as they are. By Automaton.">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script>document.documentElement.classList.add('js')</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="bar wrap">
+  <a class="wordmark" translate="no" href="/" aria-label="Automaton">automaton<span aria-hidden="true">.</span></a>
+  <nav aria-label="Sections">
+    <a class="link" href="#sample">Sample</a>
+    <a class="link" href="#moves">Moves</a>
+    <a class="link" href="#send">What to send</a>
+    <a class="link" href="#questions">Questions</a>
+  </nav>
+  <a class="button" href="tel:+18623253923" data-book>Call (862) 325-3923</a>
+</header>
+
+<main id="main">
+  <!-- Hero: the tour itself sits in the sentence's word space. -->
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <h1 id="hero-title" class="display hero-line lines">
+      <span class="line"><span data-line style="--i:0">Photos in, <span class="slot slot-video"><video src="/assets/walkthroughs/sample-16x9.mp4" poster="/assets/walkthroughs/sample-poster.jpg" muted autoplay loop playsinline preload="metadata" aria-hidden="true" width="1280" height="720"></video></span></span></span>
+      <span class="line"><span data-line style="--i:1">tour out.</span></span>
+    </h1>
+    <div class="hero-foot">
+      <p class="lead" data-rise style="--i:3">Send a listing’s photos and get back a smooth video walkthrough, 16:9 and 9:16, ready for the listing, YouTube and Reels. The camera moves; the rooms stay exactly as they are.</p>
+      <div class="hero-actions" data-rise style="--i:4">
+        <a class="button" href="tel:+18623253923" data-book>Call (862) 325-3923</a>
+        <a class="link-plain" href="#sample">Watch the sample</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- The sample cut, both shapes. -->
+  <section id="sample" class="sample section wrap" aria-labelledby="sample-title">
+    <h2 id="sample-title" class="head" data-reveal>A sample, start<br>to finish.</h2>
+    <div class="sample-cuts">
+      <figure class="sample-wide" data-reveal>
+        <video controls playsinline preload="metadata" poster="/assets/walkthroughs/sample-poster.jpg" width="1280" height="720"><source src="/assets/walkthroughs/sample-16x9.mp4" type="video/mp4"></video>
+        <figcaption class="small">16:9, for the listing page and YouTube</figcaption>
+      </figure>
+      <figure class="sample-tall" data-reveal>
+        <video controls playsinline preload="metadata" muted poster="/assets/walkthroughs/sample-poster-9x16.jpg" width="540" height="960"><source src="/assets/walkthroughs/sample-9x16.mp4" type="video/mp4"></video>
+        <figcaption class="small">9:16, for Reels, TikTok and Stories</figcaption>
+      </figure>
+    </div>
+    <p class="sample-note" data-reveal>Made from illustrations of a house so it can be shown here. Yours is made from your listing’s own photos, in the same way.</p>
+  </section>
+
+  <!-- The live thing: pick a room, see its move. -->
+  <section id="moves" class="moves section wrap" aria-labelledby="moves-title">
+    <div class="moves-copy" data-reveal>
+      <h2 id="moves-title" class="head">One move<br>per room.</h2>
+      <p>Every photo gets the camera move a listing videographer would choose for that room, timed so the whole tour lands on its length. Pick a room to see it.</p>
+    </div>
+    <div class="moves-stage" data-reveal>
+      <div class="stage-frame">
+        <img src="/assets/walkthroughs/02-living-room.jpg" alt="Illustrated living room: sofa, rug, floor lamp and a window onto the garden" width="1200" height="800" loading="lazy" data-stage data-move="push_in_pan">
+      </div>
+      <p class="stage-move" aria-live="polite" data-stage-move>Living room: a slow dolly push forward, drifting gently to the right</p>
+      <div class="room-picks" role="group" aria-label="Rooms">
+        <button type="button" class="room-pick" data-src="/assets/walkthroughs/01-exterior-front.jpg" data-move="pull_out" data-alt="Illustrated front of a two-storey house" data-text="Front of the house: a slow, steady pull back, revealing more of the frame">Front</button>
+        <button type="button" class="room-pick is-on" aria-pressed="true" data-src="/assets/walkthroughs/02-living-room.jpg" data-move="push_in_pan" data-alt="Illustrated living room: sofa, rug, floor lamp and a window onto the garden" data-text="Living room: a slow dolly push forward, drifting gently to the right">Living room</button>
+        <button type="button" class="room-pick" data-src="/assets/walkthroughs/03-kitchen.jpg" data-move="pan_right" data-alt="Illustrated kitchen: island with stools, pendant lights, wall cabinets" data-text="Kitchen: a slow, even pan to the right across the room">Kitchen</button>
+        <button type="button" class="room-pick" data-src="/assets/walkthroughs/04-bedroom-main.jpg" data-move="push_in" data-alt="Illustrated main bedroom: bed, two bedside lamps, a window" data-text="Main bedroom: a slow, steady dolly push forward into the room">Bedroom</button>
+        <button type="button" class="room-pick" data-src="/assets/walkthroughs/05-garden.jpg" data-move="pull_out" data-alt="Illustrated garden: lawn, patio table, fence and trees" data-text="Garden: a slow, steady pull back, revealing more of the frame">Garden</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Honest by design: one sentence on a colour field. -->
+  <section class="price section wrap" aria-labelledby="honest-title">
+    <h2 id="honest-title" class="head price-line" data-reveal>Camera moves.<br>Rooms <span class="price-tag">don’t</span>.</h2>
+    <div class="price-foot" data-reveal>
+      <p class="price-text">Nothing is added, removed, restyled or hidden: no new furniture, no different view out of the window, no changed weather. Some shots use AI to make the camera move, and anything AI-made is said to be, to you and wherever your platform or MLS requires it.</p>
+      <div class="price-actions">
+        <a class="button" href="tel:+18623253923" data-book>Call (862) 325-3923</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- What to send, what comes back: the table pushed right. -->
+  <section id="send" class="trades section wrap" aria-labelledby="send-title">
+    <h2 id="send-title" class="head trades-title" data-reveal>What you send,<br>what you get.</h2>
+    <div class="trades-table" data-reveal>
+      <p class="trades-name small">The job</p>
+      <table>
+        <caption class="sr-only">What an agent sends and what comes back</caption>
+        <thead class="sr-only"><tr><th scope="col">Side</th><th scope="col">Item</th><th scope="col">Detail</th></tr></thead>
+        <tbody>
+          <tr><td>You send</td><td>The listing’s photos</td><td>10 to 25</td></tr>
+          <tr><td></td><td>The address and the facts</td><td>Beds, baths, size</td></tr>
+          <tr><td></td><td>Your logo or colours</td><td>Optional</td></tr>
+          <tr class="gap"><td>You get</td><td>The tour, 16:9</td><td>Listing, YouTube</td></tr>
+          <tr><td></td><td>The tour, 9:16</td><td>Reels, TikTok</td></tr>
+          <tr><td></td><td>A thumbnail and room captions</td><td>Ready to post</td></tr>
+          <tr class="gap"><td>When</td><td>The aim</td><td>Within one business day</td></tr>
+        </tbody>
+      </table>
+      <p class="trades-note small">Send only photos you have the right to use. Pricing is per listing, with a monthly option for busy agents, set on a short call.</p>
+    </div>
+  </section>
+
+  <section id="questions" class="faq section wrap" aria-labelledby="faq-title">
+    <h2 id="faq-title" class="head" data-reveal>Straight answers.</h2>
+    <div class="faq-list" data-reveal>
+      <details open><summary>Is anything AI-generated?</summary><p>Some shots use AI image-to-video models to create the camera movement from your photo. The room itself is kept as it is, and anything AI-made is labelled wherever your platform or MLS requires it.</p></details>
+      <details><summary>Can you add furniture or stage a room?</summary><p>No. The tour shows the property exactly as your photos do. That’s the point: buyers see the real house.</p></details>
+      <details><summary>What do I need to send?</summary><p>Ten to twenty-five photos you have the right to use, in the order you’d like (the front of the house first is usual), plus the address and the listing’s facts. Your logo or colours if you want them on it.</p></details>
+      <details><summary>How quickly does it come back?</summary><p>The aim is a finished tour within one business day of getting the photos. You see it and approve it before it’s used anywhere.</p></details>
+      <details><summary>What does it cost?</summary><p>It’s priced per listing, with a monthly option for busy agents, and set on a short call. Book a demo and we’ll go through it.</p></details>
+      <details><summary>Can I put it on the MLS?</summary><p>Usually, yes, as a video or virtual tour link. Rules differ by MLS, so check yours; the tour is labelled wherever AI was used.</p></details>
+    </div>
+  </section>
+
+  <section class="close section wrap" aria-labelledby="close-title">
+    <form class="close-form" data-close data-reveal novalidate>
+      <h2 id="close-title" class="head close-line">Call me on <label class="sr-only" for="close-phone">Your phone number</label><input id="close-phone" class="blank" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="your number…" maxlength="40" required><br class="only-wide"> <button class="blank-go" type="submit" aria-label="Send: call me today">today</button>.</h2>
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <p class="close-note" data-close-note role="status">We’ll call within one business day to show you a tour and talk through your listings.</p>
+    </form>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="foot-top wrap">
+    <div class="foot-invite">
+      <p class="head">Your next listing,<br>as a tour.</p>
+      <a class="button" href="tel:+18623253923" data-book>Call (862) 325-3923</a>
+    </div>
+    <ul class="foot-links">
+      <li><a class="link" href="tel:+18623253923">(862) 325-3923</a></li>
+      <li><a class="link" href="mailto:support@automaton.llc">support@automaton.llc</a></li>
+      <li><a class="link" href="/">Automaton Premium sites</a></li>
+    </ul>
+  </div>
+  <div class="foot-legal wrap small">
+    <span>© Automaton Systems, Inc. · Philadelphia · Sample tour made from illustrations</span>
+    <span><a class="link" href="https://automaton.llc/terms">Terms</a> · <a class="link" href="https://automaton.llc/privacy">Privacy</a></span>
+  </div>
+  <p class="foot-name" translate="no" aria-hidden="true">automaton</p>
+</footer>
+
+<script src="/assets/page.js" defer></script>
+<script src="/kit/widget.js" data-site="walkthroughs" defer></script>
+</body>
+</html>

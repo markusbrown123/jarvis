@@ -1,0 +1,6 @@
+node_modules
+.netlify/
+.env*
+.taste-skill/
+.design-refs/
+.playwright-cli/
