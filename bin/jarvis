@@ -52,7 +52,10 @@ start_servers() {
   export JARVIS_MODEL="${JARVIS_MODEL:-claude-sonnet-5-5}"
   export JARVIS_EFFORT="${JARVIS_EFFORT:-low}"
 
-  echo "Starting JARVIS..."
+  # A half-started copy of him (an earlier start stopped with Ctrl-C) would
+  # hold the ports this one needs: clear it first.
+  [ -n "$(leftovers)" ] && stop_all >/dev/null
+  echo "Starting JARVIS (up to a minute)..."
   mkdir -p "$(dirname "$LOG")"
   cd "$DIR" || exit 1
   # After a `git pull` that changed dependencies, install them first —
@@ -70,12 +73,18 @@ start_servers() {
   # still sleeps, closing the lid still sleeps it, and it ends when he does.
   command -v caffeinate >/dev/null && nohup caffeinate -i -s -w "$(cat "$PIDFILE")" >/dev/null 2>&1 &
 
+  # Ctrl-C while waiting: stop what was started rather than leave it half up.
+  trap 'echo; echo "Stopping the half-started JARVIS..."; stop_all >/dev/null; exit 130' INT
   for _ in $(seq 60); do
-    ready && return 0
+    if ready; then
+      trap - INT
+      return 0
+    fi
     # Gone already (an old Node, a port taken): say so now, not in a minute.
     kill -0 "$(cat "$PIDFILE")" 2>/dev/null || break
     sleep 1
   done
+  trap - INT
   echo "JARVIS didn't start. Last lines of $LOG:"
   tail -n 20 "$LOG"
   return 1
@@ -115,16 +124,34 @@ end tell
 OSA
 }
 
+# His own processes still about: anything of his listening on the bridge's or
+# the page's port, and the starters that ran them — a start that was
+# interrupted, a copy the PID file has lost track of. Only ones running from
+# this folder, so another project's page server on 5173 is left alone.
+leftovers() {
+  local here pid cwd
+  here="$(cd "$DIR" && pwd -P)"
+  for pid in $({ lsof -nP -iTCP:8788 -iTCP:5173 -sTCP:LISTEN -t 2>/dev/null; pgrep -f "scripts/start.mjs" 2>/dev/null; } | sort -u); do
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')"
+    [ "$cwd" = "$here" ] && echo "$pid"
+  done
+}
+
 stop_all() {
   if [ -f "$PIDFILE" ]; then
     kill "$(cat "$PIDFILE")" 2>/dev/null
     rm -f "$PIDFILE"
   fi
-  # Wait for the ports to come free, so a restart can take them.
+  local left
+  left="$(leftovers)"
+  [ -n "$left" ] && kill $left 2>/dev/null
+  # Wait for them to go, so a restart can take the ports; then make sure.
   for _ in $(seq 20); do
-    curl -s -o /dev/null http://localhost:8788/health || break
+    [ -z "$(leftovers)" ] && break
     sleep 0.5
   done
+  left="$(leftovers)"
+  [ -n "$left" ] && kill -9 $left 2>/dev/null
   echo "JARVIS stopped."
 }
 
