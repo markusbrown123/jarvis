@@ -20,6 +20,7 @@ import { callWindow, FINAL, OUTCOMES } from '../../bases/sites/engine/lib/batch.
 import { sheet } from '../../bases/sites/engine/lib/brief.mjs'
 import { TRADES } from '../../bases/sites/engine/lib/score.mjs'
 import { rebase } from '../../bases/sites/sitegen/sitegen.mjs'
+import { closeUrl } from './closing.mjs'
 import { secret } from './phone.mjs'
 import * as hub from './store.mjs'
 
@@ -29,6 +30,7 @@ const PROJECT = 'automaton'
 
 let store = null
 const S = () => (store ??= open(join(hub.DATA_DIR, 'leads')))
+export const engineStore = () => S()
 const cfgFile = () => join(S().dir, 'engine.config.json')
 export function config() {
   try {
@@ -91,10 +93,11 @@ function sync() {
         project: PROJECT,
         title: `${l.name} is interested: send the preview and set up the close`.slice(0, 140),
         why: `They said yes on the call${last?.note ? `: "${last.note}"` : ''}.`,
-        instructions: 'Send the preview link only where they agreed (it\'s in your note). When you\'re ready to close, tell me and I\'ll prepare the agreement, the payment link and the intake questions for you to send.',
+        instructions: 'On the close page: publish the preview link to text them (only where they agreed), then create their agreement link (plan and price). They agree, pay by card and fill in their details; I build the site from them for you to review and publish.',
         priority: 'P1',
         state: 'open',
         actions: [
+          { kind: 'open', label: 'Close page', url: closeUrl(l.id) },
           { kind: 'open', label: 'Call sheet', url: sheetUrl(l.id) },
           { kind: 'open', label: 'Preview site', url: previewUrl(l.id) },
           { kind: 'open', label: 'Call', url: `tel:${l.phone}` },

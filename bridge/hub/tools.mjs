@@ -22,6 +22,7 @@ import * as streams from './streams.mjs'
 import * as review from './review.mjs'
 import * as autopilot from './autopilot.mjs'
 import * as leads from './leadengine.mjs'
+import * as closing from './closing.mjs'
 import { OUTCOMES } from '../../bases/sites/engine/lib/batch.mjs'
 import { TRADES } from '../../bases/sites/engine/lib/score.mjs'
 import { loadConfig, saveConfig } from './config.mjs'
@@ -213,6 +214,21 @@ export function hubServer({ emit, runner, phone, sources, code }) {
           const cfg = leads.setConfig({ areas: towns, trades, ...(max_requests ? { maxRequests: max_requests } : {}) })
           void leads.tick()
           return ok(`Searching ${cfg.areas.join('; ')} for ${cfg.trades.join(', ')}, at most ${cfg.maxRequests} Google requests a week.`)
+        },
+      ),
+      tool(
+        'close_prepare',
+        'When an interested business is ready to buy: create their agreement link (plan launch or premium, one-time and monthly price in dollars) in the site kit. They read and agree to it, pay by card, then fill in their details; JARVIS builds the site for Markus to review and publish. Returns the link and the close page for Markus to send himself. Never send it yourself.',
+        { business: z.string(), plan: z.enum(['launch', 'premium']), one_time_usd: z.number().min(0).max(100000), monthly_usd: z.number().min(0).max(10000).optional() },
+        async ({ business, plan, one_time_usd, monthly_usd }) => {
+          const l = leads.findLead(business)
+          if (!l) return ok(`No business matches "${business}".`)
+          try {
+            const after = await closing.prepareAgreement(l.id, { plan, oneTimeUsd: one_time_usd, monthlyUsd: monthly_usd ?? 0 })
+            return ok(`Agreement link for ${after.name} is ready (on Needs, with a copy button): ${after.client.agreementUrl}. Close page: ${closing.closeUrl(l.id)}.`)
+          } catch (e) {
+            return ok(`Couldn't create it: ${e.message}`)
+          }
         },
       ),
       tool(

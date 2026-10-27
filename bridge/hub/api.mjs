@@ -24,6 +24,7 @@ import * as ideas from './ideas.mjs'
 import { BASE_PROJECTS, all as allStreams } from './streams.mjs'
 import * as walkthroughs from './walkthroughs.mjs'
 import * as leadengine from './leadengine.mjs'
+import * as closing from './closing.mjs'
 import * as review from './review.mjs'
 import * as autopilot from './autopilot.mjs'
 
@@ -253,6 +254,7 @@ export function startHub({ runner, phone, code } = {}) {
     if (req.method === 'GET' && path.startsWith('/api/walkthroughs/') && walkthroughs.serve(req, res, path)) return
     // The lead engine's call sheets, previews and outcome form: signed links, opened from Needs (leadengine.mjs).
     if (path.startsWith('/api/leads/') && (await leadengine.serve(req, res, path))) return
+    if (path.startsWith('/api/close/') && (await closing.serve(req, res, path))) return
     const authed = originOk || tokenOk(req, token)
     if (!authed) return json(res, cors, 401, { error: 'unauthorized' })
 

@@ -76,7 +76,7 @@ export async function check(store, { limit = 40, concurrency = 4, fetchImpl, res
 export function rescore(store, { area = '' } = {}) {
   let n = 0
   for (const l of Object.values(store.leads())) {
-    if (['interested', 'callback', 'lost', 'dnc', 'won', 'closing'].includes(l.stage)) continue
+    if (['interested', 'callback', 'lost', 'dnc', 'won', 'closing', 'site_ready'].includes(l.stage)) continue
     store.putLead({ id: l.id, score: score(l, { area: area || l.area || '', dnc: store.dnc, contacted: store.contacted }) })
     n++
   }

@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import * as hub from './store.mjs'
 import { secret } from './phone.mjs'
 import { baseDir } from './streams.mjs'
+import * as closing from './closing.mjs'
 
 const FILE = join(hub.DATA_DIR, 'sitekit.json')
 const EVERY = 3 * 60000
@@ -79,6 +80,13 @@ Write the message Markus could send, in his voice: short, warm, plain, specific 
 export function take(e, runner) {
   const r = e.record
   if (!r) return
+  // A paying client's progress (agreement, payment, intake form): the closing flow takes it.
+  if (['agreed', 'paid', 'intake'].includes(e.type)) return void closing.onEvent(e).catch((err) => console.warn('[hub] closing:', err.message))
+  // An enquiry on a client's own site already went to the client; Markus just sees it happened.
+  if (e.type === 'lead' && !PROJECT[e.site]) {
+    hub.activity({ source: 'jarvis', project: 'automaton', title: `Enquiry on a client's site (${e.site}): ${r.name || r.phone || r.email}`, level: 'info' })
+    return
+  }
   const project = PROJECT[e.site] ?? 'automaton'
   const site = LABEL[e.site] ?? e.site
   if (e.type === 'lead') {

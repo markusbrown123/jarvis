@@ -98,7 +98,9 @@ function model(b, mode, now) {
   const city = areas[0] ?? b.address?.addressLocality ?? ''
   const st = b.address?.addressRegion ?? b.state ?? ''
   const services = (b.services?.length ? b.services.map((s) => [s.name, s.description ?? '']) : c.services).map(([name, description]) => ({ name, description, id: slug(name) }))
-  const contactLine = [b.email && `email ${b.email}`, `call ${pretty(b.telephone)}`].filter(Boolean).join(' or ')
+  // The legal pages give an email for privacy requests even when the owner doesn't want one in the footer.
+  const mail = b.email ?? b.privacyContact
+  const contactLine = [mail && `email ${mail}`, `call ${pretty(b.telephone)}`].filter(Boolean).join(' or ')
   return {
     ...b,
     mode,

@@ -119,6 +119,40 @@ to production. Either add this before `</body>` on the pages you want it:
 
 or say "Jarvis, put the site kit's widget on automaton.llc on a branch" and review what he makes.
 
+## 5b. Finding, calling and closing clients — 25 min
+
+JARVIS finds trade businesses that need a site, keeps the best 25 with a preview site each, and
+gives you 2–3 at a time to call (Needs → each has a call sheet with the script). You make every
+call yourself; JARVIS never calls, texts or emails a business.
+
+1. **Google Places key** (finding businesses): console.cloud.google.com → new project → enable
+   "Places API (New)" → Credentials → Create API key → restrict it to Places API (New). Add a
+   budget alert (Billing → Budgets, e.g. $10/month). Then:
+
+   ```bash
+   security add-generic-password -a "$USER" -s GOOGLE_PLACES_API_KEY -w 'YOUR_KEY'
+   ```
+
+   Each weekly search is capped at 30 requests (about $1, and Google gives 1,000 a month free).
+2. **Where to look**: say "Jarvis, look for roofers, plumbers and HVAC companies in Trenton and
+   Hamilton, New Jersey". Then "Jarvis, find leads now", or wait for the weekly run.
+3. **Keep Automaton's own leads out**: export the leads list from automaton.llc/data as CSV, then
+   `node bases/sites/engine/cli.mjs import-contacted ~/Downloads/<file>.csv` (in the jarvis folder).
+4. **Netlify token** (publishing previews and client sites when you press Publish):
+   app.netlify.com → User settings → Applications → New access token.
+
+   ```bash
+   security add-generic-password -a "$USER" -s NETLIFY_AUTH_TOKEN -w 'nfp_…'
+   ```
+5. **Stripe and email for the kit**: the four settings under "Closing and client sites" in
+   `bases/sites/kit/README.md` (`npx netlify-cli env:set …`, then `npx netlify-cli deploy --prod`).
+6. **Legal**: have a lawyer read the agreement (`bases/sites/kit/lib/agreement.mjs`) and the
+   client-site privacy/terms text (`bases/sites/sitegen/copy.mjs`) once.
+
+Then `jarvis restart`. The flow: call sheet → "Interested" → the close page (publish the preview
+link, create the agreement link) → they agree, pay and fill in the form → JARVIS builds the site →
+you review it and press Publish → it's live, and its enquiries go to the owner.
+
 ## 6. Decisions only you can make
 
 Tell JARVIS by voice or on the project's card ("for the real estate one, the price is …"); it goes
@@ -137,4 +171,5 @@ into the brief and the next run uses it.
 - **Sites**: every lead and booked call → your Needs list and phone, with a reply drafted.
 - **Autopilot**: JARVIS builds real estate and the sites first, YouTube and the influencer
   alongside, each about every two hours, within your Claude allowance.
+- **Leads**: a weekly capped search, the best 25 with previews, and 2–3 to call at a time on Needs.
 - **Never without you**: nothing is sent, posted, deployed or paid.

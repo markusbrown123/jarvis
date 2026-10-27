@@ -12,6 +12,10 @@ Nothing is ever emailed or texted from here.
 | `netlify/functions/booking.mjs` | `POST /api/booking?site=…` — Cal.com's webhook (booked, rescheduled, cancelled), signature checked, kept once per booking. |
 | `netlify/functions/feed.mjs` | `GET /api/feed?since=…` — what's come in, for JARVIS. Needs `KIT_ADMIN_KEY`. |
 | `netlify/functions/site.mjs` | `GET /api/site?site=…` — what the widget shows (never the assistant's instructions). |
+| `netlify/functions/close.mjs` | `/c/<token>` — a client's agreement (accept with their name → Stripe Checkout), then `/c/<token>/start`, the intake form. Plain HTML, no scripts. |
+| `netlify/functions/stripe.mjs` | `POST /api/stripe` — Stripe's webhook, signature checked; records the payment once. |
+| `netlify/functions/admin.mjs` | `/api/admin/clients` — JARVIS creates and updates clients (`KIT_ADMIN_KEY`). Price can't change once agreed. |
+| `lib/agreement.mjs`, `lib/clients.mjs` | The website services agreement (versioned by hash), and client records in Blobs. |
 | `sites/*.mjs` | One file per site: its facts, greeting, suggestions, allowed origins. The assistant answers only from `facts`. |
 | `public/kit/widget.js` | The widget. One script tag on any allowed site. |
 | `public/index.html` | Automaton Premium's page. |
@@ -56,6 +60,17 @@ npm test                                 # the API, end to end, against a stand-
 6. **On automaton.llc** (a change to the `automaton-` repo, so on a branch and through its task
    board): `<script src="https://<kit>/kit/widget.js" data-site="automaton" defer></script>`
    before `</body>`. A client site gets its own `sites/<client>.mjs` and its own `data-site`.
+
+## Closing and client sites (Markus, once)
+
+| Variable | |
+|---|---|
+| `STRIPE_SECRET_KEY` | a **restricted** key (Stripe → Developers → API keys → Create restricted key) with only Checkout Sessions: write. Never the full secret key. |
+| `STRIPE_WEBHOOK_SECRET` | Stripe → Developers → Webhooks → Add endpoint `https://<kit>/api/stripe`, event `checkout.session.completed`; copy its signing secret (`whsec_…`). |
+| `RESEND_API_KEY`, `KIT_NOTIFY_FROM` | to send each client their site's enquiries (resend.com, a verified sending domain, e.g. `Automaton <leads@automaton.llc>`). Without them enquiries still reach you through JARVIS. |
+| `KIT_LEGAL_NAME`, `KIT_GOVERNING_STATE` | Automaton's legal name and state, as they should appear in the agreement. |
+
+Have a lawyer read `lib/agreement.mjs` and the client-site privacy policy and terms (`../sitegen/copy.mjs`) once before the first real client: they're careful plain-language templates, not legal advice.
 
 ## What it costs to run
 

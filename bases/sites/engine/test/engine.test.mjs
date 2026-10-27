@@ -222,3 +222,34 @@ test('score: Do-Not-Call and already-contacted numbers are never shortlisted', (
   assert.equal(score(lead, { contacted: new Set(['+16095550101']) }).excluded, 'already contacted by Automaton')
   assert.equal(score(lead).excluded, null)
 })
+
+test('netlify deploy: creates the site, sends digests, uploads only what Netlify asks for, waits for ready', async () => {
+  const { deploy } = await import('../lib/netlify.mjs')
+  const { build } = await import('../../sitegen/sitegen.mjs')
+  const dir = mkdtempSync(join(tmpdir(), 'nl-'))
+  build({ name: 'Ace Roofing', trade: 'roofing', telephone: '+16095550101', areaServed: ['Trenton'] }, { mode: 'preview', outDir: dir })
+  const calls = []
+  let polls = 0
+  const fetchImpl = async (url, opts = {}) => {
+    calls.push({ url, method: opts.method ?? 'GET', auth: opts.headers?.authorization, body: opts.body })
+    const p = new URL(url).pathname
+    const ok = (b) => ({ ok: true, status: 200, json: async () => b })
+    if (opts.method === 'POST' && p === '/api/v1/sites') return ok({ id: 'S1', name: 'ace', ssl_url: 'https://ace.netlify.app' })
+    if (opts.method === 'POST' && p === '/api/v1/sites/S1/deploys') {
+      const files = JSON.parse(opts.body).files
+      return ok({ id: 'D1', state: 'uploading', required: [files['/index.html'], files['/_headers']] })
+    }
+    if (opts.method === 'PUT') return ok({})
+    if (p === '/api/v1/deploys/D1') return ok({ id: 'D1', state: ++polls > 1 ? 'ready' : 'processing' })
+    return { ok: false, status: 404, json: async () => ({ message: 'nope' }) }
+  }
+  const out = await deploy({ token: 'nfp_x', dir, name: 'ace', fetchImpl, sleep: async () => {} })
+  assert.equal(out.url, 'https://ace.netlify.app')
+  assert.equal(out.state, 'ready')
+  const puts = calls.filter((c) => c.method === 'PUT').map((c) => new URL(c.url).pathname)
+  assert.deepEqual(puts.sort(), ['/api/v1/deploys/D1/files/_headers', '/api/v1/deploys/D1/files/index.html'])
+  assert.ok(calls.every((c) => c.auth === 'Bearer nfp_x'))
+  const digests = JSON.parse(calls.find((c) => c.url.endsWith('/sites/S1/deploys')).body).files
+  assert.ok(digests['/privacy/index.html'] && digests['/assets/site.css'])
+  await assert.rejects(deploy({ token: '', dir, fetchImpl }), /no Netlify token/)
+})

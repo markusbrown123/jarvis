@@ -2,7 +2,7 @@
  * Requests and replies: JSON in and out, which pages may call (CORS), and a
  * private hash of the caller's address for the limits.
  */
-import { createHash } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 
 export const json = (status, body, headers = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } })
@@ -45,3 +45,10 @@ export const callerId = (context) =>
     .slice(0, 16)
 
 export const clean = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '')
+
+/** JARVIS's calls (the feed, client admin): Authorization: Bearer <KIT_ADMIN_KEY>, compared in constant time. */
+export function adminOk(req) {
+  const key = process.env.KIT_ADMIN_KEY
+  const got = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
+  return Boolean(key) && key.length >= 24 && got.length === key.length && timingSafeEqual(Buffer.from(got), Buffer.from(key))
+}

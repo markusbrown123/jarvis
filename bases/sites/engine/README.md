@@ -57,3 +57,13 @@ Everything is in `~/.jarvis/leads/` (or `ENGINE_DIR`): `leads.json`, `batches.js
 only, and none of it goes in git. It's public business information from Google, plus our own
 call notes. Previews live under a random 32-character folder name and are served by JARVIS
 behind a signed link. They're marked "Preview" on every page, aren't indexed, and the form is off.
+
+## After "interested"
+
+The call sheet's Interested button opens a close page in JARVIS (`bridge/hub/closing.mjs`):
+publish the preview as a shareable link, create the agreement link in the site kit (plan and price),
+and follow the client through agreeing, paying (Stripe) and the intake form. The live site is then
+built from their own answers (`../sitegen`, live mode) for Markus to review and publish to Netlify;
+its form goes to the kit, which forwards enquiries to the owner. Each outward step is a button he
+presses.
+
