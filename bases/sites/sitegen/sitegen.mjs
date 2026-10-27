@@ -440,6 +440,12 @@ if (form && form.dataset.kit) {
 const favicon = (m) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="${esc(m.accent)}"/><text x="32" y="44" font-family="Arial, sans-serif" font-size="34" font-weight="700" text-anchor="middle" fill="#fff">${esc((m.name.match(/[A-Za-z0-9]/) ?? ['A'])[0].toUpperCase())}</text></svg>`
 
+/**
+ * A built page served under a folder instead of a domain root (a preview behind JARVIS's
+ * signed path, or /<token>/ on the previews site): its root-relative links, re-pointed.
+ */
+export const rebase = (html, root) => html.replace(/\b(href|src|action)="\/(?!\/)/g, `$1="${root.replace(/\/?$/, '/')}`)
+
 export function build(business, { mode = 'preview', outDir, kit = null, now = new Date() } = {}) {
   if (!outDir) throw new Error('outDir is required')
   if (mode === 'live') {

@@ -36,6 +36,7 @@ import { start as startReview } from './hub/review.mjs'
 import { start as startAutopilot } from './hub/autopilot.mjs'
 import { start as startWalkthroughs } from './hub/walkthroughs.mjs'
 import { start as startSiteKit } from './hub/sitekit.mjs'
+import { start as startLeadEngine } from './hub/leadengine.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
@@ -417,7 +418,13 @@ THE STREAMS OF WORK. You are part of six things he's building, each with a base
   Two things run by themselves: listing photos dropped in ~/RealEstate/Inbox
   become walkthroughs that land on Needs to review, and every lead or booked
   call from the sites (the site kit) lands on Needs as it comes in, with a
-  reply drafted for him to send. Nothing is ever sent for him. When he tells you something about one of
+  reply drafted for him to send. A third: the lead engine finds trade
+  businesses that need a site (Google Places, capped and logged), keeps the
+  best 25 with a preview site each, and gives him 2–3 at a time to call, each
+  a Needs item with its call sheet (leads_status, leads_outcome when he says
+  how a call went, leads_setup for towns and trades, leads_search_now). He
+  makes every call himself: you never call, text or email a business, and
+  "don't call" is recorded at once. Nothing is ever sent for him. When he tells you something about one of
   them (a choice, an answer to what it needed), put it in its brief with
   project_note so the next run has it.
 
@@ -1021,6 +1028,7 @@ startAutopilot({ runner, writes: ALLOW_WRITES })
 // Listings dropped in the walkthrough inbox, rendered on their own; the sites' leads and bookings, onto Needs.
 startWalkthroughs()
 startSiteKit({ runner })
+startLeadEngine()
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin

@@ -21,6 +21,9 @@ import * as builds from './builds.mjs'
 import * as streams from './streams.mjs'
 import * as review from './review.mjs'
 import * as autopilot from './autopilot.mjs'
+import * as leads from './leadengine.mjs'
+import { OUTCOMES } from '../../bases/sites/engine/lib/batch.mjs'
+import { TRADES } from '../../bases/sites/engine/lib/score.mjs'
 import { loadConfig, saveConfig } from './config.mjs'
 
 const ok = (text) => ({ content: [{ type: 'text', text }] })
@@ -180,6 +183,43 @@ export function hubServer({ emit, runner, phone, sources, code }) {
           emit('dash', { view, game: gameId, immersive: Boolean(immersive) })
           return ok(`Showing ${view}${gameId ? ` (${gameId})` : ''}.`)
         },
+      ),
+      tool(
+        'leads_status',
+        'Automaton\'s lead engine: how many businesses were found, the shortlist, the open call batch (who, whether now is a good time to call them), who is interested, and the Google spend so far. Use for "who do I call", "how are the leads", "what\'s the batch".',
+        {},
+        async () => ok(leads.summary()),
+      ),
+      tool(
+        'leads_outcome',
+        `Record how a call to a business went, when Markus tells you ("Garcia said yes", "no answer at Ace", "they said don't call again"). business: its name or part of it. outcome: ${OUTCOMES.join(' | ')}. note: what they said, and where they agreed to receive the preview link. callback_at: for a callback, the agreed time as an ISO date-time with offset. "Don't call" is final: record do_not_call straight away.`,
+        { business: z.string(), outcome: z.enum(OUTCOMES), note: z.string().optional(), callback_at: z.string().optional() },
+        async ({ business, outcome, note, callback_at }) => {
+          const l = leads.findLead(business)
+          if (!l) return ok(`No business matches "${business}". leads_status lists the open batch.`)
+          try {
+            const after = leads.outcome(l.id, outcome, { note: note ?? '', callbackAt: callback_at ?? null })
+            return ok(`Recorded for ${after.name}: ${outcome.replace(/_/g, ' ')}${after.outcome && after.outcome !== outcome ? ` (now ${after.outcome})` : ''}.`)
+          } catch (e) {
+            return ok(`Couldn't record that: ${e.message}`)
+          }
+        },
+      ),
+      tool(
+        'leads_setup',
+        `Where the lead engine searches: towns (each like "Trenton, NJ") and trades (${Object.keys(TRADES).join(', ')}). Optional max_requests caps each weekly Google search (default 30, about $1). Use when Markus says where or what kind of businesses to look for.`,
+        { towns: z.array(z.string()).min(1), trades: z.array(z.enum(Object.keys(TRADES))).min(1), max_requests: z.number().int().min(1).max(100).optional() },
+        async ({ towns, trades, max_requests }) => {
+          const cfg = leads.setConfig({ areas: towns, trades, ...(max_requests ? { maxRequests: max_requests } : {}) })
+          void leads.tick()
+          return ok(`Searching ${cfg.areas.join('; ')} for ${cfg.trades.join(', ')}, at most ${cfg.maxRequests} Google requests a week.`)
+        },
+      ),
+      tool(
+        'leads_search_now',
+        'Run the lead engine\'s Google search now instead of waiting for the weekly one (spends Google Places requests, never more than the cap), then score, shortlist, build previews and open a batch. Use when Markus asks to find leads now.',
+        {},
+        async () => ok((await leads.tick({ discover: true })).detail),
       ),
       tool(
         'needs_done',
