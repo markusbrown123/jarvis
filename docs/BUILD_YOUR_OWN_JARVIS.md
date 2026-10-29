@@ -219,7 +219,7 @@ Then build the skeleton:
   1. ElevenLabs through the bridge's `/tts`, sentence by sentence as the text streams.
   2. Otherwise `speechSynthesis` with the best installed voice. Chrome loads its voice list asynchronously.
 - **Barge-in:** if the owner starts talking while it's speaking, stop the audio and send `stop`.
-- **Wake word:** "Hey <name>". The simplest way is matching the always-on recognizer's transcript. A dedicated engine (Porcupine, openWakeWord) can come later.
+- **Wake word:** "Hey [name]". The simplest way is matching the always-on recognizer's transcript. A dedicated engine (Porcupine, openWakeWord) can come later.
 - **On screen:**
   - the state: idle, listening, thinking or speaking;
   - a badge that always says READ-ONLY or WRITES ON.
@@ -227,7 +227,7 @@ Then build the skeleton:
 
 **Check:**
 
-- "What time is it?" and "What's in my <project> folder?" get spoken answers.
+- "What time is it?" and "What's in my [project] folder?" get spoken answers.
 - "Create a file" is politely refused in read-only mode.
 - The gate tests are green.
 
@@ -237,7 +237,7 @@ Commit.
 
 **Store (`bridge/hub/store.mjs`)**
 
-- **Needs list** ("Needs <owner>"):
+- **Needs list** ("Needs [owner]"):
   - Each item is `{ id, project, priority, title, why, actions, state, created }`.
   - Priority is `P1` (blocking or urgent), `P2` (this week) or `P3` (when convenient).
   - Actions are buttons: open a link, copy a value, or tick something off.
@@ -274,7 +274,7 @@ Commit.
 
 **Check:**
 
-- Start a job ("list the TODOs in <project>"). It appears, finishes and shows a summary.
+- Start a job ("list the TODOs in [project]"). It appears, finishes and shows a summary.
 - A `NEED:` line becomes an item.
 - A long job can be cancelled.
 - Tests cover store upserts, and the runner's queue and cancel with a stubbed `query()`.
@@ -321,7 +321,7 @@ Each adapter:
 
 - Every project shows real values with timestamps.
 - A broken source (a bad URL) says so.
-- "How's <project>?" is answered from the data.
+- "How's [project]?" is answered from the data.
 
 Commit.
 
@@ -332,7 +332,7 @@ Each project gets a base: `bases/<id>/BRIEF.md` and `bases/<id>/CLAUDE.md` (temp
 **Tools**
 
 - `project_brief(id)`.
-- `project_note(id, text)`: adds the owner's note under "From <owner>".
+- `project_note(id, text)`: adds the owner's note under "From [owner]".
 - `project_work(id, task)`: a job in the project's folder, with the brief as context.
 - `project_autopilot(id, on|off)`.
 
@@ -539,7 +539,7 @@ You're working for <owner> on <project>, in its base folder. Read BRIEF.md first
 
 ### Done when
 
-- The owner says "Hey <name>, what needs me today?" and gets an answer from real data.
+- The owner says "Hey [name], what needs me today?" and gets an answer from real data.
 - Every project shows real status with its age, and disconnected sources say so.
 - A background job can be started by voice. It runs in the project's folder, reports back, and can be cancelled.
 - Autopilot, if wanted, moves one milestone at a time within its limits, and leaves every outward step as a Need.
