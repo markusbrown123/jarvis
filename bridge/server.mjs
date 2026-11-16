@@ -26,9 +26,22 @@ import { readFileSync, realpathSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
-import { probeUrl, renderPage } from './page.mjs'
+import { renderPage } from './page.mjs'
+import { startHub } from './hub/api.mjs'
+import { hubServer } from './hub/tools.mjs'
+import { createRunner } from './hub/runner.mjs'
+import { createCode } from './hub/code.mjs'
+import { start as startBuilds } from './hub/builds.mjs'
+import { start as startReview } from './hub/review.mjs'
+import { start as startAutopilot } from './hub/autopilot.mjs'
+import { start as startWalkthroughs } from './hub/walkthroughs.mjs'
+import { start as startSiteKit } from './hub/sitekit.mjs'
+import { start as startLeadEngine } from './hub/leadengine.mjs'
+import { startPhone } from './hub/phone.mjs'
+import * as hub from './hub/store.mjs'
+import * as memory from './hub/memory.mjs'
 
-const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
+const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
 
 /**
  * A crash here takes the whole assistant down mid-sentence, and most of what
@@ -46,7 +59,7 @@ process.on('unhandledRejection', (err) => {
  * A WebSocket handshake is not subject to the same-origin policy: the browser
  * sends it on behalf of whatever page asked, no preflight stands in the way,
  * and the page reads every byte that comes back. Without a check here, any tab
- * the user happens to have open could open a socket to ws://localhost:8787,
+ * the user happens to have open could open a socket to ws://localhost:8788,
  * drive the agent with every MCP server on this machine, and read back every
  * token and panel. The Origin header is the only thing that separates our own
  * dev server from someone else's page, so it is checked explicitly.
@@ -74,7 +87,46 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 const isDevPort = (port) =>
   (port >= 5173 && port <= 5199) || (port >= 4173 && port <= 4199)
 
-function originAllowed(origin) {
+/**
+ * Your iPhone over Tailscale (`jarvis remote`): `tailscale serve` puts the
+ * page and this bridge on https://<this-mac>.<tailnet>.ts.net (:5173 and
+ * :8788), proxied to these loopback ports, and says which tailnet user is
+ * asking (Tailscale-User-Login, which the proxy sets and strips from
+ * clients). Anything arriving that way must be from the login `jarvis
+ * remote` recorded in ~/.jarvis/remote.json, and its origin, if any, must be
+ * this Mac's tailnet name. Without that file, nothing remote is accepted.
+ */
+let remoteCache = { at: 0, cfg: null }
+function remoteConfig() {
+  if (Date.now() - remoteCache.at < 5000) return remoteCache.cfg
+  let cfg = null
+  try {
+    cfg = JSON.parse(readFileSync(join(hub.DATA_DIR, 'remote.json'), 'utf8'))
+  } catch {
+    cfg = null
+  }
+  remoteCache = { at: Date.now(), cfg }
+  return cfg
+}
+const viaTailnet = (req) => req.headers['tailscale-user-login'] !== undefined || /\.ts\.net(:\d+)?$/i.test(req.headers.host ?? '')
+function tailnetAllowed(req, origin) {
+  const r = remoteConfig()
+  if (!r?.host || !r?.login) return false
+  const addr = req.socket?.remoteAddress ?? ''
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr)) return false
+  if (req.headers['tailscale-user-login'] !== r.login) return false
+  if (!origin) return true
+  try {
+    const url = new URL(origin)
+    return url.protocol === 'https:' && url.hostname === r.host
+  } catch {
+    return false
+  }
+}
+
+function originAllowed(origin, req) {
+  // Through Tailscale: only your own login, from your own Mac's name.
+  if (req && viaTailnet(req)) return tailnetAllowed(req, origin)
   if (!origin) return ALLOW_NO_ORIGIN
   if (EXTRA_ORIGINS.has(origin.replace(/\/+$/, ''))) return true
   let url
@@ -265,6 +317,10 @@ function decideTool(name) {
     // a write and would hold the whole surface back behind ALLOW_WRITES.
     if (server === 'jarvis' || server === 'jarvis_ui') return true
 
+    // The command center: reading it, moving the dashboard, and starting or
+    // cancelling background jobs (which run behind this same gate).
+    if (server === 'jarvis_hub') return true
+
     // The browser server gates itself, at construction: chromeServer() only
     // builds the acting tools — click, type, form input, close tab — when
     // ALLOW_WRITES is set, so anything that reaches here at all is something
@@ -290,12 +346,99 @@ function decideTool(name) {
   return ALLOW_WRITES
 }
 
+/**
+ * The one permission gate, shared by the conversation and background jobs.
+ * Signature is (toolName, input, options) and it must return a
+ * PermissionResult object; a bare boolean silently denies everything.
+ */
+async function permissionGate(toolName) {
+  const ok = decideTool(toolName)
+  console.log(`[jarvis] tool ${toolName} -> ${ok ? 'allow' : 'deny'}`)
+  return ok
+    ? { behavior: 'allow' }
+    : {
+        behavior: 'deny',
+        // Every word of this can end up spoken, so it carries no command
+        // to read out — the persona is forbidden from saying one aloud.
+        message:
+          'Blocked: JARVIS is running in read-only mode and cannot take' +
+          ' actions that change anything. Tell the user this action is' +
+          ' unavailable until they enable write access on the machine.',
+      }
+}
+
 const SYSTEM_PROMPT = `You are JARVIS. You are speaking out loud to one person.
 
 LENGTH. Two sentences is the ceiling in conversation; the median is under twelve
 words. Every word is read aloud and the user waits in silence while it plays, so
-a long answer is a failure however good it is. Length is licensed in exactly one
-case: reading out data they asked you to retrieve. Conversation never licenses it.
+a long answer is a failure however good it is. Length is licensed in two cases:
+reading out data they asked you to retrieve, and advice — when he asks what to
+do, for a plan, a decision, an analysis or your view (see THINKING). Advice gets
+up to five spoken sentences; anything longer goes on a blade.
+
+THINKING. You are his chief of staff for Automaton, trading and his other work,
+not a search box. When he asks for advice, a plan, an analysis or what you
+think:
+- Work it out properly first, from what you actually know: his goals and
+  setup in your memory, the live command-center data (call hub_overview or
+  hub_project), the expense ledger, past research. Never answer from generic
+  knowledge when his own numbers exist.
+- Lead with the recommendation in one sentence. Then the two or three reasons
+  that decide it, with numbers where you have them. Then the next concrete
+  step — ideally one you take yourself (a background job, a check, a draft).
+- Be tactical: tie it to his stated goals and deadlines, name the biggest risk
+  or bottleneck plainly, and say what you would do first and why. If his plan
+  has a flaw, say so once, with the reason. If a choice is genuinely his, give
+  the trade-off in a sentence and your pick.
+- If you lack a fact that changes the answer, ask the one sharp question that
+  settles it instead of guessing.
+- Put the full plan, comparison or steps on a blade with display; speak the
+  headline and the next step.
+- For research or work that takes more than a minute, start a background job
+  and say so; its findings come back into your memory.
+
+THE STREAMS OF WORK. You are part of six things he's building, each with a base
+  (bases/<id>/BRIEF.md: what it is, how it works, what comes first, the rules,
+  its status). Know them, and ask the streams tool for where each one stands:
+  real estate AI video walkthroughs; a YouTube faceless automation channel;
+  high-end client websites (Automaton); Roblox games and servers for kids,
+  earning Robux; MNQ trading and the portfolio through QuantVue (Finance, which
+  is monitoring only: you never place or change an order, and no figure is
+  made up); an AI virtual influencer, always labelled as AI. Before advising
+  on or starting work on one, read its brief (stream_brief); the rules in it
+  hold. New ideas for any of them go on the Ideas board under that project.
+  Nothing for any of them is sent, posted, published, deployed or paid without
+  him saying so.
+  Four you build yourself — real estate and the client websites (his focus:
+  Higgsfield for the walkthroughs; bots, booked meetings and automation for
+  both), YouTube and the influencer: each run does a brief's next milestone in
+  its folder (the client sites' runs work in bases/sites and only read the
+  Automaton repos) and shows on the Projects page; you run them side by side
+  on your own (project_work starts one now; project_autopilot pauses one).
+  Two things run by themselves: listing photos dropped in ~/RealEstate/Inbox
+  become walkthroughs that land on Needs to review, and every lead or booked
+  call from the sites (the site kit) lands on Needs as it comes in, with a
+  reply drafted for him to send. A third: the lead engine finds trade
+  businesses that need a site (Google Places, capped and logged), keeps the
+  best 25 with a preview site each, and gives him 2–3 at a time to call, each
+  a Needs item with its call sheet (leads_status, leads_outcome when he says
+  how a call went, leads_setup for towns and trades, leads_search_now). He
+  makes every call himself: you never call, text or email a business, and
+  "don't call" is recorded at once. Nothing is ever sent for him. When he tells you something about one of
+  them (a choice, an answer to what it needed), put it in its brief with
+  project_note so the next run has it.
+
+BUILDING YOURSELF. When he asks you to add to or change you — a gesture, a
+project, a button, a look — it gets built, not just noted. Small or urgent, or
+he wants to watch: self_build (Claude Code at your desk, in your own repo; then
+self_restart if it says so). Big, or he says "the cloud", or he's away:
+cloud_build (Claude in the cloud builds and tests it within the hour). Write the
+brief fully from what he said; ask one question first only if something
+decides the design. When a cloud build is done, offer self_update. You also
+review yourself each night (self_review, or when he asks): you look back at
+what he's asked for, learn how he likes things done, and send what's missing to
+the cloud. What gets built waits on your branch; you only change when he says
+to update yourself.
 
 URGENCY IS SIGNALLED BY DELETING WORDS, NOT ADDING THEM. As a situation worsens
 your lines get shorter, not louder. A full clause becomes a clause, becomes a
@@ -436,7 +579,49 @@ Using tools:
   is read out loud, and a URL becomes "aitch tee tee pee colon slash slash".
   Put the source in the panel as a short tag like "REUTERS" instead.
 - If a tool fails or isn't connected, one plain sentence saying so.
-- If you don't know, say you don't know.`
+- If you don't know, say you don't know.
+
+Markus's command center:
+- His projects are the Roblox studio (14 games, worked on by a Windows PC and
+  cloud agents), Automaton (website business at automaton.llc) and finance
+  research (monitoring only, no broker). For any question about them, about
+  what is running, what needs him or how much Claude usage is left, call
+  hub_overview or hub_project first. Answer from that data, briefly.
+- "Show me …" means dashboard_show.
+- "Turn on / off hand control" means hands_control (webcam hand cursor; only when he asks).
+- Anything that will take more than a minute — research, reading a codebase,
+  writing a report — goes to job_start, and you say in a few words that it is
+  running. Don't do long work inside the conversation.
+- Finance is monitoring only. Never claim to see positions, orders or P&L.
+- Business expenses: when he tells you he spent something, log it with
+  expense_log (amount, vendor, which business, category) and confirm in one
+  line; never guess an amount. "What did I spend…" is expense_report.
+- He can be reached on his phone with phone_notify when he asks to be texted
+  or reminded; urgent only for real emergencies or when he says urgent.
+
+Memory:
+- You remember across restarts. Your saved facts and the recent conversation
+  are at the end of this prompt; every exchange is kept on his Mac.
+- When he tells you something worth knowing later — how something is set up,
+  what a tool or account is, a decision, a plan, a preference, a name — save it
+  right away with memory_save, as one short factual sentence, and carry on.
+  Don't announce it beyond a word. Don't save small talk.
+- If something you saved changes, save the new version (memory_save with the
+  same topic) and forget the old one with memory_forget.
+- You learn from mistakes. When he corrects you, says you got something
+  wrong, or something you tried fails, call learn_lesson with the rule to
+  follow next time — then fix it. Your lessons are at the end of this prompt;
+  follow them over your own habits.
+- Research builds up: background job results are kept too, so check
+  memory_recall before redoing research that may already exist.
+- Older memory that bears on his message is attached to it automatically
+  (a note starting "[From your memory"). Use it; never read the note out or
+  mention it. Call memory_recall only for a deliberate deeper search — "what
+  did we find about…", or when the attached memory isn't enough.
+- Saving and recalling are silent housekeeping: never say you are accessing,
+  checking or searching your memory or an archive. Just know it.
+- If he tells you what Quant View is (a name, a link), also call
+  finance_set_quant_view so the dashboard links to it.`
 
 /**
  * ElevenLabs credentials, borrowed from the MCP server config.
@@ -458,6 +643,35 @@ function elevenKey() {
 }
 
 const VOICE_ID = process.env.JARVIS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb'
+const ELEVEN_BASE = process.env.ELEVENLABS_API_BASE ?? 'https://api.elevenlabs.io'
+
+/** Speech → text with ElevenLabs Scribe, for audio that isn't from the page
+ *  (phone voice notes). Returns '' for nothing intelligible. */
+async function elevenTranscribe(buffer, type = 'audio/ogg', name = 'voice.ogg') {
+  const key = elevenKey()
+  if (!key) throw new Error('no ElevenLabs key')
+  const form = new FormData()
+  form.append('model_id', 'scribe_v1')
+  form.append('file', new Blob([buffer], { type }), name)
+  const res = await fetch(`${ELEVEN_BASE}/v1/speech-to-text`, { method: 'POST', headers: { 'xi-api-key': key }, body: form, signal: AbortSignal.timeout(60000) })
+  if (!res.ok) throw new Error(`speech-to-text ${res.status}: ${(await res.text()).slice(0, 160)}`)
+  return ((await res.json()).text ?? '').trim()
+}
+
+/** Text → speech in his ElevenLabs voice, as a Buffer. `format` is an
+ *  ElevenLabs output_format, e.g. opus_48000_64 for a phone voice note. */
+async function elevenSpeak(text, format = 'mp3_44100_64') {
+  const key = elevenKey()
+  if (!key) throw new Error('no ElevenLabs key')
+  const res = await fetch(`${ELEVEN_BASE}/v1/text-to-speech/${VOICE_ID}?output_format=${format}`, {
+    method: 'POST',
+    headers: { 'xi-api-key': key, 'content-type': 'application/json' },
+    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.4, similarity_boost: 0.75, speed: 1.05 } }),
+    signal: AbortSignal.timeout(60000),
+  })
+  if (!res.ok) throw new Error(`text-to-speech ${res.status}: ${(await res.text()).slice(0, 160)}`)
+  return Buffer.from(await res.arrayBuffer())
+}
 
 /**
  * Where /file is permitted to read from, and how big a read may get.
@@ -662,9 +876,163 @@ function corsFor(req) {
 // One HTTP server for both the speech proxy and the WebSocket upgrade.
 const http = await import('node:http')
 
+// Background jobs run as their own sessions, behind the same gate, with the
+// user's MCP servers but none of the per-connection interface ones.
+// Jobs run in the background, so they can afford to think harder than chat.
+const runner = createRunner({ model: MODEL, effort: process.env.JARVIS_JOB_EFFORT ?? 'high', canUseTool: permissionGate, mcpServers: MCP_SERVERS })
+
+// The desk's Claude Code terminal: the same gate decides, and in read-only
+// mode what it won't allow by itself is put to Markus at the desk.
+const code = createCode({ model: MODEL, effort: process.env.JARVIS_JOB_EFFORT ?? 'high', decide: decideTool, writes: ALLOW_WRITES })
+
+/**
+ * How hard to think about this turn. Quick exchanges stay at the configured
+ * effort so he answers fast; advice, plans, analysis, trading and business
+ * questions get deep reasoning; "think hard" gets the deepest. Never lower
+ * than the configured level.
+ */
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+const DEEP_EFFORT = process.env.JARVIS_DEEP_EFFORT ?? 'high'
+const STRATEGIC =
+  /\b(plan|planning|strateg\w*|should (i|we)|what do you think|recommend\w*|advice|advise|analy[sz]\w*|compare|decid\w*|decision|improve|grow|growth|increase|optimi[sz]\w*|best way|how (do|can|should|would) (i|we)|why (is|are|did|does|do|isn)|figure out|pros and cons|risk\w*|trade|trading|setup|backtest\w*|strategy|pricing|price|marketing|clients?|leads?|revenue|profit\w*|budget|roadmap|priorit\w*|idea|ideas|research|develop\w*|build|mistake|wrong|learn)\b/i
+function effortFor(text) {
+  const base = Math.max(0, EFFORTS.indexOf(EFFORT))
+  let want = base
+  if (/\b(think (hard|harder|deeply|carefully|it through)|deep dive|really think|take your time)\b/i.test(text)) want = Math.max(want, EFFORTS.indexOf('xhigh'))
+  else if (STRATEGIC.test(text)) want = Math.max(want, EFFORTS.indexOf(DEEP_EFFORT))
+  else if (text.split(/\s+/).length > 30) want = Math.max(want, EFFORTS.indexOf('medium'))
+  return EFFORTS[want] ?? EFFORT
+}
+
+/**
+ * Get a turn ready: set the effort for it, and attach older memory that bears
+ * on it (past conversations, job findings) so he doesn't have to go looking.
+ */
+async function prepareTurn(session, text, sessionStart, effortNow, channel) {
+  const want = effortFor(text)
+  if (want !== effortNow.level && typeof session.applyFlagSettings === 'function') {
+    try {
+      await session.applyFlagSettings({ effortLevel: want })
+      effortNow.level = want
+    } catch (err) {
+      console.warn('[jarvis] could not change effort:', err.message)
+    }
+  }
+  if (want !== EFFORT) hub.term(channel, `thinking deeper (${want})`, 'info')
+  const ctx = memory.relevantContext(text, { sessionStart })
+  return ctx
+    ? `${text}\n\n[From your memory — earlier conversations and research that bear on this. Use what helps; never read this note out:\n${ctx}]`
+    : text
+}
+
+/**
+ * The phone conversation: Markus texting (or sending voice notes) from
+ * Telegram. One long-lived session of its own, so it remembers the thread
+ * between messages, with the command-center tools and the same permission
+ * gate as the voice conversation — but no screen, camera or browser, since
+ * nobody is at the Mac. Messages are answered one at a time, in order.
+ */
+const PHONE_PROMPT = `${SYSTEM_PROMPT}
+
+RIGHT NOW YOU ARE NOT SPEAKING. Markus is away from the Mac, texting you from his phone over Telegram. Reply as a text message: plain text, short, no markdown headings or tables (a few "•" bullets are fine), no code blocks unless he asks for code. There is no screen in front of him, so never call dashboard_show, display, or anything that opens or shows something on the Mac. If he asks for something long, start it with job_start (it reports back to this chat when done) and say so in one line.`
+
+function makePhoneChat() {
+  const inbox = []
+  let wake = null
+  let pending = null
+  let reply = ''
+  async function* prompts() {
+    for (;;) {
+      const text = inbox.shift() ?? (await new Promise((r) => (wake = r)))
+      yield { type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null }
+    }
+  }
+  const session = query({
+    prompt: prompts(),
+    options: {
+      mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink(), sources: hubApi.sources, code }) },
+      systemPrompt: PHONE_PROMPT + memory.promptBlock(),
+      cwd: homedir(),
+      settingSources: [],
+      model: MODEL,
+      effort: EFFORT,
+      maxTurns: 24,
+      permissionMode: 'default',
+      canUseTool: permissionGate,
+    },
+  })
+  ;(async () => {
+    try {
+      for await (const msg of session) {
+        if (msg.type === 'assistant') {
+          for (const b of msg.message?.content ?? []) if (b.type === 'text') reply += b.text
+        }
+        if (msg.type === 'rate_limit_event') hub.observeLimitStatus(msg.rate_limit_info)
+        if (msg.type === 'result') {
+          hub.observeRequest({
+            id: msg.uuid,
+            inputTokens: msg.usage?.input_tokens ?? 0,
+            outputTokens: msg.usage?.output_tokens ?? 0,
+            cacheReadTokens: msg.usage?.cache_read_input_tokens ?? 0,
+            cacheWriteTokens: msg.usage?.cache_creation_input_tokens ?? 0,
+            costUsd: msg.total_cost_usd ?? 0,
+          })
+          const p = pending
+          pending = null
+          const text = msg.subtype === 'success' ? (msg.result ?? reply) : ''
+          reply = ''
+          if (msg.subtype === 'success') p?.resolve(text.trim())
+          else p?.reject(new Error(`the turn ended early (${msg.subtype})`))
+        }
+      }
+    } catch (err) {
+      pending?.reject(err)
+    }
+    pending?.reject(new Error('the phone session ended'))
+  })()
+  let chain = Promise.resolve()
+  const sessionStart = Date.now()
+  const effortNow = { level: EFFORT }
+  return {
+    /** `text` is a string, or content blocks (an image and its instructions). */
+    ask(said) {
+      const turn = chain.then(
+        async () => {
+          const text = typeof said === 'string' ? await prepareTurn(session, said, sessionStart, effortNow, 'phone').catch(() => said) : said
+          return new Promise((resolve, reject) => {
+            pending = { resolve, reject }
+            reply = ''
+            if (wake) {
+              const w = wake
+              wake = null
+              w(text)
+            } else inbox.push(text)
+          })
+        },
+      )
+      chain = turn.catch(() => {})
+      return turn
+    },
+  }
+}
+
+let phone = null
+const phoneLink = () => phone
+phone = startPhone({ makeChat: makePhoneChat, transcribe: elevenTranscribe, speak: elevenSpeak })
+
+const hubApi = startHub({ runner, phone, code })
+// Cloud builds of JARVIS himself: watch the issues he filed (builds.mjs).
+startBuilds()
+startReview({ runner })
+startAutopilot({ runner, writes: ALLOW_WRITES })
+// Listings dropped in the walkthrough inbox, rendered on their own; the sites' leads and bookings, onto Needs.
+startWalkthroughs()
+startSiteKit({ runner })
+startLeadEngine()
+
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
-  if (origin && !originAllowed(origin)) {
+  if ((origin || viaTailnet(req)) && !originAllowed(origin, req)) {
     console.warn(`[jarvis] refused http request from origin ${origin}`)
     res.writeHead(403, { vary: 'origin' })
     return res.end('forbidden')
@@ -676,6 +1044,9 @@ const handleRequest = async (req, res) => {
     return res.end()
   }
 
+  // The command center: projects, jobs, Needs Markus, usage.
+  if (req.url?.startsWith('/api/')) return hubApi(req, res, cors, Boolean(origin))
+
   if (req.method === 'GET' && req.url === '/health') {
     // The browser reads this once at boot to decide which voice engine to use.
     // Both premium paths ride the same ElevenLabs key, so both flags track it:
@@ -684,7 +1055,8 @@ const handleRequest = async (req, res) => {
     // student with nothing configured still has a working assistant.
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven }))
+    // model/effort/writes feed the intro's systems check. No secrets here.
+    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven, model: MODEL, effort: EFFORT, writes: ALLOW_WRITES }))
   }
 
   // Serve local image files to the page. Screenshots and generated art land on
@@ -988,7 +1360,7 @@ const wss = new WebSocketServer({
       console.warn(`[jarvis] rejected websocket on path ${path}`)
       return done(false, 403, 'Forbidden')
     }
-    if (!originAllowed(origin)) {
+    if (!originAllowed(origin, req)) {
       console.warn(
         `[jarvis] rejected websocket from origin ${origin ?? '(none)'}` +
           ' — set JARVIS_ALLOWED_ORIGINS to permit it',
@@ -998,7 +1370,23 @@ const wss = new WebSocketServer({
     done(true)
   },
 })
-server.listen(PORT)
+/**
+ * Loopback only, unless JARVIS_BIND says otherwise. Listening on every
+ * interface put the speech proxy and the agent one Wi-Fi hop from anyone on
+ * the same network.
+ */
+const BIND = process.env.JARVIS_BIND ?? '127.0.0.1'
+// The socket server passes on the HTTP server's errors. The usual one at
+// start-up: the port is taken, which deserves a sentence, not a stack trace.
+wss.on('error', (err) => {
+  console.error(
+    err.code === 'EADDRINUSE'
+      ? `[jarvis] port ${PORT} is taken — JARVIS is probably running already (jarvis stop), or another app has it (lsof -i :${PORT}).`
+      : `[jarvis] bridge server error: ${err.message}`,
+  )
+  process.exit(1)
+})
+server.listen(PORT, BIND)
 
 console.log(`[jarvis] bridge listening on ws://localhost:${PORT}`)
 console.log(
@@ -1153,6 +1541,10 @@ wss.on('connection', (socket) => {
    * deadlocked assistant is not.
    */
   let settling = Promise.resolve()
+  // Per-session memory and effort bookkeeping (see prepareTurn).
+  const sessionStart = Date.now()
+  const effortNow = { level: EFFORT }
+  let turns = Promise.resolve()
   let finishTurn = null
 
   const turnFinished = () =>
@@ -1179,6 +1571,10 @@ wss.on('connection', (socket) => {
     // interface is the interface talking about itself, not work being done for
     // the user, and the badge would be describing the very thing they can see.
     if (name.startsWith('mcp__jarvis_ui__')) return
+    hub.term('voice', name.replace(/^mcp__(\w+?)__/, '$1 · '), 'tool')
+    // Memory bookkeeping is instant and his own business: no filler line, no
+    // working badge — otherwise every "noted" turn opened with "Retrieving."
+    if (/^mcp__jarvis_hub__(memory_save|memory_forget|learn_lesson|memory_recall)$/.test(name)) return
     if (decideTool(name)) return sendTurn({ type: 'tool', name })
     if (id) heldTools.set(id, name)
   }
@@ -1214,12 +1610,16 @@ wss.on('connection', (socket) => {
         jarvis_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
         // The camera, which unlike everything else here has to ask and wait.
         jarvis_eyes: visionServer(ask),
+        // The command center: live project data, dashboard, background jobs.
+        jarvis_hub: hubServer({ emit: (op, args) => send({ type: 'ui', op, args }), runner, phone, sources: hubApi.sources, code }),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
       // of input tokens on every turn. Replacing it makes the persona stick,
       // keeps answers short enough to speak, and cuts cost per turn.
-      systemPrompt: SYSTEM_PROMPT,
+      // Plus his memory: saved facts and the recent conversation, read fresh
+      // for every new session so a restart or reload loses nothing.
+      systemPrompt: SYSTEM_PROMPT + memory.promptBlock(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1261,23 +1661,12 @@ wss.on('connection', (socket) => {
       // through a `Bash: echo hello` without asking, and only reaches us for
       // something with a consequence, like a `touch`. So a deny here is
       // reliable; an absence of a call here is not proof nothing ran.
-      canUseTool: async (toolName) => {
-        const ok = decideTool(toolName)
-        console.log(`[jarvis] tool ${toolName} -> ${ok ? 'allow' : 'deny'}`)
-        return ok
-          ? { behavior: 'allow' }
-          : {
-              behavior: 'deny',
-              // Every word of this can end up spoken, so it carries no command
-              // to read out — the persona is forbidden from saying one aloud.
-              message:
-                'Blocked: JARVIS is running in read-only mode and cannot take' +
-                ' actions that change anything. Tell the user this action is' +
-                ' unavailable until they enable write access on the machine.',
-            }
-      },
+      canUseTool: permissionGate,
     },
   })
+
+  // Which content blocks of the message in flight are text, by index.
+  const textBlocks = {}
 
   // Pump the session's output stream to the browser for as long as it lives.
   ;(async () => {
@@ -1308,6 +1697,17 @@ wss.on('connection', (socket) => {
             ) {
               announceTool(ev.content_block.id, ev.content_block.name)
             }
+            // The end of a text block is the end of what can be said for now:
+            // the browser speaks the unfinished last sentence straight away
+            // instead of holding it until the turn's result arrives, which on
+            // a short answer was most of the wait.
+            if (ev?.type === 'content_block_start') {
+              textBlocks[ev.index] = ev.content_block?.type === 'text'
+            }
+            if (ev?.type === 'content_block_stop' && textBlocks[ev.index]) {
+              delete textBlocks[ev.index]
+              sendTurn({ type: 'text_end' })
+            }
             break
           }
 
@@ -1336,13 +1736,28 @@ wss.on('connection', (socket) => {
             break
           }
 
+          case 'rate_limit_event':
+            hub.observeLimitStatus(msg.rate_limit_info)
+            break
+
           case 'result':
+            // JARVIS's own usage, once per request (deduplicated by its id).
+            hub.observeRequest({
+              id: msg.uuid,
+              inputTokens: msg.usage?.input_tokens ?? 0,
+              outputTokens: msg.usage?.output_tokens ?? 0,
+              cacheReadTokens: msg.usage?.cache_read_input_tokens ?? 0,
+              cacheWriteTokens: msg.usage?.cache_creation_input_tokens ?? 0,
+              costUsd: msg.total_cost_usd ?? 0,
+            })
             // A result is not automatically a success. The error subtypes
             // carry no `result` field at all, so reporting them as 'done' with
             // empty text is indistinguishable from a turn that simply had
             // nothing to say — the HUD stops spinning and JARVIS stands there
             // silent. Say what happened instead.
             if (msg.subtype === 'success') {
+              hub.term('voice', `jarvis › ${msg.result ?? ''}`, 'reply')
+              memory.logTurn({ channel: 'voice', role: 'jarvis', text: msg.result ?? '' })
               sendTurn({
                 type: 'done',
                 text: msg.result ?? '',
@@ -1419,16 +1834,25 @@ wss.on('connection', (socket) => {
        */
       const text = msg.text
       const id = typeof msg.id === 'string' ? msg.id : null
-      void settling.then(() => {
-        answering = id
-        if (deliver) {
-          const resolve = deliver
-          deliver = null
-          resolve(text)
-        } else {
-          inbox.push(text)
-        }
-      })
+      hub.term('voice', `markus › ${text}`, 'user')
+      memory.logTurn({ channel: 'voice', role: 'user', text })
+      // In order, one at a time: each turn's preparation finishes before the
+      // next one starts, so two quick questions can't swap places.
+      const after = settling
+      turns = turns
+        .then(() => after)
+        .then(() => prepareTurn(session, text, sessionStart, effortNow, 'voice'))
+        .catch(() => text)
+        .then((content) => {
+          answering = id
+          if (deliver) {
+            const resolve = deliver
+            deliver = null
+            resolve(content)
+          } else {
+            inbox.push(content)
+          }
+        })
     }
 
     if (msg.type === 'reply' && typeof msg.id === 'string') {

@@ -2,8 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#01060c" />
+    <!-- On the phone, Share → Add to Home Screen makes it an app: its own icon, full screen. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="JARVIS" />
 
     <!--
       Defence in depth behind the sanitiser in src/ui/Panels.tsx.
@@ -32,7 +39,7 @@
       The bridge itself is framed too, and that is what makes blades work. A
       publisher's X-Frame-Options is a rule enforced against the browser, so an
       article can never be framed from here directly. The bridge fetches it
-      server-side and serves it back from localhost:8787, at which point the
+      server-side and serves it back from localhost:8788, at which point the
       document is ours and there is nothing cross-origin to refuse. Note what is
       NOT relaxed: no publisher's own origin appears here, so only pages that
       have been through the bridge — script-stripped, served under their own
@@ -51,21 +58,70 @@
         default-src 'self';
         base-uri 'self';
         object-src 'none';
-        frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com http://localhost:8787 http://127.0.0.1:8787;
-        img-src 'self' data: blob: http://localhost:8787 http://127.0.0.1:8787;
+        frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com http://localhost:8788 http://127.0.0.1:8788 https://*.ts.net:8788 https://s.tradingview.com https://www.tradingview-widget.com https://automaton.llc https://*.automaton.llc https://*.netlify.app http://localhost:8501 http://127.0.0.1:8000;
+        img-src 'self' data: blob: http://localhost:8788 http://127.0.0.1:8788 https://*.ts.net:8788;
         script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:;
-        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        font-src 'self' data: https://fonts.gstatic.com;
-        connect-src 'self' data: blob: https: ws: wss: http://localhost:8787 http://127.0.0.1:8787;
+        style-src 'self' 'unsafe-inline';
+        font-src 'self' data:;
+        connect-src 'self' data: blob: https: ws: wss: http://localhost:8788 http://127.0.0.1:8788;
         worker-src 'self' blob:;
-        media-src 'self' data: blob: http://localhost:8787 http://127.0.0.1:8787;
+        media-src 'self' data: blob: http://localhost:8788 http://127.0.0.1:8788 https://*.ts.net:8788;
       "
     />
 
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>J.A.R.V.I.S.</title>
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      If the app can't load at all — a file missing or half-edited after an
+      update — the page would otherwise sit there blank and white, because
+      the dark theme arrives with the app itself. Say what happened instead.
+    -->
+    <style>
+      html,
+      body {
+        background: #01060c;
+      }
+    </style>
+    <script>
+      ;(function () {
+        var shown = false
+        function show(detail) {
+          var root = document.getElementById('root')
+          if (shown || (root && root.childElementCount) || document.querySelector('vite-error-overlay')) return
+          shown = true
+          var box = document.createElement('div')
+          box.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:32px;background:#01060c;color:#dfe6f2;font:15px/1.6 -apple-system,system-ui,sans-serif'
+          var inner = document.createElement('div')
+          inner.style.maxWidth = '680px'
+          var title = document.createElement('b')
+          title.textContent = 'JARVIS couldn\u2019t load the page'
+          title.style.cssText = 'color:#fca5a5;letter-spacing:.08em'
+          var pre = document.createElement('pre')
+          pre.textContent = detail
+          pre.style.cssText = 'white-space:pre-wrap;color:#ffd2a8;font:13px/1.5 ui-monospace,monospace;margin:12px 0'
+          var help = document.createElement('div')
+          help.textContent = 'Usually a file is missing or half-edited after an update. In Terminal: \u201ccd ~/jarvis && git status\u201d lists changed or deleted files, and \u201ctail -40 ~/Library/Logs/jarvis.log\u201d shows the exact error.'
+          inner.append(title, pre, help)
+          box.append(inner)
+          document.body.append(box)
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            var t = e.target
+            if (t && t.tagName === 'SCRIPT') show('A script failed to load: ' + (t.src || 'inline'))
+            else if (e.message) setTimeout(function () { show(e.message) }, 1500)
+          },
+          true,
+        )
+        setTimeout(function () {
+          show('Nothing loaded after 25 seconds.')
+        }, 25000)
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

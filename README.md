@@ -6,6 +6,34 @@ searches the web, generates images, drives your phone, reads your mail. The face
 is a web page (React + Vite + Three.js + custom GLSL). The brain is Claude Code,
 run headless as a library.
 
+**This build** (Markus's) adds, on top of the voice assistant:
+
+- **One command, `jarvis`** — starts everything in write mode, links your
+  phone the first time, prints a status board, opens the window, and says when
+  a newer version is waiting. `jarvis update` brings it in, installs what
+  changed and restarts him, carrying over anything not committed or not pushed
+  yet (and putting everything back if that can't be done cleanly).
+- **The Station** — a 3D Tony Stark house on a Malibu cliff under the real sky
+  and weather: a GTA-style loading screen and fly-in from the sea, the estate,
+  FPV drones and Dum-E doing the real work, your desk looking out to sea with
+  JARVIS himself as a hologram over it. Opens straight into the flight on the
+  Mac. Click the desk to sit down; click one of its monitors to go into it and
+  use the page (Esc comes back out).
+  [docs/STATION.md](docs/STATION.md)
+- **The desk** — beside talking to JARVIS: a real Claude Code terminal in any of
+  your project folders, and an Ideas board he develops with you and can hand
+  to Claude Code to build.
+- **The streams of work** — six things you're building (real estate video
+  walkthroughs, a YouTube channel, client websites, Roblox for kids, MNQ
+  trading and the portfolio, an AI influencer), each with a base in
+  [bases/](bases/README.md) that JARVIS reads, so he knows where each stands.
+- **The command center** — Roblox studio (queue, galleries), Automaton (site
+  pipeline, public checks), Finance (research data, services, expenses), jobs,
+  Needs Markus, usage, memory. [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md)
+- **Your phone** — Telegram chat and voice notes, reports, urgent Pushover
+  alerts, and live voice from the iPhone over Tailscale (`jarvis remote`) — as
+  a home-screen app with its own icon and a blue lock screen to tap into.
+
 **The only subscription you need is Claude Code.** No API keys, no OpenAI
 account, no cloud bill — the brain runs on your existing Claude Code login, and
 the heavy work (the model itself) runs on Anthropic's servers, so even a low-end
@@ -25,7 +53,7 @@ can have — Node.js and Chrome. That's the whole list.
   or the platform installer at <https://docs.claude.com/en/docs/claude-code> —
   then run `claude` once and complete login. The bridge reuses that login. **No
   API key**, and usage is billed to your existing Claude account.
-- **Node.js 20 or newer** — free, one installer from <https://nodejs.org>. This
+- **Node.js 20.19+ or 22.12+** — free, one installer from <https://nodejs.org>. This
   is a Node web app, so it is the one unavoidable tool.
 - **Google Chrome or Microsoft Edge**, in a **real browser window** — not an
   embedded preview pane. Preview panes (including the one inside editors and
@@ -42,6 +70,24 @@ language.
 
 ## Quick start
 
+**On a Mac, one command does everything** (this fork's launcher, `bin/jarvis`):
+
+```bash
+echo 'alias jarvis="$HOME/jarvis/bin/jarvis"' >> ~/.zshrc && source ~/.zshrc
+jarvis          # starts in the background in write mode, links your phone the first time,
+                # says what's running, and opens him in Chrome; he starts himself (or press any key)
+jarvis --safe   # the same, read-only
+jarvis remote   # once: talk to him from your iPhone over Tailscale
+jarvis stop     # shuts him down
+jarvis logs     # shows what he's doing
+```
+
+The command center (projects, jobs, Needs Markus, usage) is described in
+[docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md).
+
+It reads the ElevenLabs key from the Keychain (`security add-generic-password -a "$USER" -s elevenlabs -w`)
+and logs to `~/Library/Logs/jarvis.log`. The manual way still works:
+
 First, install, then start it:
 
 ```bash
@@ -49,7 +95,7 @@ npm install
 npm start          # runs the brain and the face together
 ```
 
-Then open the URL it prints (http://localhost:5173) in **Chrome**, click **INITIALISE**, and say **“Hey Jarvis”**.
+Then open the URL it prints (http://localhost:5173) in **Chrome**, press any key (or say **“Jarvis”**), and say **“Hey Jarvis”**.
 
 Prefer two terminals? Run them separately instead:
 
@@ -75,7 +121,7 @@ Then open the app in a **real Chrome or Edge window**:
 open http://localhost:5173
 ```
 
-Click **INITIALISE**, allow the microphone when asked, and say **"Hey Jarvis"**.
+Press any key on the start screen, allow the microphone when asked, and say **"Hey Jarvis"**. After that he can start by himself.
 
 > It has to be a real browser window. Embedded preview panes block the
 > microphone, so JARVIS will look perfectly alive and simply never respond.
@@ -92,7 +138,7 @@ the brain and the hands.
   │  "Hey Jarvis" wake word            │        │  Node · bridge/server.mjs        │
   │  local VAD  →  speech to text      │   ws   │  Claude Agent SDK                │
   │  reactor UI (Three.js + GLSL)      │◄─────► │   = Claude Code, headless        │
-  │  text to speech                    │  8787  │  spawns your MCP servers         │
+  │  text to speech                    │  8788  │  spawns your MCP servers         │
   │  heads-up display                  │        │  permission gate (decideTool)    │
   └────────────────────────────────────┘        └──────────────────────────────────┘
 ```
@@ -101,7 +147,7 @@ Everything you see and hear happens in the browser. The bridge is a single Node
 process (`bridge/server.mjs`) that runs the **Claude Agent SDK**
 (`@anthropic-ai/claude-agent-sdk`) — this spawns the real `claude` CLI as a child
 process, so **the brain literally is Claude Code, headless.** They talk over a
-WebSocket (plus a few HTTP endpoints) on `ws://localhost:8787`.
+WebSocket (plus a few HTTP endpoints) on `ws://localhost:8788`.
 
 **Why a bridge at all?** A browser tab cannot spawn the local stdio MCP servers —
 `higgsfield`, `elevenlabs`, `android`, `playwright`, `exa`, `serper`, and the
@@ -224,10 +270,11 @@ Everything is optional in bridge mode. Frontend settings live in `.env.local`
 
 | Variable | Default | Effect |
 |---|---|---|
-| `JARVIS_BRIDGE_PORT` | `8787` | Port for the WebSocket + HTTP endpoints |
+| `JARVIS_BRIDGE_PORT` | `8788` | Port for the WebSocket + HTTP endpoints |
 | `JARVIS_MODEL` | `claude-opus-5` | Model to run |
 | `JARVIS_EFFORT` | `medium` | Reasoning effort |
 | `JARVIS_ALLOW_WRITES` | off | `1` allows effectful tools (see below) |
+| `JARVIS_MAX_JOBS` | `8` | Background jobs allowed to run at once (1–24); starts are also capped at 16 per minute |
 | `JARVIS_ALLOWED_ORIGINS` | local dev | Extra WebSocket origins to accept |
 | `JARVIS_ALLOW_NO_ORIGIN` | off | Accept connections with no `Origin` header |
 | `JARVIS_FILE_ROOTS` | — | Roots the `/file` endpoint may serve from |
@@ -267,8 +314,8 @@ interface for a confirmation dialog, so the decision is made ahead of time in
 `settingSources: []`, which makes its own gate the only authority — filesystem
 settings and any global `bypassPermissions` cannot override it.
 
-To allow effectful tools (phone, browser driving, sending), run the bridge this
-way instead:
+On a Mac, `jarvis` starts him with effectful tools allowed (`jarvis --safe` for
+read-only). Run by hand, allow them (phone, browser driving, sending) this way:
 
 ```bash
 npm run bridge:writes
@@ -289,7 +336,7 @@ Press **T** for a one-line audio self-test.
 window** (not an embedded preview), and you must have **allowed the microphone**.
 
 **Bridge not reachable.** Check that `npm run bridge` is still running in its
-terminal, and that nothing else is holding port `8787`.
+terminal, and that nothing else is holding port `8788`.
 
 ---
 

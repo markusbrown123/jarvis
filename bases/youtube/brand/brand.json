@@ -1,0 +1,27 @@
+{
+  "_comment": "The one place the channel's identity lives. Change 'name'/'handle' when Markus picks, then re-run tools/make_brand.py. Everything else is the look decided in BRAND.md.",
+  "name": "Built Overnight",
+  "handle": "@builtovernight",
+  "tagline": "One build, start to finish.",
+  "mark_glyph": "/_",
+  "palette": {
+    "ink": "#0B0E13",
+    "panel": "#141A23",
+    "line": "#263141",
+    "paper": "#F2F4F7",
+    "muted": "#8C98A8",
+    "signal": "#FF5A1F",
+    "ok": "#35D07F"
+  },
+  "fonts": {
+    "display": "/usr/share/fonts/opentype/inter/InterDisplay-Black.otf",
+    "display_semibold": "/usr/share/fonts/opentype/inter/InterDisplay-SemiBold.otf",
+    "body": "/usr/share/fonts/opentype/inter/Inter-Medium.otf",
+    "mono": "/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Bold.ttf",
+    "mono_regular": "/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Regular.ttf"
+  },
+  "font_licences": {
+    "Inter": "SIL Open Font Licence 1.1 - free for commercial and embedded use",
+    "JetBrains Mono": "SIL Open Font Licence 1.1 - free for commercial and embedded use"
+  }
+}

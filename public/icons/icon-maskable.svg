@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs>
+<radialGradient id="bg" cx="50%" cy="50%" r="70%"><stop offset="0" stop-color="#0b3a66"/><stop offset="0.55" stop-color="#04162b"/><stop offset="1" stop-color="#01060c"/></radialGradient>
+<radialGradient id="core"><stop offset="0" stop-color="#ffffff"/><stop offset="0.28" stop-color="#d6f1ff"/><stop offset="0.6" stop-color="#38bdf8" stop-opacity="0.9"/><stop offset="1" stop-color="#1d4ed8" stop-opacity="0"/></radialGradient>
+<filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="512" height="512" fill="url(#bg)"/>
+<g transform="translate(256 256) scale(0.74)" fill="none" stroke="#38bdf8" filter="url(#glow)">
+<path d="M192.0 0.0L206.0 0.0M198.2 17.3L205.2 18.0M196.0 34.6L202.9 35.8M192.2 51.5L199.0 53.3M187.0 68.1L193.6 70.5M180.4 84.1L186.7 87.1M166.3 96.0L178.4 103.0M163.0 114.1L168.7 118.2M152.4 127.9L157.8 132.4M140.7 140.7L145.7 145.7M127.9 152.4L132.4 157.8M114.1 163.0L118.2 168.7M96.0 166.3L103.0 178.4M84.1 180.4L87.1 186.7M68.1 187.0L70.5 193.6M51.5 192.2L53.3 199.0M34.6 196.0L35.8 202.9M17.3 198.2L18.0 205.2M0.0 192.0L0.0 206.0M-17.3 198.2L-18.0 205.2M-34.6 196.0L-35.8 202.9M-51.5 192.2L-53.3 199.0M-68.1 187.0L-70.5 193.6M-84.1 180.4L-87.1 186.7M-96.0 166.3L-103.0 178.4M-114.1 163.0L-118.2 168.7M-127.9 152.4L-132.4 157.8M-140.7 140.7L-145.7 145.7M-152.4 127.9L-157.8 132.4M-163.0 114.1L-168.7 118.2M-166.3 96.0L-178.4 103.0M-180.4 84.1L-186.7 87.1M-187.0 68.1L-193.6 70.5M-192.2 51.5L-199.0 53.3M-196.0 34.6L-202.9 35.8M-198.2 17.3L-205.2 18.0M-192.0 0.0L-206.0 0.0M-198.2 -17.3L-205.2 -18.0M-196.0 -34.6L-202.9 -35.8M-192.2 -51.5L-199.0 -53.3M-187.0 -68.1L-193.6 -70.5M-180.4 -84.1L-186.7 -87.1M-166.3 -96.0L-178.4 -103.0M-163.0 -114.1L-168.7 -118.2M-152.4 -127.9L-157.8 -132.4M-140.7 -140.7L-145.7 -145.7M-127.9 -152.4L-132.4 -157.8M-114.1 -163.0L-118.2 -168.7M-96.0 -166.3L-103.0 -178.4M-84.1 -180.4L-87.1 -186.7M-68.1 -187.0L-70.5 -193.6M-51.5 -192.2L-53.3 -199.0M-34.6 -196.0L-35.8 -202.9M-17.3 -198.2L-18.0 -205.2M-0.0 -192.0L-0.0 -206.0M17.3 -198.2L18.0 -205.2M34.6 -196.0L35.8 -202.9M51.5 -192.2L53.3 -199.0M68.1 -187.0L70.5 -193.6M84.1 -180.4L87.1 -186.7M96.0 -166.3L103.0 -178.4M114.1 -163.0L118.2 -168.7M127.9 -152.4L132.4 -157.8M140.7 -140.7L145.7 -145.7M152.4 -127.9L157.8 -132.4M163.0 -114.1L168.7 -118.2M166.3 -96.0L178.4 -103.0M180.4 -84.1L186.7 -87.1M187.0 -68.1L193.6 -70.5M192.2 -51.5L199.0 -53.3M196.0 -34.6L202.9 -35.8M198.2 -17.3L205.2 -18.0" stroke-width="3" opacity="0.75"/>
+<circle r="176" pathLength="100" stroke-dasharray="22 11.33" stroke-width="12" stroke-linecap="round" opacity="0.9" transform="rotate(-80)"/>
+<circle r="140" stroke="#bae6fd" stroke-width="3.5"/>
+<circle r="110" pathLength="120" stroke-dasharray="7 3" stroke-width="14" opacity="0.55"/>
+<polygon points="0.0,-70.0 60.6,-35.0 60.6,35.0 0.0,70.0 -60.6,35.0 -60.6,-35.0" fill="rgba(56,189,248,0.08)" stroke="#bae6fd" stroke-width="3"/>
+<circle r="62" fill="url(#core)" stroke="none"/>
+</g>
+</svg>

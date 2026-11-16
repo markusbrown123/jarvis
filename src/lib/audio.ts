@@ -9,16 +9,97 @@ let ctx: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let buf: Uint8Array | null = null
 
-export async function getMic(): Promise<MediaStream> {
-  if (stream) return stream
-  stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    },
+const VOICE = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+}
+
+const open = (deviceId?: string) =>
+  navigator.mediaDevices.getUserMedia({
+    audio: deviceId ? { ...VOICE, deviceId: { exact: deviceId } } : VOICE,
   })
+
+/**
+ * macOS hands the default input to a nearby iPhone (Continuity) whenever it
+ * can, and that microphone is often unavailable by the time the page asks for
+ * it — or it works, and JARVIS listens to a phone in another room. Prefer the
+ * Mac's own microphone; any other input that isn't a phone will do.
+ */
+const PHONE = /iphone|ipad/i
+
+const BUILT_IN = /macbook|built-in/i
+
+async function localMic(): Promise<MediaDeviceInfo | null> {
+  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
+    (d) =>
+      d.kind === 'audioinput' &&
+      d.deviceId !== 'default' &&
+      d.deviceId !== 'communications' &&
+      !PHONE.test(d.label),
+  )
+  return inputs.find((d) => BUILT_IN.test(d.label)) ?? inputs[0] ?? null
+}
+
+/** The request in flight, so two callers at once share one microphone. */
+let opening: Promise<MediaStream> | null = null
+
+export function getMic(): Promise<MediaStream> {
+  if (stream) return Promise.resolve(stream)
+  opening ??= openMic().finally(() => {
+    opening = null
+  })
+  return opening
+}
+
+async function openMic(): Promise<MediaStream> {
+  let s: MediaStream
+  try {
+    s = await open()
+  } catch (err) {
+    // A refused permission is final. Anything else may be the phone's mic
+    // having gone away, so try the Mac's own before giving up.
+    if (err instanceof DOMException && err.name === 'NotAllowedError') throw err
+    const mic = await localMic()
+    if (!mic) throw err
+    s = await open(mic.deviceId)
+  }
+  // Always the built-in mic when there is one, whatever macOS chose as the
+  // default (a phone, AirPods, a webcam). With no built-in, only move off a
+  // phone.
+  const label = s.getAudioTracks()[0]?.label ?? ''
+  if (!BUILT_IN.test(label)) {
+    const mic = await localMic()
+    if (mic && (BUILT_IN.test(mic.label) || PHONE.test(label))) {
+      try {
+        const own = await open(mic.deviceId)
+        s.getTracks().forEach((t) => t.stop())
+        s = own
+      } catch {
+        // What macOS picked works; better than nothing.
+      }
+    }
+  }
+  stream = s
   return stream
+}
+
+/**
+ * Let go of the microphone entirely, so the system's mic indicator goes out.
+ * The next getMic() opens it afresh, and startAnalyser() rebuilds its graph.
+ */
+export function releaseMic(): void {
+  stream?.getTracks().forEach((t) => t.stop())
+  stream = null
+  void ctx?.close()
+  ctx = null
+  analyser = null
+  buf = null
+}
+
+/** Which microphone is actually open, for the diagnostics panel. */
+export function micName(): string {
+  return stream?.getAudioTracks()[0]?.label ?? ''
 }
 
 export async function startAnalyser(): Promise<void> {

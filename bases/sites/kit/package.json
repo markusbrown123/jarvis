@@ -1,0 +1,16 @@
+{
+  "name": "automaton-site-kit",
+  "private": true,
+  "type": "module",
+  "description": "The backend and drop-in widget for Automaton's premium sites: a lead assistant, lead capture, Cal.com bookings, and a feed for JARVIS.",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@netlify/blobs": "^11.1.6"
+  }
+}

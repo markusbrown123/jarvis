@@ -1,0 +1,376 @@
+#!/bin/bash
+#
+# One command for everything. Starts the brain and the face in the background
+# (no terminal to keep open, no `npm start`) in write mode, links your phone
+# the first time (and keeps the same chat after that), says what's running,
+# then opens JARVIS in a new full-size window of your normal Chrome.
+#
+#   jarvis          start if needed (write mode on), then open his window
+#   jarvis --safe   the same, read-only: he can look things up but not act
+#   jarvis stop     shut him down
+#   jarvis logs     follow the log
+#   jarvis setup-claude [--remove]   forward Claude Code usage + activity
+#   jarvis setup-phone telegram|pushover|remove   phone tokens → Keychain
+#   jarvis watch                     live terminal feed in this window
+#   jarvis remote [off]              talk to him from your iPhone over Tailscale
+#   jarvis update                    pull the newest version, install, restart
+#   jarvis restart                   restart him (after he's changed himself)
+#
+# Settings come from the environment, with defaults below. The ElevenLabs key
+# is read from the macOS Keychain (service "elevenlabs") so it never sits in a
+# file:  security add-generic-password -a "$USER" -s elevenlabs -w
+
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+LOG="$HOME/Library/Logs/jarvis.log"
+PIDFILE="$DIR/.jarvis.pid"
+URL="http://localhost:5173/"
+# Which of your Chrome profiles to open him in, by the name Chrome shows.
+CHROME_PROFILE="${JARVIS_CHROME_PROFILE:-Kus}"
+
+# launchd (the clap listener) starts us with a bare PATH.
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+
+# Write mode: on unless asked otherwise. With it JARVIS can act — files,
+# shell, browser, phone, sending — not only look things up.
+WRITES=1
+if [ "${1:-}" = "--safe" ]; then
+  WRITES=0
+  shift
+fi
+
+ready() {
+  curl -s http://localhost:8788/health | grep -q '"ok":true' &&
+    curl -s -o /dev/null http://localhost:5173
+}
+
+start_servers() {
+  if [ -z "${ELEVENLABS_API_KEY:-}" ]; then
+    ELEVENLABS_API_KEY="$(security find-generic-password -a "$USER" -s elevenlabs -w 2>/dev/null)"
+    export ELEVENLABS_API_KEY
+  fi
+  export JARVIS_VOICE_ID="${JARVIS_VOICE_ID:-0b0iqagmTWiLn7v15IEs}"
+  export JARVIS_MODEL="${JARVIS_MODEL:-claude-sonnet-5-5}"
+  export JARVIS_EFFORT="${JARVIS_EFFORT:-low}"
+
+  # A half-started copy of him (an earlier start stopped with Ctrl-C) would
+  # hold the ports this one needs: clear it first.
+  [ -n "$(leftovers)" ] && stop_all >/dev/null
+  echo "Starting JARVIS (up to a minute)..."
+  mkdir -p "$(dirname "$LOG")"
+  cd "$DIR" || exit 1
+  # After a `git pull` that changed dependencies, install them first —
+  # otherwise the page fails to build on a missing package.
+  if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+    echo "Installing updated dependencies (one time)..."
+    npm install --no-audit --no-fund >>"$LOG" 2>&1 || { echo "npm install failed — see $LOG"; return 1; }
+  fi
+  local mode=()
+  [ "$WRITES" = 1 ] && mode=(--writes)
+  nohup node scripts/start.mjs "${mode[@]}" >>"$LOG" 2>&1 &
+  echo $! >"$PIDFILE"
+  # Awake while he runs: the phone (Telegram, iPhone voice) can't reach a
+  # sleeping Mac. No idle sleep, and none at all on the charger; the display
+  # still sleeps, closing the lid still sleeps it, and it ends when he does.
+  command -v caffeinate >/dev/null && nohup caffeinate -i -s -w "$(cat "$PIDFILE")" >/dev/null 2>&1 &
+
+  # Ctrl-C while waiting: stop what was started rather than leave it half up.
+  trap 'echo; echo "Stopping the half-started JARVIS..."; stop_all >/dev/null; exit 130' INT
+  for _ in $(seq 60); do
+    if ready; then
+      trap - INT
+      return 0
+    fi
+    # Gone already (an old Node, a port taken): say so now, not in a minute.
+    kill -0 "$(cat "$PIDFILE")" 2>/dev/null || break
+    sleep 1
+  done
+  trap - INT
+  echo "JARVIS didn't start. Last lines of $LOG:"
+  tail -n 20 "$LOG"
+  return 1
+}
+
+# The folder Chrome keeps a profile in ("Profile 1"), from the name you see.
+profile_dir() {
+  node -e '
+    const fs = require("fs")
+    const cache = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).profile.info_cache
+    const want = process.argv[2].toLowerCase()
+    const hit = Object.keys(cache).find((k) => (cache[k].name || "").toLowerCase() === want)
+    if (hit) console.log(hit)
+  ' "$HOME/Library/Application Support/Google/Chrome/Local State" "$CHROME_PROFILE" 2>/dev/null
+}
+
+open_window() {
+  # Your normal Chrome, where the microphone works, in the profile named
+  # above. A new window, sized to fill the screen without going fullscreen.
+  local dir
+  dir="$(profile_dir)"
+  local args=(--new-window)
+  if [ -n "$dir" ]; then
+    args+=(--profile-directory="$dir")
+  else
+    echo "No Chrome profile named \"$CHROME_PROFILE\"; opening in the current one."
+  fi
+  open -na "Google Chrome" --args "${args[@]}" "$URL"
+
+  sleep 1
+  osascript <<'OSA' >/dev/null 2>&1
+tell application "Finder" to set b to bounds of window of desktop
+tell application "Google Chrome"
+  activate
+  set bounds of front window to {0, 0, item 3 of b, item 4 of b}
+end tell
+OSA
+}
+
+# His own processes still about: anything of his listening on the bridge's or
+# the page's port, and the starters that ran them — a start that was
+# interrupted, a copy the PID file has lost track of. Only ones running from
+# this folder, so another project's page server on 5173 is left alone.
+leftovers() {
+  local here pid cwd
+  here="$(cd "$DIR" && pwd -P)"
+  for pid in $({ lsof -nP -iTCP:8788 -iTCP:5173 -sTCP:LISTEN -t 2>/dev/null; pgrep -f "scripts/start.mjs" 2>/dev/null; } | sort -u); do
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')"
+    [ "$cwd" = "$here" ] && echo "$pid"
+  done
+}
+
+stop_all() {
+  if [ -f "$PIDFILE" ]; then
+    kill "$(cat "$PIDFILE")" 2>/dev/null
+    rm -f "$PIDFILE"
+  fi
+  local left
+  left="$(leftovers)"
+  [ -n "$left" ] && kill $left 2>/dev/null
+  # Wait for them to go, so a restart can take the ports; then make sure.
+  for _ in $(seq 20); do
+    [ -z "$(leftovers)" ] && break
+    sleep 0.5
+  done
+  left="$(leftovers)"
+  [ -n "$left" ] && kill -9 $left 2>/dev/null
+  echo "JARVIS stopped."
+}
+
+# Running already, but in the other mode from the one asked for?
+wrong_mode() {
+  local writes=0
+  curl -s http://localhost:8788/health | grep -q '"writes":true' && writes=1
+  [ "$writes" != "$WRITES" ]
+}
+
+# The phone, from the terminal: the first time, offer to link it (a bot
+# token from @BotFather) and pair your chat with a code; after that the same
+# chat is remembered (~/.jarvis/phone.json) and works on every start. Only
+# asks when there's someone at the terminal (not when the clap starts him),
+# and never again once you've said no (jarvis setup-phone does it any time).
+phone_link() {
+  [ -t 0 ] && [ -t 1 ] || return 0
+  local tg paired bot chat po
+  IFS='|' read -r tg paired bot chat po <<<"$(node "$DIR/scripts/launcher.mjs" phone)"
+  if [ "$tg" != 1 ] && [ ! -f "$HOME/.jarvis/phone-skip" ]; then
+    echo
+    echo "Your phone isn't linked yet. Linked, you can text or voice-note JARVIS from anywhere"
+    echo "and he reports back when jobs finish or something needs you."
+    printf 'Link it now? You need a Telegram bot token from @BotFather (a minute to make). [y/N] '
+    local yn
+    read -r yn
+    case "$yn" in
+      y | Y | yes) setup_phone telegram || return 0 ;;
+      *)
+        mkdir -p "$HOME/.jarvis" && touch "$HOME/.jarvis/phone-skip"
+        echo "Skipped. Any time: jarvis setup-phone telegram"
+        return 0
+        ;;
+    esac
+    tg=1
+  fi
+  [ "$tg" = 1 ] && [ "$paired" != 1 ] || return 0
+  local code
+  code="$(node "$DIR/scripts/launcher.mjs" pair)"
+  [ -n "$code" ] || { echo "Couldn't get a pairing code; pair in JARVIS → Settings → Phone."; return 0; }
+  echo
+  echo "Pair your phone: in Telegram, open your bot${bot:+ (@$bot)} and send"
+  echo
+  echo "    /start $code"
+  echo
+  echo "Waiting for it (up to 5 minutes; Ctrl-C to do it later)..."
+  local skip=0
+  trap 'skip=1' INT
+  for _ in $(seq 150); do
+    [ "$skip" = 1 ] && break
+    sleep 2
+    IFS='|' read -r tg paired bot chat po <<<"$(node "$DIR/scripts/launcher.mjs" phone)"
+    if [ "$paired" = 1 ]; then
+      echo "Paired with ${chat:-your chat}. That chat stays linked from now on."
+      break
+    fi
+  done
+  trap - INT
+  [ "$paired" = 1 ] || echo "Not paired yet. The code works for 15 minutes; or pair in JARVIS → Settings → Phone."
+}
+
+# Phone tokens go into the login Keychain, never a file or the repo. The
+# bridge looks them up as it needs them, so a change needs no restart.
+keychain_put() {
+  local service="$1" prompt="$2" value
+  printf '%s' "$prompt"
+  IFS= read -rs value
+  echo
+  if [ -z "$value" ]; then echo "Nothing entered; unchanged."; return 1; fi
+  security add-generic-password -U -a "$USER" -s "$service" -w "$value" && echo "Saved to Keychain ($service)."
+}
+
+setup_phone() {
+  case "${1:-}" in
+    telegram)
+      echo "Paste the bot token @BotFather gave you (typing is hidden)."
+      keychain_put jarvis-telegram "Telegram bot token: " || return 1
+      ;;
+    pushover)
+      echo "Your User Key is on pushover.net after you log in; the API token is from Create an Application."
+      keychain_put jarvis-pushover-user "Pushover User Key: " || return 1
+      keychain_put jarvis-pushover-token "Pushover API token: " || return 1
+      ;;
+    remove)
+      for s in jarvis-telegram jarvis-pushover-user jarvis-pushover-token; do
+        security delete-generic-password -a "$USER" -s "$s" >/dev/null 2>&1 && echo "Removed $s."
+      done
+      ;;
+    *)
+      echo "usage: jarvis setup-phone telegram|pushover|remove"
+      return 1
+      ;;
+  esac
+  # The bridge reads the Keychain as it goes: no restart needed.
+  echo "JARVIS picks this up within a few seconds."
+}
+
+# The tailscale command: on the PATH, or inside the Mac app.
+tailscale_bin() {
+  command -v tailscale 2>/dev/null && return
+  local app="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+  [ -x "$app" ] && echo "$app"
+}
+
+# Your iPhone, over Tailscale: the page and the bridge on this Mac's tailnet
+# name over HTTPS (its own tailnet certificate), tailnet only — never the
+# internet. The bridge lets in only the Tailscale login recorded here.
+remote() {
+  local ts
+  ts="$(tailscale_bin)"
+  if [ -z "$ts" ]; then
+    echo "Tailscale isn't installed. Get it on this Mac and your iPhone (https://tailscale.com/download),"
+    echo "sign in to both with the same account, then run: jarvis remote"
+    return 1
+  fi
+  if [ "${1:-}" = "off" ]; then
+    "$ts" serve --https=5173 off >/dev/null 2>&1
+    "$ts" serve --https=8788 off >/dev/null 2>&1
+    rm -f "$HOME/.jarvis/remote.json"
+    echo "Remote access is off."
+    return 0
+  fi
+  local status
+  status="$("$ts" status --json 2>/dev/null)"
+  if [ -z "$status" ] || ! printf '%s' "$status" | grep -q '"BackendState": *"Running"'; then
+    echo "Tailscale isn't connected on this Mac: open the Tailscale app and sign in, then run jarvis remote again."
+    return 1
+  fi
+  ready || start_servers || return 1
+  # The first time, Tailscale may need your OK to use Serve and HTTPS on your
+  # tailnet: it prints a link and waits until you've opened it and allowed it.
+  # So its output stays on screen — hidden, that looked like a blank, stuck
+  # terminal.
+  echo "Sharing JARVIS on your tailnet (tailscale serve)..."
+  echo "If Tailscale shows a link below, open it, sign in and allow it; this carries on by itself once you have."
+  echo
+  if ! "$ts" serve --bg --https=5173 http://127.0.0.1:5173 || ! "$ts" serve --bg --https=8788 http://127.0.0.1:8788; then
+    echo "tailscale serve didn't start. Turn on HTTPS certificates for your tailnet (admin console → DNS), then try again."
+    return 1
+  fi
+  printf '%s' "$status" | node "$DIR/scripts/launcher.mjs" remote-save
+}
+
+# How far behind GitHub this checkout is (fetches quietly; empty if unknown).
+behind() {
+  local branch
+  branch="$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)" || return
+  git -C "$DIR" fetch -q origin "$branch" 2>/dev/null || return
+  git -C "$DIR" rev-list --count "HEAD..origin/$branch" 2>/dev/null
+}
+
+# The newest version of this branch: bring it in, install what changed, restart.
+# Nothing here is lost on the way. Changes not committed yet (a note you added
+# to a project's brief, an edit JARVIS made to himself) are set aside and put
+# back on top; commits made here that GitHub doesn't have yet (a run of his
+# whose push was refused) are replayed on top of the new version. If that
+# can't be done cleanly, it stops and puts everything back as it was.
+update() {
+  cd "$DIR" || return 1
+  local branch n mine dirty
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  n="$(behind)"
+  if [ -z "$n" ]; then echo "Couldn't reach GitHub to check for updates."; return 1; fi
+  if [ "$n" = 0 ]; then echo "Already up to date ($branch)."; return 0; fi
+  echo "$n new change(s) on $branch:"
+  git log --format='  %s' "HEAD..origin/$branch" | head -20
+  mine="$(git rev-list --count "origin/$branch..HEAD" 2>/dev/null)"
+  dirty="$(git status --porcelain --untracked-files=no)"
+  if [ -n "$dirty" ]; then
+    echo "Keeping the changes here that aren't committed yet (put back on top):"
+    printf '%s\n' "$dirty" | head -10
+  fi
+  [ "${mine:-0}" != 0 ] && echo "Keeping $mine commit(s) made here that GitHub doesn't have yet (replayed on top)."
+  if ! git -c rebase.autoStash=true rebase -q "origin/$branch"; then
+    git rebase --abort >/dev/null 2>&1
+    echo "Couldn't bring it in cleanly (git says why above); everything is as it was. Ask Claude, or run: git status"
+    return 1
+  fi
+  if git stash list | head -1 | grep -q "autostash"; then
+    echo "Your uncommitted changes clashed with the update: they're kept safe in git stash (git stash list)."
+  fi
+  if ready; then
+    echo "Restarting JARVIS on the new version..."
+    stop_all >/dev/null
+    start_servers || return 1
+    echo "Reload his window if it doesn't by itself."
+  fi
+  echo "Updated."
+}
+
+case "${1:-}" in
+  stop) stop_all ;;
+  update) update ;;
+  restart)
+    # After a change JARVIS made to himself: the page reloads by itself, his bridge needs this.
+    stop_all >/dev/null
+    start_servers
+    ;;
+  remote) shift; remote "$@" ;;
+  setup-phone) shift; setup_phone "$@" ;;
+  watch) exec node "$DIR/scripts/watch.mjs" ;;
+  setup-claude) shift; node "$DIR/scripts/setup-claude.mjs" "$@" ;;
+  logs) tail -n 50 -f "$LOG" ;;
+  "")
+    if ready && wrong_mode; then
+      echo "Restarting JARVIS $([ "$WRITES" = 1 ] && echo 'in write mode' || echo 'read-only')..."
+      stop_all >/dev/null
+      ready && echo "It wasn't started by this command, so it's still running as it was: stop it, then run jarvis again."
+    fi
+    ready || start_servers || exit 1
+    phone_link
+    node "$DIR/scripts/launcher.mjs" board
+    open_window
+    # Said last, once the window's open: is there a newer version waiting?
+    n="$(behind)"
+    [ -n "$n" ] && [ "$n" != 0 ] && echo "An update is waiting: $n new change(s). Run: jarvis update"
+    ;;
+  *)
+    echo "usage: jarvis [--safe] [stop|update|restart|logs|watch|remote [off]|setup-claude [--remove]|setup-phone telegram|pushover|remove]"
+    exit 1
+    ;;
+esac

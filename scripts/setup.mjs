@@ -25,14 +25,14 @@ console.log('------------------------------------------------------------');
 
 // --- Node version --------------------------------------------------------
 try {
-  const major = Number(process.versions.node.split('.')[0]);
-  if (Number.isFinite(major) && major >= 20) {
-    line(tick, `Node.js ${process.versions.node} (20+ required).`);
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if ((major === 20 && minor >= 19) || (major === 22 && minor >= 12) || major > 22) {
+    line(tick, `Node.js ${process.versions.node} (20.19+ or 22.12+ required).`);
   } else {
-    line(warn, `Node.js ${process.versions.node} is below 20. Please upgrade — the bridge needs Node 20 or newer.`);
+    line(warn, `Node.js ${process.versions.node} is too old. Please upgrade — the page server (Vite) needs Node 20.19+ or 22.12+.`);
   }
 } catch {
-  line(warn, 'Could not read the Node.js version. JARVIS needs Node 20 or newer.');
+  line(warn, 'Could not read the Node.js version. JARVIS needs Node 20.19+ or 22.12+.');
 }
 
 // --- Claude CLI on PATH ---------------------------------------------------
@@ -109,7 +109,7 @@ console.log('To run JARVIS, open two terminals:');
 console.log('  1)  npm run bridge      # the brain (Claude Code, headless)');
 console.log('  2)  npm run dev         # the face (open http://localhost:5173 in Chrome)');
 console.log('');
-console.log('Then click INITIALISE and say "Hey Jarvis".');
+console.log('Then press any key on the start screen and say "Hey Jarvis".');
 console.log('To let JARVIS take real actions (phone, browser, sending), run `npm run bridge:writes` instead of `npm run bridge`.');
 console.log('');
 

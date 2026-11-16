@@ -160,7 +160,7 @@ export function vetTarget(raw) {
   if (!url.hostname) throw proxyError(400, 'absolute http(s) url required')
   if (BLOCKED_HOSTNAME.test(url.hostname)) throw proxyError(403, 'blocked host')
   // An IP literal never reaches DNS in any meaningful sense, so judge it here —
-  // this is what turns http://127.0.0.1:8787/health into a refusal before a
+  // this is what turns http://127.0.0.1:8788/health into a refusal before a
   // socket is opened rather than after.
   const literal = url.hostname.replace(/^\[|\]$/g, '')
   if (isIP(literal) && blockedAddress(literal)) {

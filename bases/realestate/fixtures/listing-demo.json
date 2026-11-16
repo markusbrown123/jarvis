@@ -1,0 +1,36 @@
+{
+  "_note": "FICTIONAL demo listing, for testing the pipeline only. Not a real property. Real listings live outside the repo (see BRIEF.md rules).",
+  "listing_id": "demo-001",
+  "address_line": "Demo Property",
+  "facts": {
+    "beds": 3,
+    "baths": 2,
+    "interior_sqm": 118,
+    "plot_sqm": 420,
+    "year_built": 1998,
+    "parking": "single garage"
+  },
+  "features": [
+    "south-facing garden",
+    "open-plan kitchen and dining",
+    "wood floors throughout the ground floor"
+  ],
+  "branding": {
+    "agent_name": "Demo Agency",
+    "primary_hex": "#1F3A5F",
+    "logo_path": null
+  },
+  "target_duration_s": 30,
+  "shots": [
+    { "file": "01-exterior-front.jpg", "room": "exterior front", "hero": true },
+    { "file": "02-hallway.jpg",        "room": "hallway" },
+    { "file": "03-living-room.jpg",    "room": "living room", "hero": true },
+    { "file": "04-living-window.jpg",  "room": "living room" },
+    { "file": "05-kitchen.jpg",        "room": "kitchen", "hero": true },
+    { "file": "06-dining.jpg",         "room": "dining area" },
+    { "file": "07-bedroom-main.jpg",   "room": "main bedroom", "hero": true },
+    { "file": "08-bedroom-two.jpg",    "room": "second bedroom" },
+    { "file": "09-bathroom.jpg",       "room": "bathroom" },
+    { "file": "10-garden.jpg",         "room": "garden", "hero": true }
+  ]
+}

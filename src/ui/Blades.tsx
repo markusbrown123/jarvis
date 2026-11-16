@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useStore, type Blade } from '../store'
 import { BRIDGE_HTTP_URL } from '../config'
 import { sanitisePanelHtml } from './sanitise'
-import { frameSpan, peaceScroll, pinchCount } from '../lib/hands'
+import { frameSpan, palmScroll, peaceScroll, pinchCount } from '../lib/hands'
 import * as camera from '../lib/camera'
 
 /**
@@ -385,11 +385,21 @@ function Card({
     if (!focused) return
     let raf = 0
     let last: number | null = null
+    let source: 'peace' | 'palm' | null = null
     const tick = () => {
       raf = requestAnimationFrame(tick)
-      const travelled = peaceScroll()
+      // Two fingers up, or an open palm held over this blade.
+      let travelled = peaceScroll()
+      let now: 'peace' | 'palm' | null = travelled === null ? null : 'peace'
       if (travelled === null) {
-        last = null
+        const box = shell.current?.getBoundingClientRect() ?? null
+        travelled = palmScroll(box)
+        if (travelled !== null) now = 'palm'
+      }
+      if (travelled === null || now !== source) {
+        // Nothing held, or the pose changed: the two measure from different anchors.
+        source = now
+        last = travelled
         return
       }
       if (last === null) {

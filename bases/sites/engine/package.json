@@ -1,0 +1,8 @@
+{
+  "name": "automaton-lead-engine",
+  "private": true,
+  "type": "module",
+  "description": "Find, score, preview and batch local-business leads for Automaton. No dependencies.",
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=20" }
+}

@@ -210,6 +210,50 @@ function defined<T extends object>(patch: T | undefined): Partial<T> {
  */
 const MAX_ORBITS = 8
 
+/** How a turn starts and ends. Auto listens for the wake word and endpoints
+ *  by itself; hold opens the mic only while Space or the button is held; tap
+ *  starts on one press and finishes on the next. */
+/** Power-up steps, in order. */
+export type BootStage = 'idle' | 'audio' | 'bridge' | 'microphone' | 'voice' | 'ready'
+
+export type TalkMode = 'auto' | 'hold' | 'tap'
+
+/** The voice controls the interface calls. App registers the real ones once
+ *  it has booted; until then they do nothing. */
+export type VoiceControls = {
+  /** Silence the current answer and anything queued. Work carries on. */
+  stopTalking: () => void
+  /** Abandon the reply being prepared or spoken. */
+  cancelReply: () => void
+  /** Take what has been said so far as the whole thought. */
+  finishSpeaking: () => void
+  /** Open the mic for a turn without the wake word. */
+  startTalking: () => void
+  /** Release or re-open the microphone. */
+  setMicArmed: (on: boolean) => void
+  /** Send a typed message as a turn. */
+  sendText: (text: string) => void
+}
+
+const noop = () => {}
+const NO_CONTROLS: VoiceControls = {
+  stopTalking: noop,
+  cancelReply: noop,
+  finishSpeaking: noop,
+  startTalking: noop,
+  setMicArmed: noop,
+  sendText: noop,
+}
+
+function savedTalkMode(): TalkMode {
+  try {
+    const v = localStorage.getItem('jarvis.talkMode')
+    return v === 'hold' || v === 'tap' ? v : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
+
 type State = {
   phase: Phase
   /** 0..1 mic loudness, drives the reactor pulse. */
@@ -230,6 +274,10 @@ type State = {
   looking: string | null
   /** Transient status line during boot, e.g. the voice model download. */
   bootNote: string
+  /** How far power-up has got, for the intro's progress list. */
+  bootStage: BootStage
+  /** Booted without a key press or click, so Chrome may hold his voice until one. */
+  soundLocked: boolean
   /** Cards currently on the display, newest last. */
   panels: Panel[]
   /** Blades currently open, newest last — which is also front-most. */
@@ -240,11 +288,20 @@ type State = {
   expandedBlade: string | null
   /** JARVIS's control over his own appearance. UI_DEFAULTS == the stock look. */
   ui: UiState
+  talkMode: TalkMode
+  /** False once the microphone has been released ("stop listening"). */
+  micArmed: boolean
+  controls: VoiceControls
 
+  setTalkMode: (m: TalkMode) => void
+  setMicArmedFlag: (on: boolean) => void
+  setControls: (c: VoiceControls) => void
   setVoice: (v: string) => void
   setGestures: (on: boolean) => void
   setLooking: (why: string | null) => void
   setBootNote: (n: string) => void
+  setBootStage: (s: BootStage) => void
+  setSoundLocked: (locked: boolean) => void
   pushPanel: (p: Panel) => void
   clearPanels: () => void
   pushBlade: (b: Blade) => void
@@ -286,12 +343,29 @@ export const useStore = create<State>((set) => ({
   focusedBlade: null,
   expandedBlade: null,
   bootNote: '',
+  bootStage: 'idle',
+  soundLocked: false,
   ui: defaultUi(),
+  talkMode: savedTalkMode(),
+  micArmed: true,
+  controls: NO_CONTROLS,
 
+  setTalkMode: (talkMode) => {
+    try {
+      localStorage.setItem('jarvis.talkMode', talkMode)
+    } catch {
+      /* per-browser preference only */
+    }
+    set({ talkMode })
+  },
+  setMicArmedFlag: (micArmed) => set({ micArmed }),
+  setControls: (controls) => set({ controls }),
   setVoice: (voice) => set({ voice }),
   setGestures: (gestures) => set({ gestures }),
   setLooking: (looking) => set({ looking }),
   setBootNote: (bootNote) => set({ bootNote }),
+  setBootStage: (bootStage) => set({ bootStage }),
+  setSoundLocked: (soundLocked) => set({ soundLocked }),
   // Three is as many as fits around the reactor without crowding it. Sticky
   // panels are exempt from the cull — the tool description promises they stay
   // until replaced, and a plain slice(-3) silently evicted them the moment a

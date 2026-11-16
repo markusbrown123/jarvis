@@ -6,6 +6,7 @@ import { BladeSweep, Blades } from './Blades'
 import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
+import { HandsToggle } from './HandsToggle'
 
 const statusText: Record<Phase, string> = {
   offline: 'OFFLINE',
@@ -330,10 +331,10 @@ export function Hud() {
       {/* Above even the effects: the reticle shows where a press will land, and
           a press that lands under a flourish is a press you cannot aim. */}
       <Pointer />
-      {(gestures || looking) && (
-        <div className="hands-live">
-          {looking ? `LOOKING — ${looking.toUpperCase()}` : 'CAMERA ON · G TO STOP'}
-        </div>
+      {looking ? (
+        <div className="hands-live">{`LOOKING — ${looking.toUpperCase()}`}</div>
+      ) : (
+        <HandsToggle className="hands-toggle-fixed" />
       )}
       <GestureGuide live={gestures} />
     </div>

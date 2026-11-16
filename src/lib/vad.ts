@@ -75,7 +75,7 @@ const START_MS = 110
  * should always have been — a cheap "have they stopped making noise" — and the
  * shorter window gets the transcript moving sooner.
  */
-const SILENCE_MS = 650
+export const SILENCE_MS = 650
 /** Nobody speaks one segment for this long; cut it and transcribe what we have. */
 const MAX_MS = 20000
 

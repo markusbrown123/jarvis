@@ -33,12 +33,16 @@ type Speaker = {
   /** Speak a phrase ahead of anything still queued. Used for filler like
    *  "Working on it, sir" while a tool runs. */
   say: (text: string) => void
+  /** Speak whatever is buffered now, even without a sentence ending. */
+  flush: () => void
   /** No more text coming — flush the remainder and resolve when audio ends. */
   end: () => Promise<void>
   /** Cut it off mid-sentence (barge-in). Always settles `end()`. */
   cancel: () => void
   /** 0..1 output loudness for the visualiser. */
   level: () => number
+  /** When sound first actually came out of this speaker (ms epoch), or 0. */
+  firstSound: () => number
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +343,7 @@ export function createSpeaker(): Speaker {
   const queue: Item[] = []
   let buffer = ''
   let cancelled = false
+  let firstSoundAt = 0
   let outLevel = 0
   let pumping = false
 
@@ -522,6 +527,7 @@ export function createSpeaker(): Speaker {
 
       u.onstart = () => {
         started = true
+        if (!firstSoundAt) firstSoundAt = Date.now()
         diag.started++
         diag.lastError = ''
         if (watchdog) clearTimeout(watchdog)
@@ -634,6 +640,7 @@ export function createSpeaker(): Speaker {
       // SpeechSynthesisUtterance.onstart, and it is what makes the diagnostics
       // verdict — and the T self-test — tell the truth on the premium path.
       audio.onplaying = () => {
+        if (!firstSoundAt) firstSoundAt = Date.now()
         diag.started++
         diag.lastError = ''
       }
@@ -697,6 +704,11 @@ export function createSpeaker(): Speaker {
         }
       }
     },
+    flush() {
+      if (cancelled || !buffer.trim()) return
+      enqueue(buffer)
+      buffer = ''
+    },
     async end() {
       if (buffer.trim()) {
         enqueue(buffer)
@@ -733,6 +745,7 @@ export function createSpeaker(): Speaker {
       settleDrained()
     },
     level: () => outLevel,
+    firstSound: () => firstSoundAt,
   }
 }
 

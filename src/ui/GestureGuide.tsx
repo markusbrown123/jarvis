@@ -17,10 +17,14 @@ import { diag } from '../lib/hands'
  */
 
 const MOVES: { gesture: string; hand: string; does: string }[] = [
-  { gesture: 'point', hand: '☝', does: 'move the cursor' },
-  { gesture: 'pinch', hand: '🤏', does: 'grab a blade · move it · press' },
-  { gesture: 'open', hand: '🖐', does: 'let go' },
-  { gesture: 'peace', hand: '✌', does: 'two fingers up-down to scroll' },
+  { gesture: 'move', hand: '☝', does: 'move your hand, the cursor follows like a trackpad' },
+  { gesture: 'open', hand: '🖐', does: 'spread palm: stop the cursor and reposition · up-down over a blade scrolls it' },
+  { gesture: 'tap', hand: '🤏', does: 'pinch thumb + index: click' },
+  { gesture: 'hold', hand: '🤏', does: 'pinch and move: drag' },
+  { gesture: 'twice', hand: '🤏', does: 'pinch twice: double click · on empty space: scroll mode' },
+  { gesture: 'middle', hand: '👌', does: 'thumb + middle finger: right click' },
+  { gesture: 'scroll', hand: '↕', does: 'in scroll mode, pinch and move to scroll · pinch and twist to zoom' },
+  { gesture: 'peace', hand: '✌', does: 'two fingers up-down to scroll a blade' },
   { gesture: 'frame', hand: '📐', does: 'two L-corners to resize' },
 ]
 
@@ -72,7 +76,7 @@ export function GestureGuide({ live }: { live: boolean }) {
             </div>
           ))}
           <div className="gguide-foot">
-            grab a blade by its bar · <kbd>G</kbd> to stop
+            pinch anywhere on a blade to move it · <kbd>G</kbd> to stop
           </div>
         </motion.div>
       )}
