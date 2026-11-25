@@ -20,7 +20,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import * as hub from './store.mjs'
 import * as memory from './memory.mjs'
 import { expand, loadConfig } from './config.mjs'
-import { BASE_PROJECTS, baseDir } from './streams.mjs'
+import { BASE_PROJECTS, baseDir, priorities } from './streams.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -129,6 +129,7 @@ export function createRunner({ model, effort, canUseTool, mcpServers }) {
             'something that worked notably well, a fact about the project you had to dig for — each starting exactly with "LESSON: ". ' +
             'Skip lessons if there are none. ' +
             'Never send messages, emails or calls, never deploy, publish or pay, and never touch live customer data.' +
+            priorities() +
             memory.promptBlock({ conversation: false }),
         },
         canUseTool,

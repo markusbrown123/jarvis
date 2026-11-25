@@ -105,14 +105,14 @@ export function VoiceWave({ size = 'bar' }: { size?: 'bar' | 'large' }) {
   const st = inputState()
   const live = phase === 'listening' || phase === 'waking'
   const pill = live
-    ? { text: 'LIVE · TAP TO FINISH', run: c.finishSpeaking }
+    ? { text: talkMode === 'auto' ? 'LIVE · TAP TO FINISH' : 'LISTENING · TAP OR SPACE TO SEND', run: c.finishSpeaking }
     : phase === 'speaking'
       ? { text: 'TAP TO INTERRUPT', run: c.stopTalking }
       : phase === 'thinking' || phase === 'tooling'
         ? { text: 'TAP TO CANCEL', run: c.cancelReply }
         : phase === 'offline'
           ? null
-          : { text: talkMode === 'auto' ? 'SAY “HEY JARVIS” · OR TAP' : 'TAP TO TALK', run: c.startTalking }
+          : { text: talkMode === 'auto' ? 'SAY “HEY JARVIS” · OR TAP' : 'TAP OR SPACE TO TALK', run: c.startTalking }
   const large = size === 'large'
   return (
     <div className={`vw vw-${size} state-${st.tone}`}>

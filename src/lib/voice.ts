@@ -27,8 +27,12 @@ import { caps } from './capabilities'
 export type VoiceMode =
   /** Powered down. Only his name matters. */
   | 'wake'
-  /** He is expecting you to speak. Everything is a command. */
+  /** He is expecting you to speak. Everything is a command, and a pause long
+   *  enough ends it. */
   | 'command'
+  /** Push-to-talk. Everything is a command, and nothing ends it but the key
+   *  (finish). Pauses, however long, are part of the thought. */
+  | 'dictate'
   /** He is thinking or talking. Anything you say is an interruption. */
   | 'guard'
   /** Something is playing that must not be transcribed at all. */
@@ -53,8 +57,9 @@ export type VoiceHandlers = {
 
 export type Voice = {
   stop: () => void
-  /** Treat what has been said so far as the whole thought, now. */
-  finish: () => void
+  /** Treat what has been said so far as the whole thought, now. Resolves once
+   *  the last words are transcribed and the utterance (if any) has been sent. */
+  finish: () => Promise<void>
   /** True while a recogniser is actually running. */
   live: () => boolean
 }
@@ -202,6 +207,8 @@ function holdFor(text: string): number {
 type Assembler = {
   /** Add a transcript. `active` is true if the user is audibly still going. */
   feed: (text: string, active: boolean) => void
+  /** Add a transcript and decide nothing: only flush sends it (push-to-talk). */
+  hold: (text: string) => void
   /** Send whatever is held right now, if anything. */
   flush: () => void
   /** Throw away whatever is held — used when he stands down. */
@@ -260,6 +267,14 @@ function makeAssembler(h: {
         return
       }
       timer = setTimeout(fire, wait)
+    },
+    hold(text) {
+      if (!text.trim()) return
+      held = `${held} ${text}`.replace(/\s+/g, ' ').trim()
+      if (!firstAt) firstAt = Date.now()
+      h.partial(held)
+      diag.holding = held
+      clear()
     },
     flush: fire,
     extend() {
@@ -336,7 +351,12 @@ function isEcho(heard: string, spoken: string): boolean {
   // way. Demand a total match before discarding it — the cost of dropping a
   // real question is much higher than the cost of one stray echo getting in.
   if (content.length < 2) {
-    if (all.length < 2) return false
+    // One word on its own that he has just said is him. "Yes, sir?" arrives
+    // back through the mic as a bare "yes", and letting that through made his
+    // own greeting a turn — he answered himself, then answered that, and the
+    // user's real request was interrupted by the loop. Control words were let
+    // through above, so "stop" and "no" still always work.
+    if (all.length < 2) return mine.has(all[0])
     return all.every((w) => mine.has(w))
   }
 
@@ -426,7 +446,7 @@ export async function startVoice(h: VoiceHandlers): Promise<Voice> {
         ? 'Microphone access denied — voice input is unavailable.'
         : 'No microphone available.',
     )
-    return { stop: () => {}, finish: () => {}, live: () => false }
+    return { stop: () => {}, finish: async () => {}, live: () => false }
   }
   diag.engine = caps().stt ? 'elevenlabs' : 'browser'
   return caps().stt ? startElevenVoice(h) : startBrowserVoice(h)
@@ -450,8 +470,21 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
    * Order is preserved because the drain is single-flight, which matters —
    * "London" arriving before "what's the weather in" is worse than either.
    */
-  const pendingAudio: Blob[] = []
-  let draining = false
+  const pendingAudio: { blob: Blob; mode: VoiceMode }[] = []
+  let draining: Promise<void> | null = null
+
+  /**
+   * The mode each segment began in. A recording that started while the mic did
+   * not count (he was talking, or push-to-talk was idle) is his voice or the
+   * room, and is never sent — even if the transcript arrives after the user
+   * has pressed Space, when the mode would otherwise say it counts.
+   */
+  let segMode: VoiceMode = 'deaf'
+  let lastMode: VoiceMode = 'deaf'
+
+  /** Set while push-to-talk is closing a turn: the words already spoken are
+   *  still transcribed and kept, though the app has moved on to thinking. */
+  let finishing = false
 
   /**
    * Transcripts become turns here rather than one-per-segment.
@@ -475,8 +508,12 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
    * transcript arriving — and the transcript belongs to the mode the user is in
    * now, not the one they interrupted.
    */
-  const transcribe = async (blob: Blob) => {
-    const mode = h.mode()
+  const transcribe = async (blob: Blob, startedIn: VoiceMode) => {
+    if (startedIn === 'deaf') {
+      drop('recorded while the mic was not listening')
+      return
+    }
+    const mode: VoiceMode = finishing ? 'dictate' : h.mode()
     if (mode === 'deaf') return
     const t0 = performance.now()
     try {
@@ -498,6 +535,15 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
 
       if (!said) {
         drop('nothing intelligible in the segment')
+        return
+      }
+
+      // Push-to-talk: the mic only counts while he is silent, so there is no
+      // echo to filter, and nothing is decided until the key says so.
+      if (mode === 'dictate') {
+        diag.heard = said
+        diag.heardAt = Date.now()
+        assemble.hold(said)
         return
       }
 
@@ -534,17 +580,21 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
     }
   }
 
-  /** One transcription at a time, in the order the segments were spoken. */
-  const drain = async () => {
-    if (draining) return
-    draining = true
-    try {
-      while (pendingAudio.length) {
-        await transcribe(pendingAudio.shift()!)
+  /** One transcription at a time, in the order the segments were spoken.
+   *  Resolves when the queue is empty, including anything added meanwhile. */
+  const drain = (): Promise<void> => {
+    if (draining) return draining
+    draining = (async () => {
+      try {
+        while (pendingAudio.length) {
+          const next = pendingAudio.shift()!
+          await transcribe(next.blob, next.mode)
+        }
+      } finally {
+        draining = null
       }
-    } finally {
-      draining = false
-    }
+    })()
+    return draining
   }
 
   let bargeTimer: ReturnType<typeof setTimeout> | null = null
@@ -552,9 +602,10 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
   vad = await startVad({
     onStart: () => {
       const mode = h.mode()
+      segMode = mode
       diag.mode = mode
       diag.sessions++
-      if (mode === 'deaf') return
+      if (mode === 'deaf' || mode === 'dictate') return
       // Standing down mid-thought throws the thought away with it. Otherwise
       // held text would surface as the opening of the *next* conversation.
       if (mode === 'wake') assemble.cancel()
@@ -586,14 +637,23 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       }
       // The segment closes after SILENCE_MS of quiet, so speech ended then.
       diag.lastSpeechAt = Date.now() - SILENCE_MS
-      pendingAudio.push(blob)
+      pendingAudio.push({ blob, mode: segMode })
       void drain()
     },
     onLevel: (v) => {
+      const mode = h.mode()
+      // The moment the mic starts counting for the user, a recording already
+      // running is his voice or the room — start a fresh one, so the user's
+      // first words are not thrown away along with it.
+      if (mode !== lastMode) {
+        const wasListening = lastMode === 'command' || lastMode === 'dictate'
+        const nowListening = mode === 'command' || mode === 'dictate'
+        if (nowListening && !wasListening && segMode === 'deaf' && vad?.meter().speaking) vad.drop()
+        lastMode = mode
+      }
       // Only paint the live level while actually listening for a command, so a
       // dormant reactor stays calm and does not twitch at every room noise.
-      const mode = h.mode()
-      if (mode !== 'command') return
+      if (mode !== 'command' && mode !== 'dictate') return
       // Never over the assembled text. This used to run unconditionally and
       // overwrote a half-built sentence with an ellipsis sixty times a second,
       // so a pause looked like the interface had forgotten what you just said.
@@ -618,7 +678,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
     // to the wake word. Anything half-said belonged to a conversation that is
     // over, and letting the hold expire later would open the next one with a
     // fragment of the last.
-    if ((mode === 'wake' || mode === 'deaf') && assemble.held()) assemble.cancel()
+    if (!finishing && (mode === 'wake' || mode === 'deaf') && assemble.held()) assemble.cancel()
   }, 200)
 
   return {
@@ -628,7 +688,19 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       vad?.stop()
       diag.running = false
     },
-    finish: () => assemble.flush(),
+    finish: async () => {
+      if (finishing) return
+      finishing = true
+      try {
+        // Close the segment being spoken now rather than waiting for a pause,
+        // then wait for every segment to come back as words, then send.
+        await vad?.cut()
+        await drain()
+        assemble.flush()
+      } finally {
+        finishing = false
+      }
+    },
     live: () => vad?.live() ?? false,
   }
 }
@@ -652,19 +724,79 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
   if (!Ctor) {
     h.onError('This browser has no speech recognition — use Chrome or Edge, or add an ElevenLabs key.')
-    return { stop: () => {}, finish: () => {}, live: () => false }
+    return { stop: () => {}, finish: async () => {}, live: () => false }
   }
 
   let stopped = false
   let running = false
   let rec: any = null
-  let settled = ''
-  let interim = ''
   let started = false
   let barged = false
   let lastWake = 0
   let lastAlive = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
+
+  /**
+   * What has already been used.
+   *
+   * Chrome's continuous recogniser keeps every result of its session, and a
+   * result it is still working on comes back in full, longer each time, until
+   * it is final. Taking the text and forgetting it is therefore not enough: the
+   * next event hands back "most of the" after "most of" was already sent, so
+   * every pause became another turn repeating the last one, each a word
+   * longer — and each of those cut off the answer to the one before.
+   *
+   * So the results themselves are the record. Everything before `base` is
+   * spent, and so are the first `skip` words of results[base] (a result still
+   * in progress when it was used). Nothing is ever read twice.
+   */
+  let results: any = null
+  let base = 0
+  let skip = 0
+  /** The mode at the last check, to notice the mic starting to count. */
+  let lastMode: VoiceMode = 'deaf'
+
+  const listening = (m: VoiceMode) => m === 'command' || m === 'dictate'
+  const wordsOf = (t: string) => t.trim().split(/\s+/).filter(Boolean)
+
+  /** Everything recognised and not yet used, interim words included. */
+  const pending = (): string => {
+    if (!results) return ''
+    const out: string[] = []
+    for (let i = base; i < results.length; i++) {
+      const w = wordsOf(String(results[i][0]?.transcript ?? ''))
+      out.push(...(i === base ? w.slice(skip) : w))
+    }
+    return out.join(' ')
+  }
+
+  /** Mark everything recognised so far as used. */
+  const consume = () => {
+    const n = results?.length ?? 0
+    if (!n) {
+      base = 0
+      skip = 0
+      return
+    }
+    const last = results[n - 1]
+    if (last.isFinal) {
+      base = n
+      skip = 0
+    } else {
+      base = n - 1
+      skip = wordsOf(String(last[0]?.transcript ?? '')).length
+    }
+  }
+
+  /** The mic has just started counting: what came before was not for us. */
+  const noticeMode = (mode: VoiceMode) => {
+    if (listening(mode) && !listening(lastMode)) {
+      consume()
+      started = false
+      barged = false
+    }
+    lastMode = mode
+  }
 
   /** Same assembly rules as the premium path — a pause is not a full stop. */
   const assemble = makeAssembler({
@@ -686,36 +818,23 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     silenceTimer = null
   }
 
-  const reset = () => {
+  /** Take what is pending as one segment and hand it on. */
+  const emit = () => {
     clearSilence()
-    settled = ''
-    interim = ''
+    const text = pending()
+    consume()
     started = false
     barged = false
-  }
-
-  const emit = () => {
-    const text = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
     const mode = h.mode()
-    reset()
-    if (!text || mode === 'deaf') return
-    if (isEcho(text, speakingNow())) {
+    if (!text || mode === 'deaf' || mode === 'wake') return
+    if (mode !== 'dictate' && isEcho(text, speakingNow())) {
       drop('echo of his own voice')
       return
     }
     diag.heard = text
     diag.heardAt = Date.now()
-    if (mode === 'wake') {
-      assemble.cancel()
-      if (WAKE.test(text) && Date.now() - lastWake > WAKE_DEBOUNCE) {
-        lastWake = Date.now()
-        diag.wakes++
-        diag.dropped = ''
-        diag.accepted++
-        h.onWake(afterWake(text))
-      } else {
-        drop(`heard "${text.slice(-40)}" — not his name`)
-      }
+    if (mode === 'dictate') {
+      assemble.hold(text)
       return
     }
     // The recogniser has already endpointed on its own 900ms gap; the assembler
@@ -735,48 +854,62 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     touch()
     const mode = h.mode()
     diag.mode = mode
+    // Checked against the results as they were before this event, so words
+    // that arrive in it are the user's, and words before it are not.
+    noticeMode(mode)
+    results = e.results
+
+    // Not listening: whatever this is, it is spent.
     if (mode === 'deaf') {
-      interim = ''
-      return
-    }
-    diag.lastSpeechAt = Date.now()
-    let fresh = ''
-    interim = ''
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const chunk = e.results[i][0].transcript as string
-      if (e.results[i].isFinal) fresh += chunk
-      else interim += chunk
-    }
-    const heard = `${settled}${fresh} ${interim}`.replace(/\s+/g, ' ').trim()
-    if (!heard) return
-    if (isEcho(`${fresh} ${interim}`, speakingNow())) {
-      interim = ''
+      consume()
       return
     }
 
+    const heard = pending()
+    if (!heard) return
+
     if (mode === 'wake') {
-      settled += fresh
+      if (isEcho(heard, speakingNow())) {
+        consume()
+        return
+      }
       if (WAKE.test(heard) && Date.now() - lastWake > WAKE_DEBOUNCE) {
         lastWake = Date.now()
         diag.wakes++
+        diag.heard = heard
+        diag.heardAt = Date.now()
         const trailing = afterWake(heard)
-        reset()
+        consume()
         h.onWake(trailing)
-      } else if (settled.length > 400) {
-        settled = ''
+      } else if (results[results.length - 1]?.isFinal || heard.length > 400) {
+        // A finished phrase without his name in it is not for him.
+        drop(`heard "${heard.slice(-40)}" — not his name`)
+        consume()
       }
       return
     }
 
-    settled += fresh
-    const full = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
+    // Push-to-talk: show it, keep it, decide nothing — the key ends the turn.
+    if (mode === 'dictate') {
+      diag.dropped = ''
+      diag.lastSpeechAt = Date.now()
+      h.onPartial([assemble.held(), heard].filter(Boolean).join(' '))
+      return
+    }
+
+    if (isEcho(heard, speakingNow())) {
+      consume()
+      return
+    }
+    diag.lastSpeechAt = Date.now()
+
     if (mode === 'command') assemble.extend()
     if (!started || (mode === 'guard' && !barged)) {
-      const words = full.split(/\s+/).filter(Boolean).length
+      const words = wordsOf(heard).length
       if (mode === 'guard') {
         // An override word cuts through everything below it — "stop" has to
         // work on the first syllable or it is not a stop button.
-        if (!OVERRIDE.test(full)) {
+        if (!OVERRIDE.test(heard)) {
           // His own first syllable, same as the premium path. This engine has
           // no energy gate, so without the clock the only defence is the word
           // count below, and a single clear word is exactly what leaks first.
@@ -801,7 +934,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     // Show the whole thought, not just the fragment being spoken now — there
     // may be an earlier half of it held by the assembler.
     const carried = assemble.held()
-    h.onPartial(carried ? `${carried} ${full}` : full)
+    h.onPartial(carried ? `${carried} ${heard}` : heard)
     bumpSilence()
   }
 
@@ -831,6 +964,20 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       diag.running = false
       touch()
       rec = null
+      // A session ending is an endpoint: whatever it heard and nobody has used
+      // yet goes now, before its results are gone with it.
+      if (pending()) {
+        const mode = h.mode()
+        if (mode === 'dictate') {
+          const text = pending()
+          if (text) assemble.hold(text)
+        } else if (mode === 'command' || mode === 'guard') {
+          emit()
+        }
+      }
+      results = null
+      base = 0
+      skip = 0
       if (!stopped) setTimeout(spin, 80)
     }
     try {
@@ -842,6 +989,15 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   }
 
   spin()
+
+  // Mode changes happen between results too — pressing Space, Escape, the
+  // answer ending. Noticing them here means nothing from before the mic
+  // started counting can ride along with the first words after it.
+  const modeWatch = setInterval(() => {
+    const mode = h.mode()
+    noticeMode(mode)
+    if ((mode === 'wake' || mode === 'deaf') && assemble.held()) assemble.cancel()
+  }, 100)
 
   // The heartbeat. If nothing has been heard from the engine for a while it has
   // gone quiet on us — tear it down and build a fresh one.
@@ -867,6 +1023,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     stop: () => {
       stopped = true
       clearInterval(health)
+      clearInterval(modeWatch)
       clearSilence()
       assemble.cancel()
       diag.running = false
@@ -876,8 +1033,20 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
         /* noop */
       }
     },
-    finish: () => {
-      if (started) emit()
+    finish: async () => {
+      // Everything recognised so far, including words still being recognised,
+      // is the whole thought. Taken directly rather than through emit(): the
+      // app may already have moved on to thinking, where the mode says deaf.
+      clearSilence()
+      const text = pending()
+      consume()
+      started = false
+      barged = false
+      if (text) {
+        diag.heard = text
+        diag.heardAt = Date.now()
+        assemble.hold(text)
+      }
       assemble.flush()
     },
     live: () => running,

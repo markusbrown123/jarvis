@@ -164,9 +164,9 @@ export function Settings() {
           <label className="field">
             <span>Talk mode</span>
             <select className="input" value={talkMode} onChange={(e) => setTalkMode(e.target.value as TalkMode)}>
+              <option value="tap">Tap — Space to talk, Space again to send</option>
+              <option value="hold">Hold to talk — hold Space, let go to send</option>
               <option value="auto">Auto — “Hey Jarvis”, ends when you pause</option>
-              <option value="hold">Hold to talk — hold Space</option>
-              <option value="tap">Tap to start / finish — Space</option>
             </select>
           </label>
           <div className="field">

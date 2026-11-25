@@ -292,9 +292,9 @@ function ConversationBar() {
           {micArmed ? 'Mic on' : 'Mic off'}
         </button>
         <select className="input input-small" value={talkMode} onChange={(e) => setTalkMode(e.target.value as typeof talkMode)} aria-label="Talk mode">
-          <option value="auto">Auto</option>
-          <option value="hold">Hold</option>
-          <option value="tap">Tap</option>
+          <option value="tap">Tap (Space)</option>
+          <option value="hold">Hold (Space)</option>
+          <option value="auto">Auto (“Hey Jarvis”)</option>
         </select>
       </div>
       </div>

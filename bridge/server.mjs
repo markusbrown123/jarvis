@@ -40,6 +40,7 @@ import { start as startLeadEngine } from './hub/leadengine.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
+import { priorities } from './hub/streams.mjs'
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
 
@@ -951,7 +952,7 @@ function makePhoneChat() {
     prompt: prompts(),
     options: {
       mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink(), sources: hubApi.sources, code }) },
-      systemPrompt: PHONE_PROMPT + memory.promptBlock(),
+      systemPrompt: PHONE_PROMPT + priorities() + memory.promptBlock(),
       cwd: homedir(),
       settingSources: [],
       model: MODEL,
@@ -1619,7 +1620,7 @@ wss.on('connection', (socket) => {
       // keeps answers short enough to speak, and cuts cost per turn.
       // Plus his memory: saved facts and the recent conversation, read fresh
       // for every new session so a restart or reload loses nothing.
-      systemPrompt: SYSTEM_PROMPT + memory.promptBlock(),
+      systemPrompt: SYSTEM_PROMPT + priorities() + memory.promptBlock(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),

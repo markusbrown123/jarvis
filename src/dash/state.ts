@@ -47,6 +47,8 @@ export function inputState(): InputState {
       }
     case 'waking':
     case 'listening':
+      if (talkMode === 'tap') return { label: 'Listening — press Space to send', tone: 'live' }
+      if (talkMode === 'hold') return { label: 'Listening — let go of Space to send', tone: 'live' }
       if (voiceDiag.holding) return { label: 'You paused — still listening', tone: 'held' }
       if (caption && caption !== '…') return { label: 'Hearing you', tone: 'live' }
       return { label: 'Listening', tone: 'live' }
