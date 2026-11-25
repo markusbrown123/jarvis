@@ -26,10 +26,20 @@ the next turn picks it up.
 3. **Easy media generation for distribution.** Videos and posts made by a
    pipeline (YouTube, influencer, real estate walkthroughs), held for his
    review before anything goes out.
-4. **Trading: Hyperliquid, stocks, maybe Axiom.** Research, watchlists,
-   backtests and paper-tracking only (same as Finance). JARVIS never places a
-   trade, connects a wallet or moves money. Changing that is Markus's call,
-   made by him editing this line.
+4. **Trading: Hyperliquid, stocks, Axiom and its Pulse.** Learn it on paper
+   first, with $40 of pretend money per strategy:
+   - The Pulse (https://axiom.trade/pulse — sol, robinhood, ely, bnb, base,
+     eth, hype, arc, ink) is watched all day from public data, and what new
+     launches did afterwards is recorded: `pulse_status`.
+   - A paper-trading tournament runs on Solana memecoins, Hyperliquid perps
+     and Pulse launches, with real fees and a random control to beat:
+     `paper_status`. Every day look at both; when the trends suggest an idea,
+     test it with `paper_strategy`, and stop what isn't working.
+   - When a strategy clears the bar (two weeks, 40 trades, up 10% after
+     costs, ahead of random) it goes on Needs. Only then is a real $40 test
+     discussed, and Markus decides it and sets it up himself.
+   JARVIS never places a real trade, connects a wallet or moves money.
+   Changing that is Markus's call, made by him editing this line.
 5. **Using different sites and their free credits for website coding.** Where
    other AI site and coding tools give free credits or do one part better,
    use them for the work, and note which is best for what.

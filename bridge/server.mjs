@@ -37,6 +37,8 @@ import { start as startAutopilot } from './hub/autopilot.mjs'
 import { start as startWalkthroughs } from './hub/walkthroughs.mjs'
 import { start as startSiteKit } from './hub/sitekit.mjs'
 import { start as startLeadEngine } from './hub/leadengine.mjs'
+import { start as startPaper } from './hub/papertrade.mjs'
+import { start as startPulse } from './hub/pulse.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
@@ -1030,6 +1032,10 @@ startAutopilot({ runner, writes: ALLOW_WRITES })
 startWalkthroughs()
 startSiteKit({ runner })
 startLeadEngine()
+// Axiom's Pulse watched from public data, and the paper-trading tournament that
+// learns from it with pretend money. Neither holds a key or can place an order.
+startPulse()
+startPaper()
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
