@@ -24,6 +24,7 @@ import * as autopilot from './autopilot.mjs'
 import * as leads from './leadengine.mjs'
 import * as paper from './papertrade.mjs'
 import * as pulse from './pulse.mjs'
+import * as tradeReview from './tradereview.mjs'
 import * as closing from './closing.mjs'
 import { OUTCOMES } from '../../bases/sites/engine/lib/batch.mjs'
 import { TRADES } from '../../bases/sites/engine/lib/score.mjs'
@@ -221,6 +222,19 @@ export function hubServer({ emit, runner, phone, sources, code }) {
             return ok(`Started ${st.id} with $${paper.START_USD} of pretend money. Settings: ${JSON.stringify(st.params)}.`)
           } catch (e) {
             return ok(`Couldn't: ${e.message}`)
+          }
+        },
+      ),
+      tool(
+        'paper_review',
+        'Review the paper trading now instead of waiting for tonight: a background job reads the scoreboard, every strategy\'s trades and the Pulse trends, may search the web, then starts up to two new strategies and stops failing ones (pretend money only), and sends Markus the summary. Use for "review the trading", "what should we change", "learn from the results".',
+        {},
+        async () => {
+          try {
+            const r = tradeReview.run({ runner })
+            return ok(r.started ? 'Reviewing the paper trading now in the background; the summary comes to your phone when it\'s done.' : r.why)
+          } catch (e) {
+            return ok(`Couldn't start it: ${e.message}`)
           }
         },
       ),

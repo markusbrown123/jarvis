@@ -748,8 +748,8 @@ export function setPaused(on) {
 }
 
 /** Tests only. */
-export function _reset({ rand } = {}) {
-  S = null
+export function _reset({ rand, wipe = false } = {}) {
+  S = wipe ? blank() : null
   inFlight = false
   if (rand) random = rand
 }

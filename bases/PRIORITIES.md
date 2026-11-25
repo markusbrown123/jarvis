@@ -33,8 +33,11 @@ the next turn picks it up.
      launches did afterwards is recorded: `pulse_status`.
    - A paper-trading tournament runs on Solana memecoins, Hyperliquid perps
      and Pulse launches, with real fees and a random control to beat:
-     `paper_status`. Every day look at both; when the trends suggest an idea,
-     test it with `paper_strategy`, and stop what isn't working.
+     `paper_status`. Each night a review runs by itself (`paper_review` runs
+     it now): it learns from the results and the Pulse, may research the web,
+     starts up to two new strategies, stops failing ones, and sends Markus the
+     summary. In conversation, when the trends suggest an idea, test it with
+     `paper_strategy`.
    - When a strategy clears the bar (two weeks, 40 trades, up 10% after
      costs, ahead of random) it goes on Needs. Only then is a real $40 test
      discussed, and Markus decides it and sets it up himself.
