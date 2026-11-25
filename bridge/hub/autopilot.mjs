@@ -33,6 +33,33 @@ const GAP = Math.max(1, Number(process.env.JARVIS_AUTOPILOT_GAP_MIN) || 120) * 6
 const TICK = 5 * 60000
 const MAX_ALLOWANCE = 70
 
+/**
+ * The night shift. While Markus sleeps the allowance would otherwise sit
+ * unused, and he asked for the work to go on while he sleeps and for the
+ * credits to be used. So at night each project runs every NIGHT_GAP instead
+ * of GAP, up to NIGHT_ALLOWANCE of the 5-hour window. The night ends at 5am
+ * (JARVIS_NIGHT_HOURS, e.g. "1-6"), early enough that the window has room
+ * again when he's up, and it keeps to the day pace if the weekly allowance is
+ * already past WEEKLY_GUARD, so a busy week isn't run dry.
+ */
+const NIGHT_HOURS = (() => {
+  const m = /^(\d{1,2})-(\d{1,2})$/.exec(process.env.JARVIS_NIGHT_HOURS ?? '0-5')
+  return m ? [Number(m[1]), Number(m[2])] : [0, 5]
+})()
+const NIGHT_GAP = Math.max(1, Number(process.env.JARVIS_AUTOPILOT_NIGHT_GAP_MIN) || 45) * 60000
+const NIGHT_ALLOWANCE = 85
+const WEEKLY_GUARD = 85
+
+/** How hard to run right now: the day pace, or the night shift. */
+export function pace(at = new Date(), windows = hub.snapshot().usage?.windows ?? {}) {
+  const h = at.getHours()
+  const [from, to] = NIGHT_HOURS
+  const inNight = from <= to ? h >= from && h < to : h >= from || h < to
+  const weekly = windows.seven_day?.usedPct
+  if (inNight && !(typeof weekly === 'number' && weekly > WEEKLY_GUARD)) return { night: true, gap: NIGHT_GAP, maxAllowance: NIGHT_ALLOWANCE }
+  return { night: false, gap: GAP, maxAllowance: MAX_ALLOWANCE }
+}
+
 const read = () => {
   try {
     return existsSync(FILE) ? JSON.parse(readFileSync(FILE, 'utf8')) : {}
@@ -193,14 +220,15 @@ export function start({ runner, writes = true }) {
   if (process.env.JARVIS_NO_AUTOPILOT || !writes) return
   const tick = () => {
     try {
+      const { gap, maxAllowance } = pace()
       const used = hub.snapshot().usage?.windows?.five_hour?.usedPct
-      if (typeof used === 'number' && used > MAX_ALLOWANCE) return
+      if (typeof used === 'number' && used > maxAllowance) return
       const jobs = Object.values(hub.snapshot().jobs)
       // Each project's own lane: GAP after its last run finished, whatever the others are doing.
       const lastEnd = (p) => Math.max(0, ...jobs.filter((j) => j.autopilot && j.project === p).map((j) => j.updatedAt ?? 0))
       const stuck = (p) => saved.blocked[p] && waiting(p).length > 0
       // In BUILT's order, Markus's focus first; one start a tick.
-      const next = BUILT.find((p) => !saved.paused[p] && !stuck(p) && !running(p) && Date.now() - lastEnd(p) >= GAP && nextFor(p))
+      const next = BUILT.find((p) => !saved.paused[p] && !stuck(p) && !running(p) && Date.now() - lastEnd(p) >= gap && nextFor(p))
       if (next) work(next, { runner, by: 'autopilot' })
     } catch (err) {
       console.warn('[hub] autopilot:', err.message)
