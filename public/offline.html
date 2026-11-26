@@ -93,14 +93,45 @@
         <circle r="60" fill="none" stroke="#bae6fd" stroke-width="1.5" />
         <circle r="26" fill="#38bdf8" opacity="0.25" />
       </svg>
-      <h1>Can't reach your Mac</h1>
-      <p>JARVIS runs on your Mac, and this phone can't get to it right now. Check:</p>
-      <ul>
+      <h1 id="title">Can't reach your Mac</h1>
+      <p id="lead">JARVIS runs on your Mac, and this phone can't get to it right now. Check:</p>
+      <ul id="checks">
         <li>the Mac is awake and JARVIS is running (<code>jarvis</code>)</li>
         <li>Tailscale is on, on this phone and on the Mac</li>
         <li>remote access is set up (<code>jarvis remote</code>)</li>
       </ul>
       <button onclick="location.reload()">Try again</button>
+      <p id="note" style="font-size: 13px; opacity: 0.7">Trying again by itself every few seconds.</p>
     </main>
+    <script>
+      // Which part is missing? If JARVIS's brain answers on this Mac (port
+      // 8788) but the page didn't load, the Mac is reachable and JARVIS is up,
+      // just not where the phone looks (port 5173) — the usual cause is that
+      // he was started some other way, like the Claude app's launch button on
+      // an older setup. That needs a different fix from a Mac that's asleep.
+      // 'no-cors': any answer at all, even a refusal, proves the Mac is there.
+      const brain = location.protocol + '//' + location.hostname + ':8788/health'
+      const reachable = (url) =>
+        fetch(url, { mode: 'no-cors', cache: 'no-store' }).then(
+          () => true,
+          () => false,
+        )
+      let told = false
+      async function check() {
+        // The page itself is back: open JARVIS.
+        const page = await fetch(location.href, { cache: 'no-store' }).then((r) => r.ok, () => false)
+        if (page) return location.reload()
+        if (!told && (await reachable(brain))) {
+          told = true
+          document.getElementById('title').textContent = 'Your Mac is there, JARVIS’s screen isn’t'
+          document.getElementById('lead').textContent =
+            'JARVIS is running on your Mac, but not on the port this phone uses. On the Mac, run:'
+          document.getElementById('checks').innerHTML =
+            '<li><code>jarvis restart</code></li><li>then open him here again</li>'
+        }
+      }
+      check()
+      setInterval(check, 5000)
+    </script>
   </body>
 </html>

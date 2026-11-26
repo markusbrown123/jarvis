@@ -369,6 +369,13 @@ function TalkPanel() {
   const c = useStore((s) => s.controls)
   const [text, setText] = useState('')
   const body = useRef<HTMLDivElement>(null)
+  // Push-to-talk waits for the key, so standby says which one — a bare
+  // "Standing by" read as stuck.
+  const talkMode = useStore((s) => s.talkMode)
+  const word =
+    phase === 'dormant' && talkMode !== 'auto'
+      ? talkMode === 'hold' ? 'Standing by — hold Space to talk' : 'Standing by — press Space to talk'
+      : PHASE_WORD[phase] ?? phase
   const live = (phase === 'listening' || phase === 'waking') && caption && caption !== '…'
   useEffect(() => {
     if (body.current) body.current.scrollTop = body.current.scrollHeight
@@ -394,7 +401,7 @@ function TalkPanel() {
         </nav>
         <span className={`st-talk-state p-${phase}`}>
           <i />
-          {PHASE_WORD[phase] ?? phase}
+          {word}
           {phase === 'tooling' && tool ? ` · ${tool.replace(/^mcp__\w+?__/, '').replace(/_/g, ' ')}` : ''}
         </span>
       </header>

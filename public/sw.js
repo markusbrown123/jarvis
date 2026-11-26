@@ -7,7 +7,7 @@
  * straight to the network and nothing of the app is cached, so an update to
  * JARVIS is there the next time it opens.
  */
-const CACHE = 'jarvis-offline-v1'
+const CACHE = 'jarvis-offline-v2'
 const OFFLINE = ['/offline.html', '/icons/icon-192.png']
 
 self.addEventListener('install', (e) => {

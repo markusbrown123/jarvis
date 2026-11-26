@@ -411,7 +411,20 @@ export const diag = {
   restarts: 0,
   /** Milliseconds the last transcription round-trip took. */
   idleMs: 0,
+  /** This window can't hear at all (microphone blocked, or no working speech
+   *  recognition) — said on screen rather than left as a silent standby. */
+  unusable: false,
 }
+
+/** Speech-recognition errors that mean the window can't recognise speech,
+ *  as opposed to 'no-speech' or 'aborted', which are ordinary. */
+const BROKEN_RECOGNITION = new Set(['network', 'audio-capture', 'language-not-supported', 'bad-grammar'])
+
+/** What to do when this window can't hear: Chrome on the Mac, Settings on the phone. */
+const HEAR_HELP =
+  typeof window !== 'undefined' && window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
+    ? 'On the iPhone, allow the microphone for JARVIS (Settings → Safari → Microphone) and turn on Dictation (Settings → General → Keyboard).'
+    : 'Open JARVIS in Chrome at http://localhost:5173 — app and editor preview windows block the microphone and speech recognition. You can still type to him.'
 
 /** Record why a transcript went nowhere. Silence always has a reason; this is
  *  the difference between debugging it and speculating about it. */
@@ -441,10 +454,11 @@ export async function startVoice(h: VoiceHandlers): Promise<Voice> {
     await getMic()
   } catch (err) {
     diag.lastError = 'mic'
+    diag.unusable = true
     h.onError(
       err instanceof DOMException && err.name === 'NotAllowedError'
-        ? 'Microphone access denied — voice input is unavailable.'
-        : 'No microphone available.',
+        ? `Microphone access denied, so I can't hear you. ${HEAR_HELP}`
+        : `No microphone available, so I can't hear you. ${HEAR_HELP}`,
     )
     return { stop: () => {}, finish: async () => {}, live: () => false }
   }
@@ -735,6 +749,12 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   let lastWake = 0
   let lastAlive = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
+  /** Recognition failures in a row with nothing heard between them. */
+  let failures = 0
+  /** Whether the recogniser has ever actually started, and why not if not. */
+  let opened = false
+  let startError = ''
+  const bornAt = Date.now()
 
   /**
    * What has already been used.
@@ -852,6 +872,8 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
 
   const onResult = (e: any) => {
     touch()
+    failures = 0
+    diag.unusable = false
     const mode = h.mode()
     diag.mode = mode
     // Checked against the results as they were before this event, so words
@@ -945,6 +967,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec.interimResults = true
     rec.lang = 'en-GB'
     rec.onstart = () => {
+      opened = true
       running = true
       diag.running = true
       diag.sessions++
@@ -952,11 +975,22 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     }
     rec.onresult = onResult
     rec.onerror = (ev: any) => {
-      diag.lastError = String(ev.error ?? '')
-      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+      const code = String(ev.error ?? '')
+      diag.lastError = code
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
         stopped = true
         diag.running = false
-        h.onError('Microphone access was refused — voice input is unavailable.')
+        diag.unusable = true
+        h.onError(`I can't use the microphone in this window. ${HEAR_HELP}`)
+        return
+      }
+      // A window that can't do speech recognition at all — an app's built-in
+      // preview, a browser without the speech service — fails like this on
+      // every session, for ever, and used to say nothing: he just sat on
+      // standby. Three in a row with nothing heard in between is that.
+      if (BROKEN_RECOGNITION.has(code) && ++failures === 3) {
+        diag.unusable = true
+        h.onError(`I can't hear you in this window: its speech recognition isn't working (${code}). ${HEAR_HELP}`)
       }
     }
     rec.onend = () => {
@@ -982,7 +1016,8 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     }
     try {
       rec.start()
-    } catch {
+    } catch (err) {
+      startError = String((err as Error)?.message ?? err)
       running = false
       setTimeout(spin, 250)
     }
@@ -1003,6 +1038,13 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   // gone quiet on us — tear it down and build a fresh one.
   const health = setInterval(() => {
     if (stopped) return
+    // Never started at all: it throws on start, or starts without ever saying
+    // so. The screen used to read "Reconnecting microphone…" for ever while it
+    // retried in silence, which is the "stuck on standby" this ends.
+    if (!opened && !diag.unusable && Date.now() - bornAt > 12000) {
+      diag.unusable = true
+      h.onError(`I can't hear you in this window: speech recognition never started${startError ? ` (${startError})` : ''}. ${HEAR_HELP}`)
+    }
     const idle = Date.now() - lastAlive
     diag.idleMs = idle
     if (idle < 15000) return

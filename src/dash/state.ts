@@ -38,6 +38,7 @@ export function inputState(): InputState {
   if (phase === 'boot') return { label: 'Starting…', tone: 'busy' }
   if (!micArmed) return { label: 'Microphone off', tone: 'off' }
   if (voiceDiag.lastError === 'mic') return { label: 'Microphone unavailable', tone: 'fail' }
+  if (voiceDiag.unusable) return { label: 'Can’t hear you in this window', tone: 'fail' }
   if (!voiceDiag.running) return { label: 'Reconnecting microphone…', tone: 'fail' }
   switch (phase) {
     case 'dormant':
