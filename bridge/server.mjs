@@ -912,15 +912,31 @@ function effortFor(text) {
  * Get a turn ready: set the effort for it, and attach older memory that bears
  * on it (past conversations, job findings) so he doesn't have to go looking.
  */
+/**
+ * A control request to Claude Code (interrupt, a settings change) is answered
+ * by the CLI, and nothing in the SDK puts a limit on that wait. While the CLI
+ * is busy — still connecting a slow MCP server at start-up, or wedged — the
+ * answer may never come, and every question queued behind it waited for ever:
+ * JARVIS stopped answering anything, spoken or typed, for the life of the
+ * connection, with nothing on screen to say why. Never wait on one longer
+ * than this; the turn goes ahead without it.
+ */
+const CONTROL_CAP_MS = 4000
+const capped = (promise, ms = CONTROL_CAP_MS) =>
+  Promise.race([
+    Promise.resolve(promise).then(
+      () => 'done',
+      () => 'failed',
+    ),
+    new Promise((r) => setTimeout(() => r('timed out'), ms).unref?.()),
+  ])
+
 async function prepareTurn(session, text, sessionStart, effortNow, channel) {
   const want = effortFor(text)
   if (want !== effortNow.level && typeof session.applyFlagSettings === 'function') {
-    try {
-      await session.applyFlagSettings({ effortLevel: want })
-      effortNow.level = want
-    } catch (err) {
-      console.warn('[jarvis] could not change effort:', err.message)
-    }
+    const outcome = await capped(session.applyFlagSettings({ effortLevel: want }))
+    if (outcome === 'done') effortNow.level = want
+    else console.warn(`[jarvis] could not change effort (${outcome}); answering at ${effortNow.level}`)
   }
   if (want !== EFFORT) hub.term(channel, `thinking deeper (${want})`, 'info')
   const ctx = memory.relevantContext(text, { sessionStart })
@@ -1877,14 +1893,19 @@ wss.on('connection', (socket) => {
     if (msg.type === 'interrupt') {
       // Held so the next question can wait for it rather than racing it.
       const stopped = turnFinished()
-      settling = Promise.resolve(session.interrupt?.())
-        .catch(() => {})
-        .then(() =>
+      // Capped as a whole: an interrupt the CLI never acknowledges used to hold
+      // every later question for good (see CONTROL_CAP_MS).
+      settling = capped(
+        capped(session.interrupt?.()).then(() =>
           Promise.race([
             stopped,
             new Promise((r) => setTimeout(r, SETTLE_CAP_MS)),
           ]),
-        )
+        ),
+        CONTROL_CAP_MS + SETTLE_CAP_MS + 500,
+      ).then((outcome) => {
+        if (outcome === 'timed out') console.warn('[jarvis] interrupt not acknowledged in time; carrying on')
+      })
     }
   })
 

@@ -426,10 +426,14 @@ function TalkPanel() {
             {!shown.length && !live && (
               <p className="st-talk-empty">
                 {TOUCH ? (
-                  'Say “Hey Jarvis”, tap below, or type.'
+                  talkMode === 'auto' ? 'Say “Hey Jarvis”, tap below, or type.' : 'Tap Talk to speak, Done to send — or type.'
                 ) : (
                   <>
-                    Say “Hey Jarvis”, hold Space, or type below.
+                    {talkMode === 'auto'
+                      ? 'Say “Hey Jarvis”, press Space, or type below.'
+                      : talkMode === 'hold'
+                        ? 'Hold Space to talk and let go to send, or type below.'
+                        : 'Press Space to talk and Space again to send, or type below.'}
                     <br />
                     <span>F to get up and walk the station.</span>
                   </>

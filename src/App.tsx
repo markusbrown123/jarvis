@@ -86,6 +86,19 @@ const JOINS = /^(?:and|also|plus|or|but|then|actually|wait|sorry|no,|i mean)\b/i
 /** A turn started by hand stays open this long before giving up. */
 const MANUAL_LISTEN_MS = 120000
 
+/** The longest start-up waits on the microphone before carrying on without it. */
+const MIC_WAIT_MS = 10000
+
+/** Whether `p` settles within `ms`. It carries on either way; this only stops the wait. */
+const within = (p: Promise<unknown>, ms: number) =>
+  Promise.race([
+    p.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((r) => setTimeout(() => r(false), ms)),
+  ])
+
 export default function App() {
   const store = useStore
   const phase = useStore((s) => s.phase)
@@ -111,6 +124,10 @@ export default function App() {
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
   /** Push-to-talk is closing a turn: the last words are being transcribed. */
   const finishing = useRef(false)
+  /** The turn in flight was typed. Noise the mic picks up while he answers it —
+   *  his own voice, a fan, the keyboard you just typed on — is not you cutting
+   *  in, and used to cancel the answer, so typed questions often got none. */
+  const typedTurn = useRef(false)
 
   // -- helpers --------------------------------------------------------------
 
@@ -187,6 +204,7 @@ export default function App() {
     }
     const job = { text: said, spokeAt: 0, tools: false }
     inflight.current = job
+    typedTurn.current = source === 'typed'
 
     clearIdle()
     const s = store.getState()
@@ -316,7 +334,9 @@ export default function App() {
       case 'listening':
         return manual ? 'dictate' : 'command'
       default:
-        return manual ? 'deaf' : 'guard' // thinking, tooling, speaking
+        // thinking, tooling, speaking. A typed question is answered without
+        // listening for barge-in; Space, Escape or Cancel still stop him.
+        return manual || typedTurn.current ? 'deaf' : 'guard'
     }
   }
 
@@ -775,15 +795,32 @@ export default function App() {
     await warming
     store.getState().setConnected(connectedLabels())
     store.getState().setVoice(currentVoiceName())
+
+    // Typing works whatever the microphone does. These used to be registered
+    // only once the voice loop had started — so where the microphone never
+    // came up (an app's preview window, a permission prompt left unanswered)
+    // the text box silently did nothing as well, for good.
+    store.getState().setControls({
+      stopTalking,
+      cancelReply,
+      finishSpeaking,
+      startTalking,
+      setMicArmed: (on) => void setMicArmed(on),
+      sendText,
+    })
+
     store.getState().setBootStage('microphone')
 
     // The analyser is what makes the reactor pulse with your voice. It needs a
     // getUserMedia stream; speech recognition does not, and gets its own. So a
     // failure here costs the animation and nothing else — saying "voice input
-    // is unavailable" was both alarming and untrue.
-    try {
-      await startAnalyser()
-    } catch {
+    // is unavailable" was both alarming and untrue. Capped: a microphone
+    // request that is never answered used to hold the whole start-up.
+    const analysing = startAnalyser().then(
+      () => true,
+      () => false,
+    )
+    if (!(await within(analysing, MIC_WAIT_MS))) {
       console.warn(
         '[jarvis] no microphone stream — the reactor will not pulse with your ' +
           'voice. Speech recognition is unaffected.',
@@ -805,17 +842,19 @@ export default function App() {
       onUtterance,
       onError: onVoiceError,
     }
-    voice.current = await startVoice(handlers.current)
-    store.getState().setControls({
-      stopTalking,
-      cancelReply,
-      finishSpeaking,
-      startTalking,
-      setMicArmed: (on) => void setMicArmed(on),
-      sendText,
+    const starting = startVoice(handlers.current).then((v) => {
+      voice.current = v
     })
+    if (!(await within(starting, MIC_WAIT_MS))) {
+      store
+        .getState()
+        .setError(
+          'The microphone hasn’t started, so I can’t hear you yet — check for a permission prompt, or open JARVIS in Chrome at http://localhost:5173. Typing works.',
+        )
+    }
 
-    store.getState().setPhase('dormant')
+    // Unless a typed question is already being answered.
+    if (store.getState().phase === 'boot') store.getState().setPhase('dormant')
     store.getState().setBootStage('ready')
 
     // His only start-up: a greeting, in whichever voice is configured — held
