@@ -40,6 +40,15 @@ export type VadHandlers = {
 
 export type Vad = {
   stop: () => void
+  /** End the segment being recorded now, as if the speaker had gone quiet.
+   *  Resolves once its audio has been handed to onEnd (at once if there is
+   *  none). Push-to-talk needs this: the key press is the end of the thought,
+   *  and waiting out SILENCE_MS would lose the last words or delay the turn. */
+  cut: () => Promise<void>
+  /** Throw away the segment being recorded, unsent, and start listening
+   *  fresh. Used when the mic starts to count for the user, so a recording
+   *  that began on JARVIS's voice or room noise is not sent with their words. */
+  drop: () => void
   /** Raise the trigger bar while JARVIS speaks, so his own playback leaking
    *  past echo cancellation does not register as the user talking. */
   setGuard: (on: boolean) => void
@@ -109,12 +118,12 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
         ? 'Microphone access denied — voice input is unavailable.'
         : 'No microphone available.',
     )
-    return { stop: () => {}, setGuard: () => {}, live: () => false, meter: () => ({ energy: 0, floor: 0, threshold: 0, speaking: false }) }
+    return { stop: () => {}, cut: async () => {}, drop: () => {}, setGuard: () => {}, live: () => false, meter: () => ({ energy: 0, floor: 0, threshold: 0, speaking: false }) }
   }
 
   if (typeof MediaRecorder === 'undefined') {
     h.onError('This browser cannot record audio — voice input is unavailable.')
-    return { stop: () => {}, setGuard: () => {}, live: () => false, meter: () => ({ energy: 0, floor: 0, threshold: 0, speaking: false }) }
+    return { stop: () => {}, cut: async () => {}, drop: () => {}, setGuard: () => {}, live: () => false, meter: () => ({ energy: 0, floor: 0, threshold: 0, speaking: false }) }
   }
 
   const mime = pickMime()
@@ -176,12 +185,15 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
     parts = []
   }
 
-  const endSegment = () => {
+  const endSegment = (done?: () => void) => {
     const rec = recorder
     const startedAt = speechStartedAt
     speaking = false
     speechStartedAt = 0
-    if (!rec) return
+    if (!rec) {
+      done?.()
+      return
+    }
     recorder = null
 
     const finalise = () => {
@@ -190,6 +202,7 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
       parts = []
       const ms = startedAt ? performance.now() - startedAt : 0
       h.onEnd(blob, ms)
+      done?.()
     }
     rec.onstop = finalise
     try {
@@ -263,6 +276,23 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
       } catch {
         /* noop */
       }
+    },
+    cut: () =>
+      new Promise<void>((resolve) => {
+        armedAt = 0
+        if (!speaking) {
+          // Nothing confirmed as speech yet: at most a pre-roll blip.
+          discardRecorder()
+          resolve()
+          return
+        }
+        endSegment(resolve)
+      }),
+    drop: () => {
+      discardRecorder()
+      speaking = false
+      speechStartedAt = 0
+      armedAt = 0
     },
     setGuard: (on) => {
       guard = on

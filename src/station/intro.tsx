@@ -200,7 +200,7 @@ function Slides({ on }: { on: boolean }) {
 }
 
 const TIPS = [
-  'Say “Hey Jarvis” any time — or hold Space and talk.',
+  'Press Space to talk and Space again to send — or just type to him.',
   'F gets you up from the desk to walk the house. The glass ahead opens onto the terrace.',
   'C for Cinematic — then scroll right out to see the house from over the sea.',
   'Every drone flight is real work: a delivery, a data run, or a zone that needs you.',

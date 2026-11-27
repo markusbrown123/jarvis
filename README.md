@@ -176,6 +176,12 @@ The loop is designed so that nothing silently dies and barge-in feels natural.
   the browser voice, and if the OS voice itself is broken it latches over to the
   cloud voice.
 
+**Talk modes** (Settings → Voice, or the selector in the dashboard). **Tap** is
+the default: press Space to talk, press Space again to send; pauses don't end
+the turn, and the mic is off the rest of the time, so he can't hear himself or
+be cut off mid-task by noise. **Hold**: hold Space, let go to send. **Auto**:
+always listening for "Hey Jarvis", ending a turn when you pause.
+
 So it works with no keys and auto-upgrades when a key appears — there is no flag
 to set. Capability detection lives in `src/lib/capabilities.ts`, which probes the
 bridge's `GET /health` (returning `{ ok, tts, stt }`, both tracking the

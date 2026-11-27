@@ -37,9 +37,13 @@ import { start as startAutopilot } from './hub/autopilot.mjs'
 import { start as startWalkthroughs } from './hub/walkthroughs.mjs'
 import { start as startSiteKit } from './hub/sitekit.mjs'
 import { start as startLeadEngine } from './hub/leadengine.mjs'
+import { start as startPaper } from './hub/papertrade.mjs'
+import { start as startPulse } from './hub/pulse.mjs'
+import { start as startTradeReview } from './hub/tradereview.mjs'
 import { startPhone } from './hub/phone.mjs'
 import * as hub from './hub/store.mjs'
 import * as memory from './hub/memory.mjs'
+import { priorities } from './hub/streams.mjs'
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8788)
 
@@ -908,15 +912,31 @@ function effortFor(text) {
  * Get a turn ready: set the effort for it, and attach older memory that bears
  * on it (past conversations, job findings) so he doesn't have to go looking.
  */
+/**
+ * A control request to Claude Code (interrupt, a settings change) is answered
+ * by the CLI, and nothing in the SDK puts a limit on that wait. While the CLI
+ * is busy — still connecting a slow MCP server at start-up, or wedged — the
+ * answer may never come, and every question queued behind it waited for ever:
+ * JARVIS stopped answering anything, spoken or typed, for the life of the
+ * connection, with nothing on screen to say why. Never wait on one longer
+ * than this; the turn goes ahead without it.
+ */
+const CONTROL_CAP_MS = 4000
+const capped = (promise, ms = CONTROL_CAP_MS) =>
+  Promise.race([
+    Promise.resolve(promise).then(
+      () => 'done',
+      () => 'failed',
+    ),
+    new Promise((r) => setTimeout(() => r('timed out'), ms).unref?.()),
+  ])
+
 async function prepareTurn(session, text, sessionStart, effortNow, channel) {
   const want = effortFor(text)
   if (want !== effortNow.level && typeof session.applyFlagSettings === 'function') {
-    try {
-      await session.applyFlagSettings({ effortLevel: want })
-      effortNow.level = want
-    } catch (err) {
-      console.warn('[jarvis] could not change effort:', err.message)
-    }
+    const outcome = await capped(session.applyFlagSettings({ effortLevel: want }))
+    if (outcome === 'done') effortNow.level = want
+    else console.warn(`[jarvis] could not change effort (${outcome}); answering at ${effortNow.level}`)
   }
   if (want !== EFFORT) hub.term(channel, `thinking deeper (${want})`, 'info')
   const ctx = memory.relevantContext(text, { sessionStart })
@@ -951,7 +971,7 @@ function makePhoneChat() {
     prompt: prompts(),
     options: {
       mcpServers: { ...MCP_SERVERS, jarvis_hub: hubServer({ emit: () => {}, runner, phone: phoneLink(), sources: hubApi.sources, code }) },
-      systemPrompt: PHONE_PROMPT + memory.promptBlock(),
+      systemPrompt: PHONE_PROMPT + priorities() + memory.promptBlock(),
       cwd: homedir(),
       settingSources: [],
       model: MODEL,
@@ -1029,6 +1049,12 @@ startAutopilot({ runner, writes: ALLOW_WRITES })
 startWalkthroughs()
 startSiteKit({ runner })
 startLeadEngine()
+// Axiom's Pulse watched from public data, and the paper-trading tournament that
+// learns from it with pretend money. Neither holds a key or can place an order.
+startPulse()
+startPaper()
+// Each night he reviews the paper trading himself and changes the strategies (on paper).
+startTradeReview({ runner })
 
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
@@ -1619,7 +1645,7 @@ wss.on('connection', (socket) => {
       // keeps answers short enough to speak, and cuts cost per turn.
       // Plus his memory: saved facts and the recent conversation, read fresh
       // for every new session so a restart or reload loses nothing.
-      systemPrompt: SYSTEM_PROMPT + memory.promptBlock(),
+      systemPrompt: SYSTEM_PROMPT + priorities() + memory.promptBlock(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1867,14 +1893,19 @@ wss.on('connection', (socket) => {
     if (msg.type === 'interrupt') {
       // Held so the next question can wait for it rather than racing it.
       const stopped = turnFinished()
-      settling = Promise.resolve(session.interrupt?.())
-        .catch(() => {})
-        .then(() =>
+      // Capped as a whole: an interrupt the CLI never acknowledges used to hold
+      // every later question for good (see CONTROL_CAP_MS).
+      settling = capped(
+        capped(session.interrupt?.()).then(() =>
           Promise.race([
             stopped,
             new Promise((r) => setTimeout(r, SETTLE_CAP_MS)),
           ]),
-        )
+        ),
+        CONTROL_CAP_MS + SETTLE_CAP_MS + 500,
+      ).then((outcome) => {
+        if (outcome === 'timed out') console.warn('[jarvis] interrupt not acknowledged in time; carrying on')
+      })
     }
   })
 

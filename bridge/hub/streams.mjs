@@ -19,6 +19,21 @@ import { fileURLToPath } from 'node:url'
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const BASES = join(REPO, 'bases')
 
+/**
+ * What Markus wants all this to become (bases/PRIORITIES.md), as a block for
+ * the prompt of every conversation and every background job, so what JARVIS
+ * suggests, researches and builds on his own pulls in that direction. Read
+ * fresh each time: an edit to the file counts from the next turn.
+ */
+export function priorities() {
+  try {
+    const text = readFileSync(join(BASES, 'PRIORITIES.md'), 'utf8').trim()
+    return text ? `\n\nMARKUS'S PRIORITIES (bases/PRIORITIES.md — steer by these; the rules in it hold):\n${text.slice(0, 5000)}` : ''
+  } catch {
+    return ''
+  }
+}
+
 /** Hub projects whose working folder is a base. */
 export const BASE_PROJECTS = ['realestate', 'youtube', 'influencer']
 

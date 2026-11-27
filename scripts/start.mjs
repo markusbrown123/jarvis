@@ -123,13 +123,49 @@ if (port) {
 
 vendorWasm()
 
+/**
+ * Is a JARVIS already running? Then join it instead of starting a second.
+ *
+ * There are two ways to start him — `jarvis` in a terminal and the Claude
+ * app's launch button — and they used to fight. The second copy's bridge found
+ * port 8788 taken and died, and because either half dying takes the whole
+ * launcher down, it took its face with it; or `jarvis`, not finding a face on
+ * 5173, killed the app's copy as a leftover. Either way he went quiet, and
+ * the phone, which only ever looks on 5173, couldn't reach him at all.
+ *
+ * So each half is started only if nothing is answering on its port yet. If
+ * both are already up, this launcher stays open doing nothing, so a launch
+ * button waiting on the port keeps showing the JARVIS that is running.
+ */
+async function answering(url, mark) {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(1500) })
+    return res.ok && (await res.text()).includes(mark)
+  } catch {
+    return false
+  }
+}
+const facePort = Number(port) || 5173
+const [brainUp, faceUp] = await Promise.all([
+  answering('http://127.0.0.1:8788/health', '"ok":true'),
+  answering(`http://127.0.0.1:${facePort}/`, 'J.A.R.V.I.S.'),
+])
+
 console.log('\nJ.A.R.V.I.S. starting — the brain and the face.\n')
-run('bridge', 'node', ['bridge/server.mjs'], '36', bridgeEnv)
+if (brainUp) console.log('  the brain (bridge) is already running on port 8788; using that one.')
+else run('bridge', 'node', ['bridge/server.mjs'], '36', bridgeEnv)
 // npm is a shell script on most systems; call the vite binary directly so we do
 // not need shell:true (which would break the argument handling above).
-run('face', process.execPath, ['node_modules/vite/bin/vite.js'], '35', {})
+if (faceUp) console.log(`  the face is already running on port ${facePort}; using that one.`)
+else run('face', process.execPath, ['node_modules/vite/bin/vite.js'], '35', {})
 
-console.log(
-  '\nWhen it says the dev server is ready, open the URL it prints in Chrome,\n' +
-    'press any key on the start screen, and say "Hey Jarvis". Ctrl-C stops everything.\n',
-)
+if (brainUp && faceUp) {
+  console.log(`\nJARVIS is already running: open http://localhost:${facePort} in Chrome. (jarvis stop stops him.)\n`)
+  setInterval(() => {}, 1 << 30)
+} else {
+  console.log(
+    `\nWhen it says the dev server is ready, open http://localhost:${facePort} in Chrome\n` +
+      '(not an app or editor preview window: those block the microphone),\n' +
+      'and press Space to talk. Ctrl-C stops everything.\n',
+  )
+}

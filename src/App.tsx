@@ -86,6 +86,19 @@ const JOINS = /^(?:and|also|plus|or|but|then|actually|wait|sorry|no,|i mean)\b/i
 /** A turn started by hand stays open this long before giving up. */
 const MANUAL_LISTEN_MS = 120000
 
+/** The longest start-up waits on the microphone before carrying on without it. */
+const MIC_WAIT_MS = 10000
+
+/** Whether `p` settles within `ms`. It carries on either way; this only stops the wait. */
+const within = (p: Promise<unknown>, ms: number) =>
+  Promise.race([
+    p.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((r) => setTimeout(() => r(false), ms)),
+  ])
+
 export default function App() {
   const store = useStore
   const phase = useStore((s) => s.phase)
@@ -109,6 +122,12 @@ export default function App() {
   const booting = useRef(false)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
+  /** Push-to-talk is closing a turn: the last words are being transcribed. */
+  const finishing = useRef(false)
+  /** The turn in flight was typed. Noise the mic picks up while he answers it —
+   *  his own voice, a fan, the keyboard you just typed on — is not you cutting
+   *  in, and used to cancel the answer, so typed questions often got none. */
+  const typedTurn = useRef(false)
 
   // -- helpers --------------------------------------------------------------
 
@@ -142,7 +161,27 @@ export default function App() {
     s.setCaption('')
     s.setPhase('listening')
     sfx.play('listen')
-    idleTimer.current = setTimeout(goDormant, window)
+    // Push-to-talk that runs out of time sends what it has rather than
+    // throwing away a long dictation because the second press was forgotten.
+    idleTimer.current = setTimeout(
+      () => (s.talkMode === 'auto' ? goDormant() : void finishSpeaking()),
+      window,
+    )
+  }
+
+  /**
+   * After a spoken control ("stop", "cancel that task"). Auto keeps the mic
+   * open for the next sentence; push-to-talk waits for the next press, and
+   * does not cut off what he is saying about it.
+   */
+  const standBy = () => {
+    if (store.getState().talkMode === 'auto') {
+      listen(FOLLOW_UP_MS)
+      return
+    }
+    clearIdle()
+    store.getState().setCaption('')
+    store.getState().setPhase('dormant')
   }
 
   // -- one turn -------------------------------------------------------------
@@ -165,6 +204,7 @@ export default function App() {
     }
     const job = { text: said, spokeAt: 0, tools: false }
     inflight.current = job
+    typedTurn.current = source === 'typed'
 
     clearIdle()
     const s = store.getState()
@@ -272,22 +312,31 @@ export default function App() {
 
   // -- voice events ---------------------------------------------------------
 
-  /** What the voice loop should do with what it hears, derived from phase. */
+  /**
+   * What the voice loop should do with what it hears, derived from phase.
+   *
+   * Hold and tap are push-to-talk: the mic counts between the presses and at
+   * no other time. Not while he talks, so he can never hear himself and answer
+   * it — and not while he works, so nothing overheard can cancel a job half
+   * done. Space is how you cut in.
+   */
   const mode = (): VoiceMode => {
     const st = store.getState()
     if (!st.micArmed) return 'deaf'
+    const manual = st.talkMode !== 'auto'
     switch (st.phase) {
       case 'offline':
       case 'boot':
         return 'deaf'
       case 'dormant':
-        // Hold and tap mean the mic only counts when you ask it to.
-        return st.talkMode === 'auto' ? 'wake' : 'deaf'
+        return manual ? 'deaf' : 'wake'
       case 'waking':
       case 'listening':
-        return 'command'
+        return manual ? 'dictate' : 'command'
       default:
-        return 'guard' // thinking, tooling, speaking
+        // thinking, tooling, speaking. A typed question is answered without
+        // listening for barge-in; Space, Escape or Cancel still stop him.
+        return manual || typedTurn.current ? 'deaf' : 'guard'
     }
   }
 
@@ -362,20 +411,23 @@ export default function App() {
 
     // People keep using his name as a vocative once they're already talking to
     // him. Strip it rather than sending "jarvis" to the model as a question.
+    // In push-to-talk the press already said you were talking to him; a bare
+    // name is nothing asked, and finishSpeaking says so.
+    const manual = store.getState().talkMode !== 'auto'
     if (BARE_NAME.test(text)) {
-      listen(AWAIT_SPEECH_MS)
+      if (!manual) listen(AWAIT_SPEECH_MS)
       return
     }
     let said = text.replace(LEADING_NAME, '').trim()
     if (!said) {
-      listen(AWAIT_SPEECH_MS)
+      if (!manual) listen(AWAIT_SPEECH_MS)
       return
     }
 
     if (STOP_TALKING.test(said)) {
       carry.current = null
       silence()
-      listen(FOLLOW_UP_MS)
+      standBy()
       return
     }
     if (STOP_LISTENING.test(said)) {
@@ -431,7 +483,37 @@ export default function App() {
     else goDormant()
   }
 
-  const finishSpeaking = () => voice.current?.finish()
+  /**
+   * That's the whole thought — send it.
+   *
+   * In push-to-talk this is the second press. He goes to thinking at once, so
+   * the press visibly lands, while the voice loop finishes transcribing the
+   * last words; if nothing at all was heard he says so and stands down rather
+   * than sitting on "thinking" for ever.
+   */
+  const finishSpeaking = async () => {
+    const st = store.getState()
+    if (st.talkMode === 'auto') {
+      await voice.current?.finish()
+      return
+    }
+    if (finishing.current) return
+    if (st.phase !== 'listening' && st.phase !== 'waking') return
+    finishing.current = true
+    clearIdle()
+    const before = turn.current
+    st.setPhase('thinking')
+    try {
+      await voice.current?.finish()
+    } finally {
+      finishing.current = false
+    }
+    // Nothing became a turn: nothing was heard, or it was only his name.
+    if (turn.current === before && store.getState().phase === 'thinking') {
+      goDormant()
+      store.getState().setError('I didn’t catch anything — press Space and try again.')
+    }
+  }
 
   /** The newest background job JARVIS is running, cancelled for real: it
    *  reads "cancellation requested" until the job has actually stopped. */
@@ -446,14 +528,20 @@ export default function App() {
       void hubActions.cancelJob(job.id).catch((err: Error) => store.getState().setError(err.message))
     }
     void spk.end()
-    listen(FOLLOW_UP_MS)
+    standBy()
   }
 
   const startTalking = () => {
     const st = store.getState()
     if (st.phase === 'offline' || st.phase === 'boot') return
+    if (finishing.current) return
     if (!st.micArmed) void setMicArmed(true)
+    st.setError(null)
     if (busy()) onSpeechStart()
+    // Whatever he was saying — an answer, an announcement — stops: you have
+    // the floor, and the mic should hear you, not him.
+    silence()
+    carry.current = null
     listen(st.talkMode === 'auto' ? AWAIT_SPEECH_MS : MANUAL_LISTEN_MS)
   }
 
@@ -707,15 +795,32 @@ export default function App() {
     await warming
     store.getState().setConnected(connectedLabels())
     store.getState().setVoice(currentVoiceName())
+
+    // Typing works whatever the microphone does. These used to be registered
+    // only once the voice loop had started — so where the microphone never
+    // came up (an app's preview window, a permission prompt left unanswered)
+    // the text box silently did nothing as well, for good.
+    store.getState().setControls({
+      stopTalking,
+      cancelReply,
+      finishSpeaking,
+      startTalking,
+      setMicArmed: (on) => void setMicArmed(on),
+      sendText,
+    })
+
     store.getState().setBootStage('microphone')
 
     // The analyser is what makes the reactor pulse with your voice. It needs a
     // getUserMedia stream; speech recognition does not, and gets its own. So a
     // failure here costs the animation and nothing else — saying "voice input
-    // is unavailable" was both alarming and untrue.
-    try {
-      await startAnalyser()
-    } catch {
+    // is unavailable" was both alarming and untrue. Capped: a microphone
+    // request that is never answered used to hold the whole start-up.
+    const analysing = startAnalyser().then(
+      () => true,
+      () => false,
+    )
+    if (!(await within(analysing, MIC_WAIT_MS))) {
       console.warn(
         '[jarvis] no microphone stream — the reactor will not pulse with your ' +
           'voice. Speech recognition is unaffected.',
@@ -737,17 +842,19 @@ export default function App() {
       onUtterance,
       onError: onVoiceError,
     }
-    voice.current = await startVoice(handlers.current)
-    store.getState().setControls({
-      stopTalking,
-      cancelReply,
-      finishSpeaking,
-      startTalking,
-      setMicArmed: (on) => void setMicArmed(on),
-      sendText,
+    const starting = startVoice(handlers.current).then((v) => {
+      voice.current = v
     })
+    if (!(await within(starting, MIC_WAIT_MS))) {
+      store
+        .getState()
+        .setError(
+          'The microphone hasn’t started, so I can’t hear you yet — check for a permission prompt, or open JARVIS in Chrome at http://localhost:5173. Typing works.',
+        )
+    }
 
-    store.getState().setPhase('dormant')
+    // Unless a typed question is already being answered.
+    if (store.getState().phase === 'boot') store.getState().setPhase('dormant')
     store.getState().setBootStage('ready')
 
     // His only start-up: a greeting, in whichever voice is configured — held
@@ -929,7 +1036,7 @@ export default function App() {
       // Enter: that's the whole thought, don't wait for the pause.
       if (e.key === 'Enter' && store.getState().phase === 'listening') {
         e.preventDefault()
-        finishSpeaking()
+        void finishSpeaking()
         return
       }
 
@@ -955,7 +1062,9 @@ export default function App() {
       } else if (talkMode === 'hold') {
         startTalking()
       } else if (talkMode === 'tap') {
-        if (phase === 'listening') finishSpeaking()
+        // Press to talk, press again to send. A press while he is thinking,
+        // working or speaking cuts him off and starts listening to you.
+        if (phase === 'listening' || phase === 'waking') void finishSpeaking()
         else startTalking()
       } else if (
         phase === 'thinking' ||
@@ -975,7 +1084,7 @@ export default function App() {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
       if (e.code !== 'Space' || store.getState().talkMode !== 'hold') return
-      if (store.getState().phase === 'listening') finishSpeaking()
+      if (store.getState().phase === 'listening') void finishSpeaking()
     }
     window.addEventListener('keyup', onKeyUp)
 

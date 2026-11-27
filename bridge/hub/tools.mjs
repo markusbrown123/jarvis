@@ -22,6 +22,9 @@ import * as streams from './streams.mjs'
 import * as review from './review.mjs'
 import * as autopilot from './autopilot.mjs'
 import * as leads from './leadengine.mjs'
+import * as paper from './papertrade.mjs'
+import * as pulse from './pulse.mjs'
+import * as tradeReview from './tradereview.mjs'
 import * as closing from './closing.mjs'
 import { OUTCOMES } from '../../bases/sites/engine/lib/batch.mjs'
 import { TRADES } from '../../bases/sites/engine/lib/score.mjs'
@@ -183,6 +186,65 @@ export function hubServer({ emit, runner, phone, sources, code }) {
           }
           emit('dash', { view, game: gameId, immersive: Boolean(immersive) })
           return ok(`Showing ${view}${gameId ? ` (${gameId})` : ''}.`)
+        },
+      ),
+      tool(
+        'pulse_status',
+        'Axiom\'s Pulse, watched all day: brand-new tokens on sol, robinhood, ely, bnb, base, eth, hype, arc and ink, in Axiom\'s three columns (new pairs, final stretch, migrated), the most traded in each right now, and what launches like them did in the hours after they appeared (by column, chain, buyers vs sellers, liquidity). Public data only. Use for "what\'s on the pulse", "anything hot", "what\'s been working on new launches". chain: one of the nine to narrow it.',
+        { chain: z.enum(Object.keys(pulse.CHAINS)).optional() },
+        async ({ chain }) => ok(pulse.summary({ chain })),
+      ),
+      tool(
+        'paper_status',
+        'The paper-trading tournament: pretend money only, each strategy started with $40. Solana memecoins (Axiom-style costs), Hyperliquid perps, and launches off the Pulse, each market with a random control to beat. Without a strategy: the scoreboard and whether anything is ready for real money. With one (its id): its settings, open positions and last trades, each with why it was taken. Use for "how is the trading going", "how much have we made", "why did it buy that".',
+        { strategy: z.string().optional() },
+        async ({ strategy }) => ok(strategy ? paper.detail(strategy) ?? `No strategy called ${strategy}.\n\n${paper.summary()}` : paper.summary()),
+      ),
+      tool(
+        'paper_strategy',
+        'Try a new paper-trading strategy, or stop one. Pretend money only. action add: market meme (Solana memecoins; kind filter: minLiq, minAgeH, minBuyRatio, minVolH1, h1Min, h1Max, m5Min, h24Min) | perp (Hyperliquid; kind trend: fast, slow; breakout: lookback; both lev 1-5) | pulse (new launches; kind filter: stage new|stretch|migrated|any, chains "all" or e.g. "sol,base", minLiq, minBuyRatio, minBuyers, minAgeMin, maxAgeMin); every kind also tp, sl (percent) and maxHoldH. Settings left out keep their defaults; all are kept within sane bounds. Each new strategy gets its own $40. Use when Markus suggests an idea, or when the results or research suggest one worth testing. action stop: stop one (its id), with why in note.',
+        {
+          action: z.enum(['add', 'stop']),
+          id: z.string().optional(),
+          market: z.enum(['meme', 'perp', 'pulse']).optional(),
+          kind: z.enum(['filter', 'trend', 'breakout', 'random']).optional(),
+          params: z.record(z.union([z.number(), z.string()])).optional(),
+          note: z.string().optional(),
+        },
+        async ({ action, id, market, kind, params, note }) => {
+          try {
+            if (action === 'stop') {
+              const st = paper.retireStrategy(id ?? '', note || 'stopped by JARVIS')
+              return ok(`Stopped ${st.id}; its open positions were closed on paper.`)
+            }
+            if (!market || !kind) return ok('Say which market (meme, perp, pulse) and kind.')
+            const st = paper.addStrategy({ id, market, kind, params: params ?? {}, note: note ?? '' })
+            return ok(`Started ${st.id} with $${paper.START_USD} of pretend money. Settings: ${JSON.stringify(st.params)}.`)
+          } catch (e) {
+            return ok(`Couldn't: ${e.message}`)
+          }
+        },
+      ),
+      tool(
+        'paper_review',
+        'Review the paper trading now instead of waiting for tonight: a background job reads the scoreboard, every strategy\'s trades and the Pulse trends, may search the web, then starts up to two new strategies and stops failing ones (pretend money only), and sends Markus the summary. Use for "review the trading", "what should we change", "learn from the results".',
+        {},
+        async () => {
+          try {
+            const r = tradeReview.run({ runner })
+            return ok(r.started ? 'Reviewing the paper trading now in the background; the summary comes to your phone when it\'s done.' : r.why)
+          } catch (e) {
+            return ok(`Couldn't start it: ${e.message}`)
+          }
+        },
+      ),
+      tool(
+        'paper_pause',
+        'Pause or resume new paper trades (open ones are still managed: stops and targets keep working). paused: true or false.',
+        { paused: z.boolean() },
+        async ({ paused }) => {
+          paper.setPaused(paused)
+          return ok(paused ? 'Paper trading paused for new trades.' : 'Paper trading resumed.')
         },
       ),
       tool(

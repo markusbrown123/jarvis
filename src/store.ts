@@ -245,12 +245,20 @@ const NO_CONTROLS: VoiceControls = {
   sendText: noop,
 }
 
+/**
+ * Tap is the default: Space to talk, Space to send. The always-listening wake
+ * word heard his own replies and every pause, and turned them into turns that
+ * cut off the real one. Saved under a new key so everyone starts on tap once;
+ * picking Auto again in Settings sticks.
+ */
+const TALK_MODE_KEY = 'jarvis.talkMode.v2'
+
 function savedTalkMode(): TalkMode {
   try {
-    const v = localStorage.getItem('jarvis.talkMode')
-    return v === 'hold' || v === 'tap' ? v : 'auto'
+    const v = localStorage.getItem(TALK_MODE_KEY)
+    return v === 'hold' || v === 'auto' ? v : 'tap'
   } catch {
-    return 'auto'
+    return 'tap'
   }
 }
 
@@ -352,7 +360,7 @@ export const useStore = create<State>((set) => ({
 
   setTalkMode: (talkMode) => {
     try {
-      localStorage.setItem('jarvis.talkMode', talkMode)
+      localStorage.setItem(TALK_MODE_KEY, talkMode)
     } catch {
       /* per-browser preference only */
     }

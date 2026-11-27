@@ -38,6 +38,7 @@ export function inputState(): InputState {
   if (phase === 'boot') return { label: 'Starting…', tone: 'busy' }
   if (!micArmed) return { label: 'Microphone off', tone: 'off' }
   if (voiceDiag.lastError === 'mic') return { label: 'Microphone unavailable', tone: 'fail' }
+  if (voiceDiag.unusable) return { label: 'Can’t hear you in this window', tone: 'fail' }
   if (!voiceDiag.running) return { label: 'Reconnecting microphone…', tone: 'fail' }
   switch (phase) {
     case 'dormant':
@@ -47,6 +48,8 @@ export function inputState(): InputState {
       }
     case 'waking':
     case 'listening':
+      if (talkMode === 'tap') return { label: 'Listening — press Space to send', tone: 'live' }
+      if (talkMode === 'hold') return { label: 'Listening — let go of Space to send', tone: 'live' }
       if (voiceDiag.holding) return { label: 'You paused — still listening', tone: 'held' }
       if (caption && caption !== '…') return { label: 'Hearing you', tone: 'live' }
       return { label: 'Listening', tone: 'live' }

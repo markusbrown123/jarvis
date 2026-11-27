@@ -2,12 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "//": "autoPort is off on purpose. The bridge only accepts WebSocket origins on localhost:5173-5199 and 4173-4199, so a port picked outside that range starts a face that looks perfectly alive and can never reach the brain.",
+      "//": "Port 5173, the same as the jarvis command, because that is the port jarvis remote shares with the iPhone: started on any other port, the phone shows \"Can't reach your Mac\". autoPort is off for the same reason, and because the bridge only accepts WebSocket origins on localhost:5173-5199 and 4173-4199. If JARVIS is already running, npm start joins that copy instead of starting a second.",
       "name": "jarvis",
       "runtimeExecutable": "npm",
-      "//writes": "Append \"--\", \"--writes\" here to let JARVIS act — click and type in Chrome, drive the phone, run shell. Left off by default so a fresh clone starts read-only, as the README promises.",
-      "runtimeArgs": ["start"],
-      "port": 5180,
+      "//writes": "--writes lets JARVIS act (files, shell, browser, phone), the same as the jarvis command, which starts in write mode. Remove it for a read-only start.",
+      "runtimeArgs": ["start", "--", "--writes"],
+      "port": 5173,
       "autoPort": false
     }
   ]

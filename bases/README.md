@@ -2,6 +2,8 @@
 
 A base is the starting point for one stream of work: a `BRIEF.md` that says what it is, how it works, what comes first and what JARVIS must never do, with its status kept current. JARVIS reads them (`streams` and `stream_brief`) so "how's the YouTube channel?" or "what's next for the real estate videos?" is answered from here, not guessed.
 
+[`PRIORITIES.md`](PRIORITIES.md) is what Markus wants all of it to become. It goes into JARVIS's prompt in every conversation and every background job, so it steers what he suggests, researches and builds on his own; edit it and the next turn uses it.
+
 Streams that have no repo of their own yet, and the client sites JARVIS builds on, have a working folder here as well, with a `CLAUDE.md`: a Claude Code session started for that project at the desk runs in it.
 
 | Stream | What | JARVIS project | Lives in |
